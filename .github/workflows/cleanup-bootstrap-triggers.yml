@@ -1,0 +1,45 @@
+name: Clean Bootstrap Finalization Triggers
+
+on:
+  workflow_run:
+    workflows:
+      - Finalize Reviewed Bootstrap
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete bootstrap-only trigger files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          delete_from_main() {
+            local path="$1"
+            local sha
+            sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=main" --jq '.sha' 2>/dev/null || true)"
+            if [[ -z "${sha}" ]]; then
+              return 0
+            fi
+            local payload
+            payload="$(jq -n \
+              --arg message "ci: remove completed bootstrap trigger" \
+              --arg sha "${sha}" \
+              '{message: $message, sha: $sha, branch: "main"}')"
+            gh api \
+              --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+              --input - <<<"${payload}" >/dev/null
+          }
+
+          delete_from_main ".github/bootstrap-finalizer-trigger"
+          delete_from_main ".github/workflows/finalize-bootstrap-trigger.yml"
+          delete_from_main ".github/workflows/cleanup-bootstrap-triggers.yml"

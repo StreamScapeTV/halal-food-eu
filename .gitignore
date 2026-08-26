@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+HalalFoodEU.xcodeproj/
+.swiftpm/
+.env
+*.ipa
+*.dSYM
+coverage/
+Tools/__pycache__/
+HalalFoodEU/Resources/catalog.sqlite3
+HalalFoodEU/Resources/catalog-manifest.json

@@ -1,0 +1,137 @@
+HALAL FOOD EU SOURCE-AVAILABLE LICENSE
+Version 1.0 — 26 August 2026
+
+Copyright © 2026 StreamScapeTV and the Halal Food EU copyright holder(s).
+All rights reserved except for the limited permissions expressly granted below.
+
+1. DEFINITIONS
+
+“Software” means the source code, object code, documentation, build files, user
+interface assets, and other materials in this repository that reference this
+License, excluding Third-Party Materials and Catalog Data governed by a separate
+license or notice.
+
+“Licensor” means the copyright holder(s) for the Software.
+
+“Production Use” means running or using the Software, or any modified or derived
+version of it, for the benefit of end users, an organization, a business process,
+a public or private service, or any environment other than temporary local
+review, testing, security research, or contribution development.
+
+“Commercial Purpose” means any activity intended for or directed toward
+commercial advantage or monetary compensation, including sale, licensing,
+subscription, advertising, sponsorship, paid support, internal business use,
+fundraising, lead generation, or providing a hosted or managed service.
+
+2. LIMITED PERMISSION
+
+Subject to every condition in this License, Licensor grants you a personal,
+revocable, non-exclusive, non-transferable, non-sublicensable, royalty-free
+permission to:
+
+(a) view and study the Software;
+(b) make a private local copy solely for evaluation, education, security review,
+    or development of a contribution intended for the official Halal Food EU
+    repository; and
+(c) create a public GitHub fork solely to prepare and submit contributions,
+    provided the fork retains this License, identifies the official upstream
+    repository, does not publish releases or binaries, and is not deployed.
+
+No other permission is granted.
+
+3. PROHIBITED USES
+
+Without a separate written agreement signed by Licensor, you must not, directly
+or indirectly:
+
+(a) use the Software for any Commercial Purpose;
+(b) make any Production Use of the Software;
+(c) deploy, host, operate, publish, distribute, transmit, or make the Software or
+    a derived service available to any third party, whether publicly or privately;
+(d) publish or distribute compiled applications, installable packages,
+    containers, hosted instances, mirrors, or releases;
+(e) sell, rent, lease, sublicense, relicense, assign, or otherwise transfer the
+    Software or any right in it;
+(f) remove or obscure copyright, attribution, source, licensing, or provenance
+    notices;
+(g) represent the Software as an official or endorsed Halal Food EU service; or
+(h) use the Halal Food EU or StreamScapeTV names, marks, branding, or visual
+    identity except for truthful attribution to the official upstream project.
+
+Access to a public repository does not waive these restrictions. GitHub features
+that technically permit viewing or forking do not grant rights beyond Section 2.
+
+4. MODIFICATIONS AND CONTRIBUTIONS
+
+You may modify the Software only within the limited permission in Section 2.
+Unless Licensor agrees otherwise in writing, a contribution intentionally
+submitted to the official repository is offered under this License and grants
+Licensor a perpetual, worldwide, irrevocable, transferable, sublicensable,
+royalty-free license to use, reproduce, modify, distribute, publicly perform,
+publicly display, commercialize, and relicense the contribution in any form.
+You represent that you have the right to grant those permissions.
+
+Submitting a contribution does not grant the contributor ownership of the
+project, its branding, or other contributors’ work.
+
+5. CATALOG DATA AND THIRD-PARTY MATERIALS
+
+This License does not override a license identified for Catalog Data in
+`DATA_LICENSE.md`, a catalog manifest, an attribution file, or a third-party
+notice. Open Food Facts-derived databases, for example, may be governed by the
+Open Database License and may carry attribution and share-alike obligations.
+Third-party materials remain governed by their respective terms.
+
+6. OWNERSHIP AND RESERVED RIGHTS
+
+The Software is licensed, not sold. Licensor and contributors retain all title,
+copyright, patent, trademark, trade-secret, database, and other rights not
+expressly granted. No patent license is granted. No right to use trademarks is
+granted.
+
+7. TERMINATION
+
+Your permissions terminate automatically and immediately upon breach. After
+termination, you must stop using the Software and delete all copies under your
+control, except where retention is required by law. Sections 3 through 10 survive
+termination.
+
+8. NO RELIGIOUS, LEGAL, MEDICAL, OR SAFETY WARRANTY
+
+The Software and any assessment it displays are informational tools. They are not
+a fatwa, certification, legal opinion, medical advice, allergy guarantee, or
+substitute for checking current packaging, manufacturers, certification bodies,
+or a trusted qualified scholar. Product formulations and supply chains change.
+
+9. DISCLAIMER OF WARRANTY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED “AS IS” AND
+“AS AVAILABLE,” WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS, IMPLIED,
+OR STATUTORY, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+ACCURACY, TITLE, NON-INFRINGEMENT, OR THAT THE SOFTWARE OR DATA WILL BE ERROR-FREE,
+CURRENT, SECURE, OR SUITABLE FOR A PARTICULAR RELIGIOUS INTERPRETATION.
+
+10. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR AND CONTRIBUTORS WILL NOT BE
+LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
+PUNITIVE DAMAGES, LOSS OF PROFITS, DATA, GOODWILL, BUSINESS, OR RELIGIOUS OR
+DIETARY DECISIONS ARISING FROM THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY.
+WHERE LIABILITY CANNOT BE EXCLUDED, TOTAL LIABILITY IS LIMITED TO THE GREATER OF
+THE AMOUNT YOU PAID LICENSOR FOR THE SOFTWARE OR TEN EUROS (€10).
+
+11. SEVERABILITY AND NO WAIVER
+
+If a provision is unenforceable, it is modified only as much as necessary and the
+remaining provisions continue in effect. A failure to enforce a provision is not
+a waiver.
+
+12. COMMERCIAL OR DEPLOYMENT PERMISSION
+
+Production, hosted, distribution, App Store, enterprise, educational-institution,
+charitable-organization, governmental, and commercial permissions are available
+only through a separate written license from Licensor. Open a licensing request
+with the repository owner; silence is not permission.
+
+This is a custom source-available license. It is not an OSI-approved open-source
+license, because it restricts commercial and production use.

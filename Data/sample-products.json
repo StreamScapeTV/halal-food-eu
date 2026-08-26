@@ -1,0 +1,114 @@
+{
+  "catalog": {
+    "catalogVersion": "0.1.0-demo.1",
+    "schemaVersion": 1,
+    "methodologyVersion": "demo-methodology-1",
+    "generatedAt": "2026-08-26T00:00:00Z",
+    "dataLicense": "Halal-Food-EU-Source-Available-1.0",
+    "attribution": "Synthetic demonstration records created by StreamScapeTV. No real products are represented."
+  },
+  "sources": [
+    {
+      "key": "synthetic-fixtures",
+      "name": "Halal Food EU synthetic fixtures",
+      "kind": "synthetic",
+      "reference": "urn:halal-food-eu:synthetic-fixtures:v1",
+      "license": "Halal-Food-EU-Source-Available-1.0",
+      "retrievedAt": "2026-08-26T00:00:00Z"
+    }
+  ],
+  "products": [
+    {
+      "barcode": "0200000000004",
+      "name": "Demonstration Oat Drink",
+      "brand": "Halal Food EU Demo",
+      "sourceKey": "synthetic-fixtures",
+      "sourceProductId": "demo-oat-drink",
+      "ingredients": {
+        "text": "Water, oats (12%), sunflower oil, sea salt.",
+        "languageCode": "en",
+        "observedAt": "2026-08-26T00:00:00Z"
+      },
+      "assessment": {
+        "status": "halal-reviewed",
+        "summary": "Synthetic ingredients were reviewed for the demonstration methodology; no certification is claimed.",
+        "reviewedAt": "2026-08-26T00:00:00Z",
+        "reasons": [
+          {
+            "code": "DEMO-INGREDIENTS-REVIEWED",
+            "title": "Demonstration ingredients reviewed",
+            "detail": "Every listed synthetic ingredient is plant- or mineral-based in this fixture. This is not a real-product claim or certification.",
+            "ingredient": "Water; oats; sunflower oil; sea salt",
+            "severity": "positive"
+          },
+          {
+            "code": "NO-CERTIFICATION-CLAIM",
+            "title": "No certification claimed",
+            "detail": "The result is an ingredient review under the demonstration methodology, not evidence from a halal certification body.",
+            "ingredient": null,
+            "severity": "informational"
+          }
+        ]
+      }
+    },
+    {
+      "barcode": "0200000000011",
+      "name": "Demonstration Gelatine Sweets",
+      "brand": "Halal Food EU Demo",
+      "sourceKey": "synthetic-fixtures",
+      "sourceProductId": "demo-gelatine-sweets",
+      "ingredients": {
+        "text": "Glucose syrup, sugar, porcine gelatine, acidity regulator: citric acid, colours.",
+        "languageCode": "en",
+        "observedAt": "2026-08-26T00:00:00Z"
+      },
+      "assessment": {
+        "status": "not-halal",
+        "summary": "The synthetic fixture explicitly lists porcine gelatine.",
+        "reviewedAt": "2026-08-26T00:00:00Z",
+        "reasons": [
+          {
+            "code": "PORCINE-GELATINE",
+            "title": "Porcine gelatine listed",
+            "detail": "The ingredient source is explicitly described as porcine in this synthetic ingredient observation.",
+            "ingredient": "porcine gelatine",
+            "severity": "prohibitive"
+          }
+        ]
+      }
+    },
+    {
+      "barcode": "0200000000028",
+      "name": "Demonstration Vanilla Dessert",
+      "brand": "Halal Food EU Demo",
+      "sourceKey": "synthetic-fixtures",
+      "sourceProductId": "demo-vanilla-dessert",
+      "ingredients": {
+        "text": "Milk, sugar, modified starch, mono- and diglycerides of fatty acids (E471), natural vanilla flavouring.",
+        "languageCode": "en",
+        "observedAt": "2026-08-26T00:00:00Z"
+      },
+      "assessment": {
+        "status": "questionable",
+        "summary": "The origin of E471 and relevant flavour carriers is not established by this synthetic observation.",
+        "reviewedAt": "2026-08-26T00:00:00Z",
+        "reasons": [
+          {
+            "code": "AMBIGUOUS-E471-SOURCE",
+            "title": "E471 source is ambiguous",
+            "detail": "Mono- and diglycerides can be produced from plant or animal sources. The source is not stated in the ingredient text.",
+            "ingredient": "mono- and diglycerides of fatty acids (E471)",
+            "severity": "caution"
+          },
+          {
+            "code": "FLAVOUR-CARRIER-UNKNOWN",
+            "title": "Flavour carrier is not documented",
+            "detail": "The ingredient text does not establish whether a relevant alcohol or other carrier was used for the flavouring.",
+            "ingredient": "natural vanilla flavouring",
+            "severity": "caution"
+          }
+        ]
+      }
+    }
+  ]
+}

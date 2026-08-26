@@ -1,0 +1,96 @@
+name: HalalFoodEU
+
+options:
+  minimumXcodeGenVersion: 2.46.0
+  bundleIdPrefix: tv.streamscape
+  createIntermediateGroups: true
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "26.0"
+  projectFormat: xcode16_0
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+
+fileGroups:
+  - README.md
+  - AGENTS.md
+  - LICENSE
+  - DATA_LICENSE.md
+  - NOTICE
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - docs
+  - Data
+  - Tools
+  - Scripts
+
+schemes:
+  HalalFoodEU:
+    build:
+      targets:
+        HalalFoodEU: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - name: HalalFoodEUTests
+          parallelizable: true
+          randomExecutionOrder: true
+    archive:
+      config: Release
+
+
+targets:
+  HalalFoodEU:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: HalalFoodEU
+    dependencies:
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tv.streamscape.halalfoodeu
+        PRODUCT_NAME: HalalFoodEU
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Halal Food EU
+        INFOPLIST_KEY_NSCameraUsageDescription: Scan a packaged-food barcode to look it up in the offline Halal Food EU catalog.
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+
+  HalalFoodEUTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: HalalFoodEUTests
+      - path: HalalFoodEU/Resources/catalog.sqlite3
+        buildPhase: resources
+      - path: HalalFoodEU/Resources/catalog-manifest.json
+        buildPhase: resources
+    dependencies:
+      - target: HalalFoodEU
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tv.streamscape.halalfoodeu.tests
+        GENERATE_INFOPLIST_FILE: YES

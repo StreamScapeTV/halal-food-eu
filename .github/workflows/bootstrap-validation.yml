@@ -2,7 +2,7 @@ name: Bootstrap PR Validation
 
 on:
   schedule:
-    - cron: "5 16 26 8 *"
+    - cron: "12 16 26 8 *"
   workflow_dispatch:
 
 permissions:

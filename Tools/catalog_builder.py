@@ -35,10 +35,10 @@ CREATE TABLE catalog_metadata (
 CREATE TABLE sources (
     id INTEGER PRIMARY KEY,
     source_key TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    reference TEXT NOT NULL,
-    license TEXT NOT NULL,
+    name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+    kind TEXT NOT NULL CHECK(length(trim(kind)) > 0),
+    reference TEXT NOT NULL CHECK(length(trim(reference)) > 0),
+    license TEXT NOT NULL CHECK(length(trim(license)) > 0),
     retrieved_at TEXT NOT NULL
 );
 
@@ -55,11 +55,11 @@ CREATE TABLE product_observations (
     id INTEGER PRIMARY KEY,
     gtin TEXT NOT NULL,
     ingredients_text TEXT NOT NULL,
-    language_code TEXT NOT NULL,
+    language_code TEXT NOT NULL CHECK(length(trim(language_code)) > 0),
     observed_at TEXT NOT NULL,
     ingredients_hash TEXT NOT NULL CHECK(length(ingredients_hash) = 64),
     source_id INTEGER NOT NULL,
-    source_product_id TEXT NOT NULL,
+    source_product_id TEXT NOT NULL CHECK(length(trim(source_product_id)) > 0),
     FOREIGN KEY(gtin) REFERENCES products(gtin) ON DELETE RESTRICT,
     FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE RESTRICT,
     UNIQUE(gtin, ingredients_hash, source_id, observed_at)
@@ -76,9 +76,24 @@ CREATE TABLE product_assessments (
         'unknown'
     )),
     summary TEXT NOT NULL CHECK(length(trim(summary)) > 0),
-    methodology_version TEXT NOT NULL,
+    methodology_version TEXT NOT NULL CHECK(length(trim(methodology_version)) > 0),
     reviewed_at TEXT NOT NULL,
     FOREIGN KEY(observation_id) REFERENCES product_observations(id) ON DELETE CASCADE
+);
+
+CREATE TABLE certification_evidence (
+    id INTEGER PRIMARY KEY,
+    assessment_id INTEGER NOT NULL,
+    position INTEGER NOT NULL CHECK(position >= 0),
+    source_id INTEGER NOT NULL,
+    certifying_body TEXT NOT NULL CHECK(length(trim(certifying_body)) > 0),
+    certificate_reference TEXT NOT NULL CHECK(length(trim(certificate_reference)) > 0),
+    scope TEXT NOT NULL CHECK(length(trim(scope)) > 0),
+    valid_from TEXT,
+    valid_until TEXT,
+    FOREIGN KEY(assessment_id) REFERENCES product_assessments(id) ON DELETE CASCADE,
+    FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE RESTRICT,
+    UNIQUE(assessment_id, position)
 );
 
 CREATE TABLE assessment_reasons (
@@ -100,13 +115,17 @@ CREATE INDEX idx_product_observations_gtin_observed
     ON product_observations(gtin, observed_at DESC);
 CREATE INDEX idx_product_assessments_status
     ON product_assessments(status);
+CREATE INDEX idx_certification_evidence_order
+    ON certification_evidence(assessment_id, position);
 CREATE INDEX idx_assessment_reasons_order
     ON assessment_reasons(assessment_id, position);
 """
 
 
 def _digits(value: str) -> str:
-    result = "".join(character for character in value if not character.isspace() and character != "-")
+    result = "".join(
+        character for character in value if not character.isspace() and character != "-"
+    )
     if not result or not result.isascii() or not result.isdigit():
         raise ValueError(f"barcode contains unsupported characters: {value!r}")
     return result
@@ -135,6 +154,13 @@ def load_source(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("catalog source must be a JSON object")
     return data
+
+
+def _nonempty(value: Any, field: str, gtin: str) -> str:
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{field} is empty for {gtin}")
+    return text
 
 
 def build_catalog(source_path: Path, database_path: Path, manifest_path: Path) -> None:
@@ -213,19 +239,27 @@ def build_catalog(source_path: Path, database_path: Path, manifest_path: Path) -
             if source_key not in source_keys:
                 raise ValueError(f"unknown source key {source_key!r} for {gtin}")
 
-            ingredients = product["ingredients"]
-            ingredient_text = str(ingredients["text"]).strip()
-            if not ingredient_text:
-                raise ValueError(f"empty ingredient text for {gtin}")
-            ingredient_hash = hashlib.sha256(ingredient_text.encode("utf-8")).hexdigest()
-
             assessment = product["assessment"]
             status = assessment["status"]
             if status not in ALLOWED_STATUSES:
                 raise ValueError(f"unsupported status {status!r} for {gtin}")
+
             reasons = assessment.get("reasons", [])
             if not reasons:
                 raise ValueError(f"assessment has no reasons for {gtin}")
+
+            certifications = assessment.get("certifications", [])
+            if status == "halal-certified" and not certifications:
+                raise ValueError(f"halal-certified assessment has no certificate for {gtin}")
+
+            ingredients = product["ingredients"]
+            raw_ingredient_text = ingredients.get("text")
+            ingredient_text = "" if raw_ingredient_text is None else str(raw_ingredient_text).strip()
+            if not ingredient_text and status != "unknown":
+                raise ValueError(f"empty ingredient text is only allowed for unknown status: {gtin}")
+            if not ingredient_text and ingredients.get("languageCode") != "und":
+                raise ValueError(f"missing ingredient text must use languageCode 'und': {gtin}")
+            ingredient_hash = hashlib.sha256(ingredient_text.encode("utf-8")).hexdigest()
 
             connection.execute(
                 "INSERT INTO products(gtin, name, brand) VALUES (?, ?, ?)",
@@ -265,6 +299,35 @@ def build_catalog(source_path: Path, database_path: Path, manifest_path: Path) -
                 ),
             )
             assessment_id = int(assessment_cursor.lastrowid)
+
+            for position, certification in enumerate(certifications):
+                certification_source_key = certification["sourceKey"]
+                if certification_source_key not in source_ids:
+                    raise ValueError(
+                        f"unknown certification source {certification_source_key!r} for {gtin}"
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO certification_evidence(
+                        assessment_id, position, source_id, certifying_body,
+                        certificate_reference, scope, valid_from, valid_until
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        assessment_id,
+                        position,
+                        source_ids[certification_source_key],
+                        _nonempty(certification["certifyingBody"], "certifyingBody", gtin),
+                        _nonempty(
+                            certification["certificateReference"],
+                            "certificateReference",
+                            gtin,
+                        ),
+                        _nonempty(certification["scope"], "certification.scope", gtin),
+                        certification.get("validFrom"),
+                        certification.get("validUntil"),
+                    ),
+                )
 
             for position, reason in enumerate(reasons):
                 severity = reason["severity"]

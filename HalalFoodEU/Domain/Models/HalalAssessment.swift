@@ -24,12 +24,39 @@ struct AssessmentReason: Identifiable, Hashable, Codable, Sendable {
     let severity: EvidenceSeverity
 }
 
+struct CertificationEvidence: Identifiable, Hashable, Codable, Sendable {
+    let id: Int64
+    let certifyingBody: String
+    let certificateReference: String
+    let scope: String
+    let validFrom: Date?
+    let validUntil: Date?
+    let source: ProductSource
+}
+
 struct HalalAssessment: Hashable, Codable, Sendable {
     let status: HalalStatus
     let summary: String
     let methodologyVersion: String
     let reviewedAt: Date
     let reasons: [AssessmentReason]
+    let certifications: [CertificationEvidence]
+
+    init(
+        status: HalalStatus,
+        summary: String,
+        methodologyVersion: String,
+        reviewedAt: Date,
+        reasons: [AssessmentReason],
+        certifications: [CertificationEvidence] = []
+    ) {
+        self.status = status
+        self.summary = summary
+        self.methodologyVersion = methodologyVersion
+        self.reviewedAt = reviewedAt
+        self.reasons = reasons
+        self.certifications = certifications
+    }
 }
 
 enum EvidenceFreshness: Equatable, Sendable {

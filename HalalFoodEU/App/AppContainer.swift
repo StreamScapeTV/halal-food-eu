@@ -32,6 +32,10 @@ struct AppContainer {
 private actor UnavailableProductCatalog: ProductCatalog {
     let message: String
 
+    init(message: String) {
+        self.message = message
+    }
+
     func product(for barcode: Barcode) async throws -> ProductRecord? {
         throw ProductCatalogError.unavailable(message)
     }

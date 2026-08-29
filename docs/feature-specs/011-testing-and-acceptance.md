@@ -1,7 +1,7 @@
 # 011 — Testing and acceptance
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-29
 
 ## Test layers
 
@@ -11,6 +11,20 @@
 - Assessment status decoding and display-independent meaning.
 - Lookup use-case found/not-found/error behavior.
 - Freshness boundary calculations.
+- Immutable evidence value decoding/round-trip under Swift 6 strict concurrency.
+
+### Evidence-contract tests
+
+- Validate the committed schema-v1 synthetic evidence envelope.
+- Deterministic namespaced IDs and stable projection under input-array reordering.
+- GTIN leading-zero/check-digit and cross-market separation.
+- Ingredient content-hash and supersession/cycle behavior.
+- Retailer evidence type separation.
+- Certification structural linkage and review state.
+- Assessment invalidation without historical mutation.
+- Unknown schema/enum rejection.
+- HTTPS-only remote image references with no image bytes.
+- User/package review evidence excluded from the minimal runtime projection.
 
 ### Data integration tests
 
@@ -47,7 +61,8 @@
 - **HF-TEST-004:** The iOS job records Xcode/Swift versions and chooses an available iPhone simulator dynamically.
 - **HF-TEST-005:** Warnings introduced by project code are treated as defects; release builds may progressively enable warnings-as-errors after baseline cleanup.
 - **HF-TEST-006:** A pull request is opened only after the issue branch is complete and its push CI is green.
-- **HF-TEST-007:** A real-data release additionally requires license/provenance review and sampled assessment review; green compilation alone is insufficient.
+- **HF-TEST-007:** A real-data release additionally requires source/provenance and sampled assessment review; green compilation alone is insufficient.
+- **HF-TEST-008:** Every push/PR that affects the evidence contract runs its stdlib validator, deterministic projection tests, schema JSON parse, and Swift fixture decoding before merge.
 
 ## Definition of done
 

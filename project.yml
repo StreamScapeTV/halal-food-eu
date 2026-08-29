@@ -88,6 +88,8 @@ targets:
         buildPhase: resources
       - path: HalalFoodEU/Resources/catalog-manifest.json
         buildPhase: resources
+      - path: Data/evidence/sample-evidence-v1.json
+        buildPhase: resources
     dependencies:
       - target: HalalFoodEU
     settings:

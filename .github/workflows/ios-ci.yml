@@ -25,6 +25,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Validate immutable evidence contract
+        run: |
+          python3 -m py_compile \
+            Tools/evidence_model.py \
+            Tools/evidence_model_core.py \
+            Tools/tests/test_evidence_model.py \
+            Tools/tests/test_evidence_source_market.py
+          python3 -m json.tool Data/evidence/evidence-envelope-v1.schema.json >/dev/null
+          python3 Tools/evidence_model.py validate \
+            --input Data/evidence/sample-evidence-v1.json
+          python3 Tools/evidence_model.py project \
+            --input Data/evidence/sample-evidence-v1.json \
+            --output "$RUNNER_TEMP/runtime-projection.json"
+          python3 -m unittest discover -s Tools/tests -p 'test_evidence*.py'
+
       - name: Build synthetic SQLite catalog
         run: |
           python3 Tools/catalog_builder.py \

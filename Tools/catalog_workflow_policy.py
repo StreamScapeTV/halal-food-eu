@@ -107,10 +107,6 @@ def validate_workflows(root: Path) -> list[str]:
                 if permission in text:
                     raise ContractError(f"{path.name} unexpectedly grants {permission}")
 
-        checkout_count = text.count("actions/checkout@")
-        if checkout_count and text.count("persist-credentials: false") < checkout_count:
-            raise ContractError(f"{path.name} must disable persisted checkout credentials for every checkout")
-
         for line in text.splitlines():
             stripped = line.strip()
             if stripped.startswith("- uses:"):
@@ -123,4 +119,8 @@ def validate_workflows(root: Path) -> list[str]:
                 continue
             if not PINNED_USES.fullmatch(target):
                 raise ContractError(f"{path.name} has unpinned action reference: {target}")
+
+        checkout_count = text.count("actions/checkout@")
+        if checkout_count and text.count("persist-credentials: false") < checkout_count:
+            raise ContractError(f"{path.name} must disable persisted checkout credentials for every checkout")
     return checked

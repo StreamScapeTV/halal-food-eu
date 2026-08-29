@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.0.0",
+  "contractVersion": "1.1.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -133,6 +133,16 @@
       "credentialsRequired": false,
       "redistributionClass": "redistributable",
       "allowedHosts": [],
+      "adapterVersion": "1.0.0"
+    },
+    {
+      "key": "open-food-facts",
+      "enabled": true,
+      "sourceClass": "open-database",
+      "accessMethod": "https-export",
+      "credentialsRequired": false,
+      "redistributionClass": "redistributable",
+      "allowedHosts": ["static.openfoodfacts.org"],
       "adapterVersion": "1.0.0"
     }
   ],

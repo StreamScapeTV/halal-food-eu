@@ -46,3 +46,4 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0002 — Immutable bundled SQLite](ADR-0002-immutable-bundled-sqlite.md)
 - [ADR-0003 — Evidence-first assessment states](ADR-0003-evidence-first-assessments.md)
 - [ADR-0004 — Separate software and data rights](ADR-0004-separate-software-and-data-rights.md)
+- [ADR-0005 — Trusted catalog workflow boundaries](ADR-0005-trusted-catalog-workflow-boundaries.md)

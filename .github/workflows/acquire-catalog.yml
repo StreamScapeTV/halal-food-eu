@@ -1,0 +1,106 @@
+name: Catalog acquisition
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+      policy_artifact_name:
+        required: true
+        type: string
+    outputs:
+      artifact_name:
+        description: Uploaded source-snapshot artifact name.
+        value: ${{ jobs.acquire.outputs.artifact_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_name: ${{ steps.name.outputs.artifact_name }}
+    steps:
+      - name: Check out trusted workflow code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate source contract
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          ACQUISITION_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-source \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --mode "$ACQUISITION_MODE"
+
+      - name: Download policy admission from caller run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.policy_artifact_name }}
+          path: ${{ runner.temp }}/policy
+
+      - name: Validate policy handoff
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/policy/handoff.json" \
+            --consumer-stage acquire \
+            --payload-root "$RUNNER_TEMP/policy"
+
+      - name: Acquire registered source fixture
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          ACQUISITION_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$SOURCE_KEY" != "synthetic-fixture" || "$ACQUISITION_MODE" != "fixture" ]]; then
+            echo "No production source adapter is admitted by issue #7; source-specific issues must add reviewed adapters." >&2
+            exit 2
+          fi
+          mkdir -p "$RUNNER_TEMP/source/payload"
+          cp Data/workflows/synthetic-source-records.jsonl "$RUNNER_TEMP/source/payload/source-records.jsonl"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind source-snapshot \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow acquire-catalog.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/source/payload/source-records.jsonl" \
+            --payload-relative-path payload/source-records.jsonl \
+            --record-count 2 \
+            --completeness complete \
+            --redistribution-class redistributable \
+            --content-schema-version synthetic-source-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/source/handoff.json"
+
+      - name: Define immutable artifact name
+        id: name
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: echo "artifact_name=source-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload admitted source snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.name.outputs.artifact_name }}
+          path: ${{ runner.temp }}/source
+          if-no-files-found: error
+          retention-days: 7

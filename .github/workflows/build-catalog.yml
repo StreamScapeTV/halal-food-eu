@@ -1,0 +1,136 @@
+name: Catalog build
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      normalized_artifact_name:
+        required: true
+        type: string
+      quality_artifact_name:
+        required: true
+        type: string
+    outputs:
+      database_artifact_name:
+        value: ${{ jobs.build.outputs.database_artifact_name }}
+      manifest_artifact_name:
+        value: ${{ jobs.build.outputs.manifest_artifact_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      database_artifact_name: ${{ steps.names.outputs.database_artifact_name }}
+      manifest_artifact_name: ${{ steps.names.outputs.manifest_artifact_name }}
+    steps:
+      - name: Check out trusted workflow code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download normalized evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/normalized
+
+      - name: Download quality report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.quality_artifact_name }}
+          path: ${{ runner.temp }}/quality
+
+      - name: Validate complete build inputs
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/normalized/handoff.json" \
+            --consumer-stage build \
+            --payload-root "$RUNNER_TEMP/normalized"
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/quality/handoff.json" \
+            --consumer-stage build \
+            --payload-root "$RUNNER_TEMP/quality"
+
+      - name: Build and validate no-network synthetic catalog fixture
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$SOURCE_KEY" != "synthetic-fixture" ]]; then
+            echo "Production evidence-to-SQLite compilation remains owned by issue #12." >&2
+            exit 2
+          fi
+          mkdir -p "$RUNNER_TEMP/database/payload" "$RUNNER_TEMP/manifest/payload"
+          python3 Tools/catalog_builder.py \
+            --input Data/sample-products.json \
+            --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
+            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json"
+          python3 Tools/validate_catalog.py \
+            --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
+            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
+            --source Data/sample-products.json
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind catalog-database \
+            --source-key aggregate \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow build-catalog.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
+            --payload-relative-path payload/catalog.sqlite3 \
+            --record-count 3 \
+            --completeness complete \
+            --redistribution-class redistributable \
+            --content-schema-version demo-sqlite-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/database/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind catalog-manifest \
+            --source-key aggregate \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow build-catalog.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
+            --payload-relative-path payload/catalog-manifest.json \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class redistributable \
+            --content-schema-version catalog-manifest-demo-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/manifest/handoff.json"
+
+      - name: Define artifact names
+        id: names
+        env:
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          echo "database_artifact_name=catalog-db-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "manifest_artifact_name=catalog-manifest-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload catalog database
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.database_artifact_name }}
+          path: ${{ runner.temp }}/database
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload catalog manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.manifest_artifact_name }}
+          path: ${{ runner.temp }}/manifest
+          if-no-files-found: error
+          retention-days: 14

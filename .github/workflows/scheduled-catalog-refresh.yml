@@ -1,0 +1,82 @@
+name: Scheduled catalog refresh
+
+on:
+  schedule:
+    - cron: "17 3 * * 3"
+  workflow_dispatch:
+    inputs:
+      source_key:
+        description: Registered source key.
+        required: true
+        default: synthetic-fixture
+        type: string
+      snapshot_id:
+        description: Immutable source snapshot identifier.
+        required: true
+        default: fixture-manual
+        type: string
+      mode:
+        description: Registered acquisition mode.
+        required: true
+        default: fixture
+        type: choice
+        options: [fixture, sample, full]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-refresh-${{ inputs.source_key || 'synthetic-fixture' }}
+  cancel-in-progress: false
+
+jobs:
+  policy:
+    uses: ./.github/workflows/source-policy.yml
+    with:
+      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      mode: ${{ inputs.mode || 'fixture' }}
+
+  acquire:
+    needs: policy
+    uses: ./.github/workflows/acquire-catalog.yml
+    with:
+      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      mode: ${{ inputs.mode || 'fixture' }}
+      policy_artifact_name: ${{ needs.policy.outputs.artifact_name }}
+
+  normalize:
+    needs: acquire
+    uses: ./.github/workflows/normalize-and-diff.yml
+    with:
+      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      source_artifact_name: ${{ needs.acquire.outputs.artifact_name }}
+
+  quality:
+    needs: normalize
+    uses: ./.github/workflows/catalog-quality.yml
+    with:
+      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
+      change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
+
+  build:
+    needs: [normalize, quality]
+    uses: ./.github/workflows/build-catalog.yml
+    with:
+      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
+      quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
+
+  proposal-gate:
+    needs: [quality, build]
+    uses: ./.github/workflows/propose-catalog-update.yml
+    with:
+      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      database_artifact_name: ${{ needs.build.outputs.database_artifact_name }}
+      manifest_artifact_name: ${{ needs.build.outputs.manifest_artifact_name }}
+      quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}

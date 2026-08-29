@@ -1,0 +1,113 @@
+name: Catalog quality gate
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      normalized_artifact_name:
+        required: true
+        type: string
+      change_artifact_name:
+        required: true
+        type: string
+    outputs:
+      artifact_name:
+        value: ${{ jobs.quality.outputs.artifact_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_name: ${{ steps.name.outputs.artifact_name }}
+    steps:
+      - name: Check out trusted workflow code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download normalized evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/normalized
+
+      - name: Download change report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.change_artifact_name }}
+          path: ${{ runner.temp }}/change
+
+      - name: Validate immutable handoffs and evidence semantics
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/normalized/handoff.json" \
+            --consumer-stage quality \
+            --payload-root "$RUNNER_TEMP/normalized"
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/change/handoff.json" \
+            --consumer-stage quality \
+            --payload-root "$RUNNER_TEMP/change"
+          python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+
+      - name: Emit deterministic fixture quality report
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/quality/payload"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = {
+              "schemaVersion": 1,
+              "sourceKey": os.environ["SOURCE_KEY"],
+              "snapshotId": os.environ["SNAPSHOT_ID"],
+              "status": "pass",
+              "releaseBlockingFindings": [],
+              "fixtureOnly": True,
+          }
+          Path(os.environ["RUNNER_TEMP"] + "/quality/payload/quality-report.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind quality-report \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow catalog-quality.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/quality/payload/quality-report.json" \
+            --payload-relative-path payload/quality-report.json \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version quality-report-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/quality/handoff.json"
+
+      - name: Define artifact name
+        id: name
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: echo "artifact_name=quality-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.name.outputs.artifact_name }}
+          path: ${{ runner.temp }}/quality
+          if-no-files-found: error
+          retention-days: 14

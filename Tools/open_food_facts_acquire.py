@@ -30,6 +30,8 @@ from open_food_facts_common import (
 
 MAX_LINE_BYTES = 4 * 1024 * 1024
 MAX_DEFAULT_COMPRESSED_BYTES = 16 * 1024 * 1024 * 1024
+MAX_DEFAULT_EXPANDED_BYTES = 128 * 1024 * 1024 * 1024
+MAX_DEFAULT_RECORDS = 10_000_000
 MIN_FULL_COMPRESSED_BYTES = 256 * 1024 * 1024
 MAX_DEFAULT_MALFORMED_RATE = 0.001
 DEFAULT_RETRY_DELAYS = (5, 10, 20, 40)
@@ -71,6 +73,34 @@ class _DigestingReader:
             close()
 
 
+class _AllowlistedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects outside the reviewed HTTPS acquisition-host allowlist."""
+
+    def __init__(self, allowed_hosts: tuple[str, ...]) -> None:
+        super().__init__()
+        self.allowed_hosts = frozenset(host.casefold() for host in allowed_hosts)
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: BinaryIO,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        parsed = urlparse(newurl)
+        hostname = parsed.hostname.casefold() if parsed.hostname else None
+        if (
+            parsed.scheme != "https"
+            or hostname not in self.allowed_hosts
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise AdapterError(f"redirect target is not an admitted HTTPS OFF host: {newurl!r}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 @dataclass
 class Counters:
     examined: int = 0
@@ -79,6 +109,8 @@ class Counters:
     unsupported_schema: int = 0
     malformed: int = 0
     oversized: int = 0
+    lines_seen: int = 0
+    expanded_bytes: int = 0
 
     @property
     def malformed_rate(self) -> float:
@@ -109,11 +141,12 @@ def _open_network_export(
         headers={"User-Agent": user_agent, "Accept": "application/gzip, application/octet-stream"},
         method="GET",
     )
+    opener = urllib.request.build_opener(_AllowlistedRedirectHandler(policy.acquisition_hosts))
     attempts = len(retry_delays) + 1
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
-            response = urllib.request.urlopen(request, timeout=120)
+            response = opener.open(request, timeout=120)
             status = getattr(response, "status", 200)
             if status != 200:
                 response.close()
@@ -141,11 +174,46 @@ def _open_network_export(
     raise AdapterError(f"failed to acquire Open Food Facts export: {last_error}")
 
 
-def _iter_json_lines(stream: BinaryIO, counters: Counters) -> Iterator[dict[str, Any]]:
-    for raw in stream:
+def _account_expanded(counters: Counters, chunk: bytes, max_expanded_bytes: int) -> None:
+    counters.expanded_bytes += len(chunk)
+    if counters.expanded_bytes > max_expanded_bytes:
+        raise AdapterError(f"expanded export exceeded {max_expanded_bytes} bytes")
+
+
+def _drain_oversized_line(
+    stream: BinaryIO,
+    counters: Counters,
+    max_expanded_bytes: int,
+) -> None:
+    while True:
+        tail = stream.readline(MAX_LINE_BYTES + 1)
+        if not tail:
+            return
+        _account_expanded(counters, tail, max_expanded_bytes)
+        if tail.endswith(b"\n"):
+            return
+
+
+def _iter_json_lines(
+    stream: BinaryIO,
+    counters: Counters,
+    *,
+    max_expanded_bytes: int,
+    max_records: int,
+) -> Iterator[dict[str, Any]]:
+    while True:
+        raw = stream.readline(MAX_LINE_BYTES + 1)
+        if not raw:
+            return
+        counters.lines_seen += 1
+        if counters.lines_seen > max_records:
+            raise AdapterError(f"expanded export exceeded {max_records} logical records")
+        _account_expanded(counters, raw, max_expanded_bytes)
         if len(raw) > MAX_LINE_BYTES:
             counters.malformed += 1
             counters.oversized += 1
+            if not raw.endswith(b"\n"):
+                _drain_oversized_line(stream, counters, max_expanded_bytes)
             continue
         if not raw.strip():
             continue
@@ -181,6 +249,8 @@ def acquire(
     user_agent: str | None = None,
     sample_records: int = 10_000,
     max_compressed_bytes: int = MAX_DEFAULT_COMPRESSED_BYTES,
+    max_expanded_bytes: int = MAX_DEFAULT_EXPANDED_BYTES,
+    max_records: int = MAX_DEFAULT_RECORDS,
     max_malformed_rate: float = MAX_DEFAULT_MALFORMED_RATE,
     retrieved_at: str | None = None,
 ) -> dict[str, Any]:
@@ -188,7 +258,13 @@ def acquire(
         raise AdapterError(f"unsupported acquisition mode {mode!r}")
     if not snapshot_id or len(snapshot_id) > 120:
         raise AdapterError("snapshot_id must be a non-empty bounded identifier")
-    if sample_records < 1 or max_compressed_bytes < 1 or not 0 <= max_malformed_rate <= 0.05:
+    if (
+        sample_records < 1
+        or max_compressed_bytes < 1
+        or max_expanded_bytes < 1
+        or max_records < 1
+        or not 0 <= max_malformed_rate <= 0.05
+    ):
         raise AdapterError("invalid acquisition bounds")
 
     counters = Counters()
@@ -226,7 +302,12 @@ def acquire(
 
         with temp_output.open("wb") as destination:
             try:
-                for record in _iter_json_lines(decoded_stream, counters):
+                for record in _iter_json_lines(
+                    decoded_stream,
+                    counters,
+                    max_expanded_bytes=max_expanded_bytes,
+                    max_records=max_records,
+                ):
                     version = _schema_version(record)
                     schemas[version or "missing"] += 1
                     market = market_for_record(record)
@@ -286,6 +367,8 @@ def acquire(
                 "transportEncoding": transport_encoding,
                 "transportSha256": digest_reader.sha256.hexdigest(),
                 "transportBytes": digest_reader.bytes_read,
+                "expandedBytes": counters.expanded_bytes,
+                "recordsSeen": counters.lines_seen,
                 "downloadComplete": download_complete,
                 "sourceSchemaVersions": dict(sorted(schemas.items())),
                 "expectedProductSchemaVersion": policy.product_schema_version,

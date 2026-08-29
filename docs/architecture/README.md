@@ -18,7 +18,7 @@ SwiftUI Features ──> Domain Use Cases ──> Domain Repository Protocols
 - **Domain/UseCases** validates inputs and coordinates one business action.
 - **Data/SQLite** owns SQLite handles, SQL, row mapping, and catalog compatibility.
 - **Features** owns `@MainActor` observable state and native SwiftUI views.
-- **Tools** builds and validates the bundled database outside the application.
+- **Tools** builds, hardens, and validates the bundled database outside the application.
 
 ## Patterns used intentionally
 
@@ -36,7 +36,7 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 1. VisionKit or manual entry emits a payload.
 2. `BarcodePayloadParser` extracts and validates a normalized GTIN-14.
 3. `LookupProductByBarcode` asks `ProductCatalog` asynchronously.
-4. `SQLiteProductCatalog` executes an indexed prepared query on its actor.
+4. `SQLiteProductCatalog` validates the manifest/database pair once, then executes indexed prepared queries on its actor.
 5. Immutable domain values return to the `@MainActor` view model.
 6. SwiftUI displays status, evidence, freshness, source, and dates.
 
@@ -47,3 +47,4 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0003 — Evidence-first assessment states](ADR-0003-evidence-first-assessments.md)
 - [ADR-0004 — Separate software and data rights](ADR-0004-separate-software-and-data-rights.md)
 - [ADR-0005 — Trusted catalog workflow boundaries](ADR-0005-trusted-catalog-workflow-boundaries.md)
+- [ADR-0006 — Secure catalog ingestion and runtime integrity](ADR-0006-secure-catalog-ingestion-and-integrity.md)

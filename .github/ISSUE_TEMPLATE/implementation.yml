@@ -1,0 +1,54 @@
+name: Implementation task
+description: Propose a bounded implementation, architecture, workflow, or refactoring task.
+title: "[Task] "
+labels: ["status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never include API keys, passwords, tokens, private contracts, personal addresses, or other secrets in a public issue.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: State the user-visible or engineering outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: specs
+    attributes:
+      label: Canonical specifications
+      description: List relevant docs/feature-specs sections and any required spec changes.
+      placeholder: "docs/feature-specs/003-catalog-and-sqlite.md — HF-DB-..."
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Use issue references and state what must be true before implementation starts.
+      placeholder: "- [ ] #123 — reason"
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Design and checkpoints
+      description: Provide ordered implementation checkpoints that can become progress checkboxes.
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests and validation
+      description: Describe unit, integration, workflow, iOS, data-quality, and post-merge evidence as applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: release
+    attributes:
+      label: Release / catalog impact
+      description: State whether this changes app behavior, catalog schema/content, source inputs, or release workflows.
+    validations:
+      required: true

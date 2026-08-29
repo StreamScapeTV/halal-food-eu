@@ -21,7 +21,7 @@
       "key": "normalize-diff",
       "accepts": ["source-snapshot"],
       "produces": ["normalized-evidence", "change-report"],
-      "requiresCompleteInput": true,
+      "requiresCompleteInput": false,
       "mayWriteRepository": false
     },
     {

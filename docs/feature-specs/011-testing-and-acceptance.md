@@ -1,0 +1,54 @@
+# 011 — Testing and acceptance
+
+**Status:** Accepted  
+**Last reviewed:** 2026-08-26
+
+## Test layers
+
+### Domain unit tests
+
+- GTIN validation, check digits, normalization, and GS1 Digital Link extraction.
+- Assessment status decoding and display-independent meaning.
+- Lookup use-case found/not-found/error behavior.
+- Freshness boundary calculations.
+
+### Data integration tests
+
+- Open the actual bundled SQLite fixture read-only.
+- Find known synthetic GTINs and load ordered reasons.
+- Return nil for a valid absent GTIN.
+- Reject unsupported status/schema fixtures.
+- Validate source/date/methodology mapping.
+- Confirm exact lookup uses an index in catalog validation.
+
+### Feature/UI tests
+
+- Manual entry works without camera.
+- Invalid barcode never performs lookup.
+- Found/not-found/failure states are distinct.
+- Status, reason, date, and source accessibility labels/read order are correct.
+- Camera unavailability retains a complete manual path.
+
+### Catalog tests
+
+- SHA-256 and manifest metadata.
+- SQLite integrity and foreign keys.
+- Unique normalized GTINs and valid check digits.
+- No dangling current observation or assessment references.
+- Allowed statuses/reason severities.
+- Required provenance/license fields and parseable UTC dates.
+- Logical equivalence after rebuild.
+
+## CI acceptance gates
+
+- **HF-TEST-001:** Every push and pull request runs catalog validation on a GitHub-hosted Linux runner.
+- **HF-TEST-002:** Every push and pull request generates the Xcode project and builds/tests on a GitHub-hosted macOS 26 runner.
+- **HF-TEST-003:** CI does not require Central CI, self-hosted runners, secrets, signing, or a backend.
+- **HF-TEST-004:** The iOS job records Xcode/Swift versions and chooses an available iPhone simulator dynamically.
+- **HF-TEST-005:** Warnings introduced by project code are treated as defects; release builds may progressively enable warnings-as-errors after baseline cleanup.
+- **HF-TEST-006:** A pull request is opened only after the issue branch is complete and its push CI is green.
+- **HF-TEST-007:** A real-data release additionally requires license/provenance review and sampled assessment review; green compilation alone is insufficient.
+
+## Definition of done
+
+A feature is done only when its accepted requirement IDs are implemented, automated tests cover material behavior, documentation and data notices are current, accessibility/privacy/concurrency have been reviewed, and the merged `main` result is green.

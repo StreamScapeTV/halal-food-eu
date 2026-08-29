@@ -136,7 +136,7 @@ struct CatalogIntegrationTests {
         try executeSQLite(
             """
             PRAGMA foreign_keys = OFF;
-            UPDATE products SET current_observation_id = 999999 WHERE gtin = '0200000000004';
+            UPDATE products SET current_observation_id = 999999 WHERE gtin = '00200000000004';
             """,
             databaseURL: fixture.database
         )

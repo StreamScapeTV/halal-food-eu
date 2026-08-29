@@ -1,5 +1,7 @@
 import importlib.util
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +22,21 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("priority:P0", names)
         self.assertIn("status:ready", names)
         self.assertIn("status:done", names)
+        self.assertTrue(
+            all(
+                len(label["description"]) <= MODULE.MAX_DESCRIPTION_LENGTH
+                for label in labels
+            )
+        )
+
+    def test_rejects_description_longer_than_github_limit(self) -> None:
+        labels = json.loads((ROOT / ".github" / "labels.json").read_text(encoding="utf-8"))
+        labels[0]["description"] = "x" * (MODULE.MAX_DESCRIPTION_LENGTH + 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labels.json"
+            path.write_text(json.dumps(labels), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "GitHub maximum"):
+                MODULE.load_manifest(path)
 
 
 class TaxonomyTests(unittest.TestCase):

@@ -195,6 +195,16 @@ class WorkflowYamlPolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(catalog_workflow.ContractError, "must not trigger"):
                 catalog_workflow.validate_workflows(root)
 
+    def test_default_branch_only_workflow_requires_ref_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scheduled-catalog-refresh.yml").write_text(
+                "name: bad\non:\n  schedule:\n    - cron: '17 3 * * 3'\n  workflow_dispatch:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(catalog_workflow.ContractError, "reviewed default branch"):
+                catalog_workflow.validate_workflows(root)
+
 
 if __name__ == "__main__":
     unittest.main()

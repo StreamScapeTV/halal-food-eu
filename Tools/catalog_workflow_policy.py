@@ -15,6 +15,11 @@ TRUSTED_ONLY_WORKFLOWS = {
     "catalog-release.yml",
     "catalog-health.yml",
 }
+DEFAULT_BRANCH_ONLY_WORKFLOWS = {
+    "scheduled-catalog-refresh.yml",
+    "catalog-release.yml",
+    "catalog-health.yml",
+}
 PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.*)?$")
 
 
@@ -35,6 +40,9 @@ def validate_workflows(root: Path) -> list[str]:
             raise ContractError(f"{path.name} schedule must also expose workflow_dispatch")
         if path.name in TRUSTED_ONLY_WORKFLOWS and re.search(r"(?m)^\s{2}pull_request\s*:", text):
             raise ContractError(f"{path.name} trusted workflow must not trigger from pull_request")
+        if path.name in DEFAULT_BRANCH_ONLY_WORKFLOWS:
+            if "EXPECTED_REF: refs/heads/main" not in text or 'test "$GITHUB_REF" = "$EXPECTED_REF"' not in text:
+                raise ContractError(f"{path.name} must fail closed outside the reviewed default branch")
         if path.name not in WRITE_WORKFLOWS:
             for permission in ("contents: write", "pull-requests: write", "issues: write", "attestations: write", "id-token: write"):
                 if permission in text:

@@ -35,8 +35,12 @@ paths.each do |path|
     ids << id
   end
 
-  text = File.read(path).downcase
-  unless text.include?("do not") && (text.include?("credential") || text.include?("secret"))
+  normalized_text = File.read(path).downcase.gsub(/[*_`]/, "")
+  prohibition = normalized_text.include?("do not") || normalized_text.include?("never")
+  sensitive_term = ["credential", "secret", "api key", "password", "token"].any? do |term|
+    normalized_text.include?(term)
+  end
+  unless prohibition && sensitive_term
     raise "#{path}: must contain an explicit public-issue secret/credential warning"
   end
 end

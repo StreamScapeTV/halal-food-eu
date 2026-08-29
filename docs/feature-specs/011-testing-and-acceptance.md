@@ -26,7 +26,6 @@
 - HTTPS-only remote image references with no image bytes.
 - User/package review evidence excluded from the minimal runtime projection.
 
-
 ### Catalog-selection tests
 
 - Validate policy and normalized candidate schemas against the semantic validator field contract.
@@ -37,6 +36,16 @@
 - Remote images are HTTPS metadata only; binary/base64/data-URL fields fail closed.
 - Selection output, compact exclusion index, metrics, sample, and policy comparisons are deterministic under input reordering.
 - Basic exclusion output never contains halal status or full product evidence.
+
+### Security/adversarial tests
+
+- Bounded strict-UTF-8 JSON rejects malformed, oversized, deeply nested, control-character, and excessive-collection inputs.
+- URL admission rejects non-HTTPS, embedded credentials, non-allowlisted hosts/paths, localhost, private/link-local/reserved address literals, and metadata endpoints.
+- Archive ingestion rejects traversal, absolute/backslash paths, symlinks/devices, excess entries, excess expansion, and suspicious compression ratios.
+- Terminal/log and CSV/spreadsheet injection is neutralized; secret canaries must not appear in generated output.
+- Product image bytes remain outside the admitted catalog contract.
+- Workflow dependency pins match the reviewed tooling manifest; pull-request validation cannot gain write/secret authority.
+- Bundled iOS catalog lookup rejects manifest/database digest mismatch, unsupported manifest/source-policy schemas, integrity failures, missing required tables, and incompatible SQLite metadata.
 
 ### Data integration tests
 
@@ -58,6 +67,7 @@
 ### Catalog tests
 
 - SHA-256 and manifest metadata.
+- Source-policy schema/version/SHA-256 binding.
 - SQLite integrity and foreign keys.
 - Unique normalized GTINs and valid check digits.
 - No dangling current observation or assessment references.
@@ -76,6 +86,7 @@
 - **HF-TEST-007:** A real-data release additionally requires source/provenance and sampled assessment review; green compilation alone is insufficient.
 - **HF-TEST-008:** Every push/PR that affects the evidence contract runs its stdlib validator, deterministic projection tests, schema JSON parse, and Swift fixture decoding before merge.
 - **HF-TEST-009:** Every push/PR that affects catalog selection runs the versioned policy/candidate validators, synthetic decision fixtures, deterministic reporting/comparison tests, and image-boundary tests on the GitHub-hosted catalog lane.
+- **HF-TEST-010:** Every push/PR that affects catalog ingestion, workflow trust, dependencies, or runtime integrity runs the adversarial security suite and emits a deterministic reviewed-tooling SBOM.
 
 ## Definition of done
 

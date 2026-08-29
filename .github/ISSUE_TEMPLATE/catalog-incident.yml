@@ -1,0 +1,48 @@
+name: Catalog incident
+description: Report a serious correctness, freshness, provenance, or unsafe assessment problem.
+title: "[Catalog Incident] "
+labels: ["priority:P0", "type:data-quality", "area:catalog", "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, private source payloads, personal information, or confidential contracts. Security vulnerabilities should use the security policy instead.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: [Critical — unsafe current result or prohibited data exposure, High — material incorrect ingredients/status/provenance, Medium — stale/conflicting/coverage regression, Low — reporting or non-user-visible defect]
+    validations:
+      required: true
+  - type: input
+    id: barcode
+    attributes:
+      label: Affected GTIN / scope
+      description: Enter a GTIN or a bounded source/catalog scope.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Catalog/app version
+    validations:
+      required: false
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current incorrect behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: containment
+    attributes:
+      label: Proposed containment / rollback
+      description: State whether the current projection, source, assessment, or catalog release should be quarantined.
+    validations:
+      required: false

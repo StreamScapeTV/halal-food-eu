@@ -1,0 +1,63 @@
+name: Data source proposal
+description: Propose an API, export, manufacturer, retailer, certifier, or open-data source.
+title: "[Source] "
+labels: ["priority:P2", "type:data-source", "area:sources", "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** paste credentials, authenticated URLs, private contracts, account IDs, or personal contact details here. Record secret *names* only after an access method is approved. New source proposals start at P2 until their production value and dependencies are triaged.
+  - type: input
+    id: source
+    attributes:
+      label: Source name and operator
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Official documentation / access URL
+    validations:
+      required: true
+  - type: dropdown
+    id: access
+    attributes:
+      label: Access method
+      options: [Public bulk export, Public API, Official partner API, SFTP/object feed, Manufacturer data, Certifier data, Manual/package evidence, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: fields
+    attributes:
+      label: Useful fields
+      description: GTIN, product name, exact ingredients, dates, retailer evidence, certification, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Market, completeness, freshness, and update semantics
+      description: State what the source actually proves and what it does not prove.
+    validations:
+      required: true
+  - type: textarea
+    id: rights
+    attributes:
+      label: Collection / redistribution terms summary
+      description: Give a non-confidential summary or link. Do not paste a private contract.
+    validations:
+      required: true
+  - type: textarea
+    id: credentials
+    attributes:
+      label: Authentication and rate limits
+      description: State the mechanism and proposed GitHub secret/variable names only; never values.
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Proposed evidence tier and UI claims
+      description: Explain whether this is package, manufacturer, official retailer listing, observation, community report, identity, or certification evidence.
+    validations:
+      required: true

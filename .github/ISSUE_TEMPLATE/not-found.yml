@@ -1,0 +1,71 @@
+name: Product not found
+description: Report a packaged product that is missing from the catalog.
+title: "[Not Found] "
+labels: ["priority:P2", "area:submissions", "area:catalog", "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This public form is for non-sensitive product metadata. Do not upload receipts, faces, addresses, payment data, account credentials, or private correspondence. The app's dedicated evidence email/share flow will be preferred once available. New not-found reports start at P2 until triaged.
+  - type: input
+    id: barcode
+    attributes:
+      label: Barcode / GTIN
+    validations:
+      required: true
+  - type: input
+    id: product
+    attributes:
+      label: Product name
+    validations:
+      required: true
+  - type: input
+    id: brand
+    attributes:
+      label: Brand
+    validations:
+      required: false
+  - type: input
+    id: market
+    attributes:
+      label: Country / market
+      placeholder: Germany
+    validations:
+      required: true
+  - type: input
+    id: retailer
+    attributes:
+      label: Retailer and city (optional)
+      description: Store context is evidence only; do not provide your home address or precise personal location.
+    validations:
+      required: false
+  - type: input
+    id: observed
+    attributes:
+      label: Package observation date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: textarea
+    id: ingredients
+    attributes:
+      label: Exact ingredient text
+      description: Transcribe the package exactly, including language. Use “not readable” instead of guessing.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Product/package evidence
+      description: Optional product-only front/barcode/ingredient panel attachments. Do not attach personal material.
+    validations:
+      required: false
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have not included credentials or unrelated personal information.
+          required: true
+        - label: Any attached package images are mine or I have permission to share them for product-data review.
+          required: true

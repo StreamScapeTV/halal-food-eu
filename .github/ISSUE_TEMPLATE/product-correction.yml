@@ -1,0 +1,53 @@
+name: Product data correction
+description: Report incorrect identity, ingredients, freshness, retailer evidence, or assessment data.
+title: "[Correction] "
+labels: ["priority:P2", "area:catalog", "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share product/package evidence only. Do not include receipts, faces, home addresses, payment data, account credentials, or unrelated personal information. Corrections start at P2 until triage; use the Catalog Incident form for serious unsafe current results.
+  - type: input
+    id: barcode
+    attributes:
+      label: Barcode / GTIN
+      placeholder: "4001234567890"
+    validations:
+      required: true
+  - type: input
+    id: market
+    attributes:
+      label: Country / market
+      placeholder: Germany
+    validations:
+      required: true
+  - type: dropdown
+    id: correction
+    attributes:
+      label: What is incorrect?
+      options: [Product identity, Ingredients, Ingredient date/freshness, Retailer evidence, Halal assessment/reason, Certification evidence, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current catalog information
+      description: Quote the incorrect field/result and catalog version if known.
+    validations:
+      required: true
+  - type: textarea
+    id: corrected
+    attributes:
+      label: Proposed correction and evidence
+      description: Give exact package/source wording, observation date, and source reference. Product-only image attachments are allowed when you own or may share them.
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Evidence confirmation
+      options:
+        - label: I have not included credentials or unrelated personal information.
+          required: true
+        - label: Any attached product/package images are mine or I have permission to share them for review.
+          required: true

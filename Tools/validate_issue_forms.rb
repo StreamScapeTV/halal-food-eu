@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "yaml"
+
+root = File.expand_path("..", __dir__)
+paths = Dir[File.join(root, ".github", "ISSUE_TEMPLATE", "*.yml")].sort
+raise "no issue forms found" if paths.empty?
+
+paths.each do |path|
+  data = YAML.safe_load(File.read(path), aliases: true)
+  raise "#{path}: root must be a mapping" unless data.is_a?(Hash)
+
+  if File.basename(path) == "config.yml"
+    raise "#{path}: blank_issues_enabled must be false" unless data["blank_issues_enabled"] == false
+    next
+  end
+
+  %w[name description body].each do |key|
+    value = data[key]
+    raise "#{path}: missing #{key}" if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+  end
+  raise "#{path}: body must be an array" unless data["body"].is_a?(Array)
+
+  ids = []
+  data["body"].each_with_index do |entry, index|
+    raise "#{path}: body[#{index}] must be a mapping" unless entry.is_a?(Hash)
+    type = entry["type"]
+    raise "#{path}: body[#{index}] has no type" if type.to_s.empty?
+    next if type == "markdown"
+
+    id = entry["id"]
+    raise "#{path}: body[#{index}] has no id" if id.to_s.empty?
+    raise "#{path}: duplicate id #{id}" if ids.include?(id)
+    ids << id
+  end
+
+  text = File.read(path).downcase
+  unless text.include?("do not") && (text.include?("credential") || text.include?("secret"))
+    raise "#{path}: must contain an explicit public-issue secret/credential warning"
+  end
+end
+
+puts "Validated #{paths.length} issue template files"

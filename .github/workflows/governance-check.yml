@@ -8,6 +8,7 @@ on:
       - ".github/workflows/governance-check.yml"
       - ".github/workflows/label-sync.yml"
       - "Tools/github_governance.py"
+      - "Tools/validate_issue_forms.rb"
       - "Tools/tests/test_github_governance.py"
       - "docs/governance/**"
       - "AGENTS.md"
@@ -26,8 +27,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Compile governance Python
+        run: python3 -m py_compile Tools/github_governance.py Tools/tests/test_github_governance.py
       - name: Validate managed label manifest
         run: python3 Tools/github_governance.py validate-manifest
+      - name: Validate issue forms
+        run: ruby Tools/validate_issue_forms.rb
       - name: Run governance unit tests
         run: python3 -m unittest discover -s Tools/tests -p 'test_github_governance.py'
       - name: Validate issue priority and status taxonomy

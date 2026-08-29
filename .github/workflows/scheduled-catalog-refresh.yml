@@ -90,6 +90,7 @@ jobs:
       source_artifact_name: ${{ needs.acquire.outputs.artifact_name }}
 
   quality:
+    if: needs.trusted-default-branch.outputs.mode != 'sample'
     needs: [trusted-default-branch, normalize]
     uses: ./.github/workflows/catalog-quality.yml
     with:

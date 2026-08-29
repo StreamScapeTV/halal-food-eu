@@ -19,14 +19,15 @@ on:
 
 permissions:
   contents: read
-  issues: read
 
 jobs:
-  validate:
+  local-validation:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out repository without persisted credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Compile governance Python
         run: python3 -m py_compile Tools/github_governance.py Tools/tests/test_github_governance.py
       - name: Validate managed label manifest
@@ -35,6 +36,18 @@ jobs:
         run: ruby Tools/validate_issue_forms.rb
       - name: Run governance unit tests
         run: python3 -m unittest discover -s Tools/tests -p 'test_github_governance.py'
+
+  live-roadmap-validation:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Check out trusted default-branch code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Validate issue priority and status taxonomy
         env:
           GITHUB_TOKEN: ${{ github.token }}

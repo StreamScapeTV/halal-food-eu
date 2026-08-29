@@ -21,8 +21,10 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out trusted default-branch code without persisted credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Validate manifest
         run: python3 Tools/github_governance.py validate-manifest
       - name: Synchronize managed labels

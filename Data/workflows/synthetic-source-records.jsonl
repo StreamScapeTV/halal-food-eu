@@ -1,2 +1,2 @@
-{"sourceRecordId":"fixture-001","gtin":"4006381333931","market":"DE","ingredientText":"Wasser, Zucker","language":"de"}
-{"sourceRecordId":"fixture-002","gtin":"5012345678900","market":"DE","ingredientText":null,"language":null}
+{"sourceRecordId":"demo-oat-drink","gtin":"0200000000004","market":"DE","ingredientText":"Water, oats (12%), sunflower oil, sea salt.","language":"en"}
+{"sourceRecordId":"demo-dessert","gtin":"0200000000028","market":"DE","ingredientText":"Milk, sugar, plant-based mono- and diglycerides of fatty acids (E471), natural vanilla flavouring.","language":"en"}

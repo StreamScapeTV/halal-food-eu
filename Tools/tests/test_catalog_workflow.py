@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = ROOT / "Data/workflows/catalog-workflow-contract-v1.json"
 HANDOFF_PATH = ROOT / "Data/workflows/sample-workflow-handoff-v1.json"
 PAYLOAD_PATH = ROOT / "Data/workflows/synthetic-source-records.jsonl"
+EVIDENCE_PATH = ROOT / "Data/evidence/sample-evidence-v1.json"
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -133,6 +134,37 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(raw["payload"]["sha256"], hashlib.sha256(PAYLOAD_PATH.read_bytes()).hexdigest())
         self.assertEqual(raw["payload"]["byteCount"], PAYLOAD_PATH.stat().st_size)
+
+    def test_synthetic_source_fixture_is_actually_normalized_into_evidence(self) -> None:
+        self.assertEqual(catalog_workflow.validate_synthetic_normalization(PAYLOAD_PATH, EVIDENCE_PATH), 2)
+
+    def test_synthetic_source_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source.jsonl"
+            lines = PAYLOAD_PATH.read_text(encoding="utf-8").splitlines()
+            record = json.loads(lines[0])
+            record["ingredientText"] = "tampered ingredient text"
+            lines[0] = json.dumps(record, separators=(",", ":"))
+            source.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(catalog_workflow.ContractError, "ingredient text differs"):
+                catalog_workflow.validate_synthetic_normalization(source, EVIDENCE_PATH)
+
+    def test_fixture_builder_input_is_deterministic_and_evidence_derived(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            first_path = Path(temporary) / "first.json"
+            second_path = Path(temporary) / "second.json"
+            first = catalog_workflow.materialize_fixture_builder_input(EVIDENCE_PATH, first_path)
+            second = catalog_workflow.materialize_fixture_builder_input(EVIDENCE_PATH, second_path)
+            self.assertEqual(first, second)
+            self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
+            self.assertEqual(
+                {product["barcode"] for product in first["products"]},
+                {"00200000000004", "00200000000028"},
+            )
+            self.assertEqual(
+                {product["assessment"]["status"] for product in first["products"]},
+                {"halal-certified", "questionable"},
+            )
 
     def test_proposal_key_is_stable_and_bounded(self) -> None:
         digest = hashlib.sha256(b"catalog").hexdigest()

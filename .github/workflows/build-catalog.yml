@@ -60,8 +60,9 @@ jobs:
             --input "$RUNNER_TEMP/quality/handoff.json" \
             --consumer-stage build \
             --payload-root "$RUNNER_TEMP/quality"
+          python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
 
-      - name: Build and validate no-network synthetic catalog fixture
+      - name: Build and validate no-network synthetic catalog fixture from admitted evidence
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
@@ -72,14 +73,17 @@ jobs:
             exit 2
           fi
           mkdir -p "$RUNNER_TEMP/database/payload" "$RUNNER_TEMP/manifest/payload"
+          python3 Tools/catalog_workflow.py materialize-fixture-builder-input \
+            --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+            --output "$RUNNER_TEMP/builder-input.json"
           python3 Tools/catalog_builder.py \
-            --input Data/sample-products.json \
+            --input "$RUNNER_TEMP/builder-input.json" \
             --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json"
           python3 Tools/validate_catalog.py \
             --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
-            --source Data/sample-products.json
+            --source "$RUNNER_TEMP/builder-input.json"
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind catalog-database \
             --source-key aggregate \
@@ -89,7 +93,7 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --payload "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
             --payload-relative-path payload/catalog.sqlite3 \
-            --record-count 3 \
+            --record-count 2 \
             --completeness complete \
             --redistribution-class redistributable \
             --content-schema-version demo-sqlite-v1 \

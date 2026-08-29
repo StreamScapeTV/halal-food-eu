@@ -66,6 +66,7 @@ jobs:
             Tools/catalog_workflow.py \
             Tools/catalog_workflow_common.py \
             Tools/catalog_workflow_contract.py \
+            Tools/catalog_workflow_fixture.py \
             Tools/catalog_workflow_handoff.py \
             Tools/catalog_workflow_policy.py \
             Tools/tests/test_catalog_workflow.py
@@ -76,6 +77,12 @@ jobs:
             --input Data/workflows/sample-workflow-handoff-v1.json \
             --consumer-stage normalize-diff \
             --payload-root .
+          python3 Tools/catalog_workflow.py validate-synthetic-normalization \
+            --source Data/workflows/synthetic-source-records.jsonl \
+            --evidence Data/evidence/sample-evidence-v1.json
+          python3 Tools/catalog_workflow.py materialize-fixture-builder-input \
+            --evidence Data/evidence/sample-evidence-v1.json \
+            --output "$RUNNER_TEMP/workflow-builder-input.json"
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 -m unittest discover -s Tools/tests -p 'test_catalog_workflow.py'
 

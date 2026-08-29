@@ -15,6 +15,7 @@ from typing import Iterable
 
 from catalog_workflow_common import ARTIFACT_CLASSES, COMPLETENESS, CONTRACT_SCHEMA_VERSION, ContractError, load_json
 from catalog_workflow_contract import WorkflowContract
+from catalog_workflow_fixture import materialize_fixture_builder_input, validate_synthetic_normalization
 from catalog_workflow_handoff import emit_handoff, health_key, proposal_key, validate_handoff
 from catalog_workflow_policy import validate_workflows
 
@@ -95,6 +96,17 @@ def _command_health_key(args: argparse.Namespace) -> None:
     print(health_key(args.condition, args.source_key))
 
 
+def _command_validate_synthetic_normalization(args: argparse.Namespace) -> None:
+    count = validate_synthetic_normalization(Path(args.source), Path(args.evidence))
+    print(json.dumps({"validatedSourceRecords": count}, sort_keys=True))
+
+
+def _command_materialize_fixture_builder_input(args: argparse.Namespace) -> None:
+    output_path = Path(args.output)
+    projected = materialize_fixture_builder_input(Path(args.evidence), output_path)
+    print(json.dumps({"output": str(output_path), "products": len(projected["products"])}, sort_keys=True))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--contract", default="Data/workflows/catalog-workflow-contract-v1.json")
@@ -146,6 +158,16 @@ def build_parser() -> argparse.ArgumentParser:
     health.add_argument("--condition", required=True)
     health.add_argument("--source-key")
     health.set_defaults(func=_command_health_key)
+
+    synthetic_normalization = subparsers.add_parser("validate-synthetic-normalization")
+    synthetic_normalization.add_argument("--source", required=True)
+    synthetic_normalization.add_argument("--evidence", required=True)
+    synthetic_normalization.set_defaults(func=_command_validate_synthetic_normalization)
+
+    fixture_builder = subparsers.add_parser("materialize-fixture-builder-input")
+    fixture_builder.add_argument("--evidence", required=True)
+    fixture_builder.add_argument("--output", required=True)
+    fixture_builder.set_defaults(func=_command_materialize_fixture_builder_input)
     return parser
 
 

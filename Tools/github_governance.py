@@ -20,6 +20,7 @@ DEFAULT_MANIFEST = ROOT / ".github" / "labels.json"
 HEX_COLOR = re.compile(r"^[0-9A-Fa-f]{6}$")
 PRIORITY_PREFIX = "priority:"
 STATUS_PREFIX = "status:"
+MAX_DESCRIPTION_LENGTH = 100
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,11 @@ def load_manifest(path: Path = DEFAULT_MANIFEST) -> list[dict[str, str]]:
             raise ValueError(f"label {name!r} has invalid color {color!r}")
         if not description:
             raise ValueError(f"label {name!r} has no description")
+        if len(description) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"label {name!r} description is {len(description)} characters; "
+                f"GitHub maximum is {MAX_DESCRIPTION_LENGTH}"
+            )
         seen.add(name)
         labels.append({"name": name, "color": color, "description": description})
 

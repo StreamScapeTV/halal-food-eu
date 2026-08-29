@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import open_food_facts_common as common
@@ -49,6 +50,16 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _network_user_agent() -> str | None:
+    configured = os.environ.get("OPEN_FOOD_FACTS_USER_AGENT", "").strip()
+    if configured:
+        return configured
+    contact = os.environ.get("OPEN_FOOD_FACTS_CONTACT_EMAIL", "").strip()
+    if contact:
+        return f"HalalFoodEU/1.0 ({contact})"
+    return None
+
+
 def main() -> None:
     args = _parser().parse_args()
     # Acquisition projections must retain the unlocalized exact ingredient field too.
@@ -65,6 +76,7 @@ def main() -> None:
             mode=args.mode,
             policy=policy,
             fixture=args.fixture,
+            user_agent=_network_user_agent(),
             sample_records=args.sample_records,
             max_compressed_bytes=args.max_compressed_bytes,
             max_malformed_rate=args.max_malformed_rate,

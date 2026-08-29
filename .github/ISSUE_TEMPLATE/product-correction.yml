@@ -1,12 +1,12 @@
 name: Product data correction
 description: Report incorrect identity, ingredients, freshness, retailer evidence, or assessment data.
 title: "[Correction] "
-labels: ["area:catalog", "status:planned"]
+labels: ["priority:P2", "area:catalog", "status:planned"]
 body:
   - type: markdown
     attributes:
       value: |
-        Share product/package evidence only. Do not include receipts, faces, home addresses, payment data, account credentials, or unrelated personal information.
+        Share product/package evidence only. Do not include receipts, faces, home addresses, payment data, account credentials, or unrelated personal information. Corrections start at P2 until triage; use the Catalog Incident form for serious unsafe current results.
   - type: input
     id: barcode
     attributes:

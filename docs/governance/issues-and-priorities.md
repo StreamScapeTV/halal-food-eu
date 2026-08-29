@@ -10,6 +10,8 @@ GitHub Issues are the durable execution system for this single-agent repository.
 
 Priority never overrides a dependency, source-access condition, review gate, or owner-input requirement.
 
+Generic implementation, source-proposal, correction, and not-found issue forms deliberately start as `priority:P2` + `status:planned` so an untriaged public issue can never accidentally jump ahead of reviewed work or violate taxonomy. The continuous agent/maintainer must inspect impact and dependencies and may promote it to P1/P0 before marking it ready. The dedicated Catalog Incident form starts P0 because it is reserved for serious current correctness/safety failures.
+
 ## Status lifecycle
 
 - `status:planned` — scoped but not yet proven ready.

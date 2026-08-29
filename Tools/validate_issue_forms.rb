@@ -22,6 +22,12 @@ paths.each do |path|
   end
   raise "#{path}: body must be an array" unless data["body"].is_a?(Array)
 
+  labels = Array(data["labels"])
+  priorities = labels.grep(/^priority:/)
+  statuses = labels.grep(/^status:/)
+  raise "#{path}: form must apply exactly one default priority label" unless priorities.length == 1
+  raise "#{path}: form must apply exactly one default status label" unless statuses.length == 1
+
   ids = []
   data["body"].each_with_index do |entry, index|
     raise "#{path}: body[#{index}] must be a mapping" unless entry.is_a?(Hash)

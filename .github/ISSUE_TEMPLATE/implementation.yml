@@ -1,12 +1,12 @@
 name: Implementation task
 description: Propose a bounded implementation, architecture, workflow, or refactoring task.
 title: "[Task] "
-labels: ["status:planned"]
+labels: ["priority:P2", "status:planned"]
 body:
   - type: markdown
     attributes:
       value: |
-        Never include API keys, passwords, tokens, private contracts, personal addresses, or other secrets in a public issue.
+        Never include API keys, passwords, tokens, private contracts, personal addresses, or other secrets in a public issue. New untriaged tasks start at P2; the agent/maintainer promotes priority only after reviewing impact and dependencies.
   - type: textarea
     id: goal
     attributes:

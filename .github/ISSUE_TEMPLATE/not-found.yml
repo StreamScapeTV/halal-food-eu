@@ -1,12 +1,12 @@
 name: Product not found
 description: Report a packaged product that is missing from the catalog.
 title: "[Not Found] "
-labels: ["area:submissions", "area:catalog", "status:planned"]
+labels: ["priority:P2", "area:submissions", "area:catalog", "status:planned"]
 body:
   - type: markdown
     attributes:
       value: |
-        This public form is for non-sensitive product metadata. Do not upload receipts, faces, addresses, payment data, account credentials, or private correspondence. The app's dedicated evidence email/share flow will be preferred once available.
+        This public form is for non-sensitive product metadata. Do not upload receipts, faces, addresses, payment data, account credentials, or private correspondence. The app's dedicated evidence email/share flow will be preferred once available. New not-found reports start at P2 until triaged.
   - type: input
     id: barcode
     attributes:

@@ -1,12 +1,12 @@
 name: Data source proposal
 description: Propose an API, export, manufacturer, retailer, certifier, or open-data source.
 title: "[Source] "
-labels: ["type:data-source", "area:sources", "status:planned"]
+labels: ["priority:P2", "type:data-source", "area:sources", "status:planned"]
 body:
   - type: markdown
     attributes:
       value: |
-        Do **not** paste credentials, authenticated URLs, private contracts, account IDs, or personal contact details here. Record secret *names* only after an access method is approved.
+        Do **not** paste credentials, authenticated URLs, private contracts, account IDs, or personal contact details here. Record secret *names* only after an access method is approved. New source proposals start at P2 until their production value and dependencies are triaged.
   - type: input
     id: source
     attributes:

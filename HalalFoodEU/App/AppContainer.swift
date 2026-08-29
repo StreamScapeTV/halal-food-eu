@@ -14,14 +14,18 @@ struct AppContainer {
                 catalog: UnavailableProductCatalog(message: "catalog.sqlite3 is missing from the application bundle")
             )
         }
-
-        do {
-            return AppContainer(catalog: try SQLiteProductCatalog(databaseURL: databaseURL))
-        } catch {
+        guard let manifestURL = bundle.url(forResource: "catalog-manifest", withExtension: "json") else {
             return AppContainer(
-                catalog: UnavailableProductCatalog(message: error.localizedDescription)
+                catalog: UnavailableProductCatalog(message: "catalog-manifest.json is missing from the application bundle")
             )
         }
+
+        return AppContainer(
+            catalog: SQLiteProductCatalog(
+                databaseURL: databaseURL,
+                manifestURL: manifestURL
+            )
+        )
     }
 
     func makeScannerViewModel() -> ScannerViewModel {

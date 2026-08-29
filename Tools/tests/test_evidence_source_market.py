@@ -21,8 +21,9 @@ class SourceMarketTests(unittest.TestCase):
         data = MODULE.load_json(FIXTURE)
         identity = copy.deepcopy(data["identities"][0])
         identity["market"] = "FR"
+        identity["sourceRecordID"] = "demo-dessert-fr"
         identity["id"] = MODULE.derive_id("identities", identity)
-        data["identities"][0] = identity
+        data["identities"].append(identity)
 
         with self.assertRaisesRegex(
             MODULE.EvidenceValidationError,

@@ -80,10 +80,16 @@ jobs:
             --input "$RUNNER_TEMP/builder-input.json" \
             --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json"
+          python3 Tools/catalog_security.py bind-manifest \
+            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
           python3 Tools/validate_catalog.py \
             --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
             --source "$RUNNER_TEMP/builder-input.json"
+          python3 Tools/catalog_security.py validate-manifest \
+            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind catalog-database \
             --source-key aggregate \

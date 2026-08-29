@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 command -v xcodegen >/dev/null 2>&1 || {
-  echo "xcodegen is required. Install it with: brew install xcodegen" >&2
+  echo "xcodegen is required. CI builds the reviewed source pin from Data/security/tooling-dependencies-v1.json." >&2
   exit 1
 }
 
@@ -18,10 +18,18 @@ python3 Tools/catalog_builder.py \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
 
+python3 Tools/catalog_security.py bind-manifest \
+  --manifest HalalFoodEU/Resources/catalog-manifest.json \
+  --source-policy Data/workflows/catalog-workflow-contract-v1.json
+
 python3 Tools/validate_catalog.py \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json \
   --source Data/sample-products.json
+
+python3 Tools/catalog_security.py validate-manifest \
+  --manifest HalalFoodEU/Resources/catalog-manifest.json \
+  --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
 xcodegen generate
 

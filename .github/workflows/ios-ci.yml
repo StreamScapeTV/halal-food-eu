@@ -86,19 +86,46 @@ jobs:
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 -m unittest discover -s Tools/tests -p 'test_catalog_workflow.py'
 
+      - name: Validate hostile-input and dependency security policy
+        run: |
+          python3 -m py_compile \
+            Tools/catalog_security.py \
+            Tools/tests/test_catalog_security.py
+          python3 -m json.tool Data/security/tooling-dependencies-v1.json >/dev/null
+          python3 -m unittest discover -s Tools/tests -p 'test_catalog_security.py'
+          python3 Tools/catalog_security.py tooling-sbom \
+            --root . \
+            --dependency-manifest Data/security/tooling-dependencies-v1.json \
+            --output "$RUNNER_TEMP/tooling-sbom.json"
+          python3 -m json.tool "$RUNNER_TEMP/tooling-sbom.json" >/dev/null
+
+      - name: Upload reviewed tooling SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tooling-sbom-${{ github.sha }}
+          path: ${{ runner.temp }}/tooling-sbom.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build synthetic SQLite catalog
         run: |
           python3 Tools/catalog_builder.py \
             --input Data/sample-products.json \
             --database HalalFoodEU/Resources/catalog.sqlite3 \
             --manifest HalalFoodEU/Resources/catalog-manifest.json
+          python3 Tools/catalog_security.py bind-manifest \
+            --manifest HalalFoodEU/Resources/catalog-manifest.json \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
-      - name: Validate bundled SQLite catalog
+      - name: Validate bundled SQLite catalog and source-policy binding
         run: |
           python3 Tools/validate_catalog.py \
             --database HalalFoodEU/Resources/catalog.sqlite3 \
             --manifest HalalFoodEU/Resources/catalog-manifest.json \
             --source Data/sample-products.json
+          python3 Tools/catalog_security.py validate-manifest \
+            --manifest HalalFoodEU/Resources/catalog-manifest.json \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
       - name: Rebuild and compare logical catalog content
         run: |
@@ -107,23 +134,46 @@ jobs:
             --input Data/sample-products.json \
             --database "$RUNNER_TEMP/rebuilt/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/rebuilt/catalog-manifest.json"
+          python3 Tools/catalog_security.py bind-manifest \
+            --manifest "$RUNNER_TEMP/rebuilt/catalog-manifest.json" \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
           python3 Tools/validate_catalog.py \
             --database "$RUNNER_TEMP/rebuilt/catalog.sqlite3" \
             --manifest "$RUNNER_TEMP/rebuilt/catalog-manifest.json" \
             --source Data/sample-products.json
+          python3 Tools/catalog_security.py validate-manifest \
+            --manifest "$RUNNER_TEMP/rebuilt/catalog-manifest.json" \
+            --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
   ios:
     name: iOS 18+ build and tests
     runs-on: macos-26
     timeout-minutes: 30
+    env:
+      XCODEGEN_VERSION: 2.46.0
+      XCODEGEN_COMMIT: 8445e778451c7e44237b90281bde622d764b0084
     steps:
       - name: Check out repository without persisted credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
-      - name: Install deterministic project generator
-        run: brew install xcodegen
+      - name: Build reviewed XcodeGen source pin
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/XcodeGen" "$RUNNER_TEMP/bin"
+          git -C "$RUNNER_TEMP/XcodeGen" init
+          git -C "$RUNNER_TEMP/XcodeGen" remote add origin https://github.com/yonaskolb/XcodeGen.git
+          git -C "$RUNNER_TEMP/XcodeGen" fetch --depth=1 origin "$XCODEGEN_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/XcodeGen" rev-parse FETCH_HEAD)" = "$XCODEGEN_COMMIT"
+          git -C "$RUNNER_TEMP/XcodeGen" checkout --detach FETCH_HEAD
+          test -f "$RUNNER_TEMP/XcodeGen/Package.resolved"
+          (
+            cd "$RUNNER_TEMP/XcodeGen"
+            swift build -c release --disable-sandbox
+          )
+          cp "$RUNNER_TEMP/XcodeGen/.build/release/xcodegen" "$RUNNER_TEMP/bin/xcodegen"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Generate, build, and test
         run: ./Scripts/ci-ios.sh

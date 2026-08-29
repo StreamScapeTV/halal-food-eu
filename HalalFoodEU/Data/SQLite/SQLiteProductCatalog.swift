@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SQLite3
 
@@ -13,16 +14,43 @@ private final class SQLiteConnection: @unchecked Sendable {
     }
 }
 
+private struct CatalogManifest: Decodable, Sendable {
+    struct SourcePolicy: Decodable, Sendable {
+        let schemaVersion: Int
+        let contractVersion: String
+        let sha256: String
+    }
+
+    let catalogVersion: String
+    let schemaVersion: Int
+    let recordCount: Int
+    let sha256: String
+    let sourcePolicy: SourcePolicy
+}
+
 actor SQLiteProductCatalog: ProductCatalog {
     static let supportedSchemaVersion = 1
+    static let supportedSourcePolicySchemaVersion = 1
     static let expectedApplicationID: Int32 = 1_212_564_821 // ASCII "HFEU"
 
+    private static let requiredTables: Set<String> = [
+        "catalog_metadata",
+        "sources",
+        "products",
+        "product_observations",
+        "product_assessments",
+        "certification_evidence",
+        "assessment_reasons",
+    ]
+
     private let databaseURL: URL
+    private let manifestURL: URL
     private var connection: SQLiteConnection?
     private var catalogVersion: String?
 
-    init(databaseURL: URL) {
+    init(databaseURL: URL, manifestURL: URL) {
         self.databaseURL = databaseURL
+        self.manifestURL = manifestURL
     }
 
     func product(for barcode: Barcode) async throws -> ProductRecord? {
@@ -137,6 +165,8 @@ actor SQLiteProductCatalog: ProductCatalog {
             return (connection, catalogVersion)
         }
 
+        let manifest = try Self.loadAndValidateManifest(manifestURL: manifestURL, databaseURL: databaseURL)
+
         var openedDatabase: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         let openResult = sqlite3_open_v2(databaseURL.path, &openedDatabase, flags, nil)
@@ -153,6 +183,11 @@ actor SQLiteProductCatalog: ProductCatalog {
         try Self.execute("PRAGMA query_only = ON;", database: openedDatabase)
         try Self.execute("PRAGMA foreign_keys = ON;", database: openedDatabase)
 
+        let queryOnly = try Self.readIntegerPragma("query_only", database: openedDatabase)
+        guard queryOnly == 1 else {
+            throw ProductCatalogError.invalidRecord("SQLite query-only mode was not enabled")
+        }
+
         let applicationID = try Self.readIntegerPragma("application_id", database: openedDatabase)
         guard applicationID == Self.expectedApplicationID else {
             throw ProductCatalogError.invalidRecord(
@@ -167,11 +202,30 @@ actor SQLiteProductCatalog: ProductCatalog {
                 actual: Int(schemaVersion)
             )
         }
+        guard manifest.schemaVersion == Int(schemaVersion) else {
+            throw ProductCatalogError.invalidRecord("catalog manifest and SQLite schema versions differ")
+        }
 
-        let openedCatalogVersion = try Self.readMetadata(
-            "catalogVersion",
+        try Self.validateIntegrity(database: openedDatabase)
+        try Self.validateRequiredTables(database: openedDatabase)
+
+        let openedCatalogVersion = try Self.readMetadata("catalogVersion", database: openedDatabase)
+        guard openedCatalogVersion == manifest.catalogVersion else {
+            throw ProductCatalogError.invalidRecord("catalog manifest and SQLite catalog versions differ")
+        }
+        let metadataSchema = try Self.readMetadata("schemaVersion", database: openedDatabase)
+        guard metadataSchema == String(manifest.schemaVersion) else {
+            throw ProductCatalogError.invalidRecord("catalog metadata schema version differs from manifest")
+        }
+
+        let productCount = try Self.readCount(
+            "SELECT COUNT(*) FROM products;",
             database: openedDatabase
         )
+        guard productCount == manifest.recordCount else {
+            throw ProductCatalogError.invalidRecord("catalog manifest record count differs from SQLite")
+        }
+
         connection = openedConnection
         catalogVersion = openedCatalogVersion
         return (openedConnection, openedCatalogVersion)
@@ -356,6 +410,131 @@ actor SQLiteProductCatalog: ProductCatalog {
         ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(connection.handle)))
     }
 
+    private static func loadAndValidateManifest(
+        manifestURL: URL,
+        databaseURL: URL
+    ) throws -> CatalogManifest {
+        let data: Data
+        do {
+            data = try Data(contentsOf: manifestURL, options: [.mappedIfSafe])
+        } catch {
+            throw ProductCatalogError.invalidRecord("catalog manifest cannot be read")
+        }
+
+        let manifest: CatalogManifest
+        do {
+            manifest = try JSONDecoder().decode(CatalogManifest.self, from: data)
+        } catch {
+            throw ProductCatalogError.invalidRecord("catalog manifest is malformed or incomplete")
+        }
+
+        guard manifest.schemaVersion == supportedSchemaVersion else {
+            throw ProductCatalogError.incompatibleSchema(
+                expected: supportedSchemaVersion,
+                actual: manifest.schemaVersion
+            )
+        }
+        guard manifest.recordCount >= 0 else {
+            throw ProductCatalogError.invalidRecord("catalog manifest record count is invalid")
+        }
+        guard isLowercaseSHA256(manifest.sha256) else {
+            throw ProductCatalogError.invalidRecord("catalog manifest SHA-256 is invalid")
+        }
+        guard manifest.sourcePolicy.schemaVersion == supportedSourcePolicySchemaVersion,
+              !manifest.sourcePolicy.contractVersion.isEmpty,
+              isLowercaseSHA256(manifest.sourcePolicy.sha256) else {
+            throw ProductCatalogError.invalidRecord("catalog manifest source-policy identity is invalid")
+        }
+
+        let actualDigest: String
+        do {
+            actualDigest = try sha256(of: databaseURL)
+        } catch {
+            throw ProductCatalogError.invalidRecord("catalog database digest could not be computed")
+        }
+        guard actualDigest == manifest.sha256 else {
+            throw ProductCatalogError.invalidRecord("catalog database SHA-256 does not match manifest")
+        }
+        return manifest
+    }
+
+    private static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
+            hasher.update(data: data)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func isLowercaseSHA256(_ value: String) -> Bool {
+        value.utf8.count == 64 && value.utf8.allSatisfy { byte in
+            (48...57).contains(byte) || (97...102).contains(byte)
+        }
+    }
+
+    private static func validateIntegrity(database: OpaquePointer) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA integrity_check;", -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW,
+              let text = sqlite3_column_text(statement, 0),
+              String(cString: text) == "ok",
+              sqlite3_step(statement) == SQLITE_DONE else {
+            throw ProductCatalogError.invalidRecord("SQLite integrity check failed")
+        }
+
+        var foreignKeyStatement: OpaquePointer?
+        guard sqlite3_prepare_v2(
+            database,
+            "PRAGMA foreign_key_check;",
+            -1,
+            &foreignKeyStatement,
+            nil
+        ) == SQLITE_OK, let foreignKeyStatement else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(foreignKeyStatement) }
+
+        guard sqlite3_step(foreignKeyStatement) == SQLITE_DONE else {
+            throw ProductCatalogError.invalidRecord("SQLite foreign-key check failed")
+        }
+    }
+
+    private static func validateRequiredTables(database: OpaquePointer) throws {
+        var statement: OpaquePointer?
+        let sql = "SELECT name FROM sqlite_master WHERE type = 'table';"
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var tables: Set<String> = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                if let name = sqlite3_column_text(statement, 0) {
+                    tables.insert(String(cString: name))
+                }
+            case SQLITE_DONE:
+                let missing = requiredTables.subtracting(tables)
+                guard missing.isEmpty else {
+                    throw ProductCatalogError.invalidRecord("catalog is missing required SQLite tables")
+                }
+                return
+            default:
+                throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+            }
+        }
+    }
+
     private static func execute(_ sql: String, database: OpaquePointer) throws {
         var errorMessage: UnsafeMutablePointer<CChar>?
         let result = sqlite3_exec(database, sql, nil, nil, &errorMessage)
@@ -379,6 +558,20 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
         }
         return sqlite3_column_int(statement, 0)
+    }
+
+    private static func readCount(_ sql: String, database: OpaquePointer) throws -> Int {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        return Int(sqlite3_column_int64(statement, 0))
     }
 
     private static func readMetadata(_ key: String, database: OpaquePointer) throws -> String {

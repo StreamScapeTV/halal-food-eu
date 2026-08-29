@@ -31,6 +31,7 @@
 - **HF-PIPELINE-011:** Production catalog proposals record the selection-policy version and report records examined, included detailed products, basic exclusions, invalid/source exclusions, missing-ingredient inclusions, deterministic exclusion samples, and policy decision changes.
 - **HF-PIPELINE-012:** A selection-policy change must produce a deterministic before/after impact report before publication; a decrease in detailed coverage is review evidence, not an automatic optimization.
 - **HF-PIPELINE-013:** Selection/build stages may preserve bounded remote image-reference metadata but must not implicitly download or bundle product image bytes.
+- **HF-PIPELINE-014:** Every releasable catalog manifest records the exact reviewed source-policy schema/version and SHA-256, and CI verifies that binding before artifact handoff or release evidence is accepted.
 
 ## Versioning
 

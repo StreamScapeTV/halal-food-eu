@@ -22,8 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Validate immutable evidence contract
         run: |
@@ -58,6 +60,32 @@ jobs:
             --output "$RUNNER_TEMP/catalog-selection.json"
           python3 -m unittest discover -s Tools/tests -p 'test_catalog_selection.py'
 
+      - name: Validate catalog workflow contract and trust boundaries
+        run: |
+          python3 -m py_compile \
+            Tools/catalog_workflow.py \
+            Tools/catalog_workflow_common.py \
+            Tools/catalog_workflow_contract.py \
+            Tools/catalog_workflow_fixture.py \
+            Tools/catalog_workflow_handoff.py \
+            Tools/catalog_workflow_policy.py \
+            Tools/tests/test_catalog_workflow.py
+          python3 -m json.tool Data/workflows/catalog-workflow-contract-v1.json >/dev/null
+          python3 -m json.tool Data/workflows/workflow-handoff-v1.schema.json >/dev/null
+          python3 Tools/catalog_workflow.py validate-contract
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input Data/workflows/sample-workflow-handoff-v1.json \
+            --consumer-stage normalize-diff \
+            --payload-root .
+          python3 Tools/catalog_workflow.py validate-synthetic-normalization \
+            --source Data/workflows/synthetic-source-records.jsonl \
+            --evidence Data/evidence/sample-evidence-v1.json
+          python3 Tools/catalog_workflow.py materialize-fixture-builder-input \
+            --evidence Data/evidence/sample-evidence-v1.json \
+            --output "$RUNNER_TEMP/workflow-builder-input.json"
+          python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
+          python3 -m unittest discover -s Tools/tests -p 'test_catalog_workflow.py'
+
       - name: Build synthetic SQLite catalog
         run: |
           python3 Tools/catalog_builder.py \
@@ -89,8 +117,10 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Install deterministic project generator
         run: brew install xcodegen

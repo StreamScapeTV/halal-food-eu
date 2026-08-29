@@ -1,0 +1,76 @@
+name: Catalog health
+
+on:
+  schedule:
+    - cron: "23 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-health
+  cancel-in-progress: true
+
+jobs:
+  contract-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require reviewed default-branch workflow code
+        env:
+          EXPECTED_REF: refs/heads/main
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+
+      - name: Check out trusted default-branch code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate workflow/source contracts and derive deduplicated health identities
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-contract
+          python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
+          mkdir -p "$RUNNER_TEMP/health/payload"
+          CONTRACT_KEY="$(python3 Tools/catalog_workflow.py health-key --condition contract-invalid)"
+          SOURCE_KEY="$(python3 Tools/catalog_workflow.py health-key --condition source-disabled --source-key synthetic-fixture)"
+          CONTRACT_KEY="$CONTRACT_KEY" SOURCE_KEY="$SOURCE_KEY" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = {
+              'schemaVersion': 1,
+              'status': 'healthy',
+              'conditions': [],
+              'deduplicationKeys': [os.environ['CONTRACT_KEY'], os.environ['SOURCE_KEY']],
+              'note': 'Issue creation is only necessary when a concrete health condition exists; source-specific expiry/failure conditions are added with their adapters.',
+          }
+          Path(os.environ['RUNNER_TEMP'] + '/health/payload/health-report.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind health-report \
+            --source-key aggregate \
+            --snapshot-id "health-${GITHUB_RUN_ID}" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow catalog-health.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/health/payload/health-report.json" \
+            --payload-relative-path payload/health-report.json \
+            --record-count 0 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version health-report-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/health/handoff.json"
+
+      - name: Upload health report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: catalog-health-${{ github.run_id }}
+          path: ${{ runner.temp }}/health
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "artifactKind": "source-snapshot",
+  "sourceKey": "synthetic-fixture",
+  "snapshotId": "fixture-2026-08-29",
+  "producer": {
+    "repository": "StreamScapeTV/halal-food-eu",
+    "commitSha": "b20ab34bed1ef05defd0198b065499766029a12e",
+    "workflow": "fixture-local",
+    "runId": "1"
+  },
+  "payload": {
+    "relativePath": "Data/workflows/synthetic-source-records.jsonl",
+    "sha256": "3b36b5a533da474959a1dababd524de26a8f925e8b67129f6864d13f3ffdf5f1",
+    "byteCount": 357
+  },
+  "recordCount": 2,
+  "completeness": "complete",
+  "redistributionClass": "redistributable",
+  "contentSchemaVersion": "synthetic-source-v1",
+  "createdAt": "2026-08-29T00:00:00Z"
+}

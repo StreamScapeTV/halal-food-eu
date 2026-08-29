@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscapetv.example/halal-food-eu/workflow-handoff-v1.schema.json",
+  "title": "Halal Food EU workflow artifact handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactKind",
+    "sourceKey",
+    "snapshotId",
+    "producer",
+    "payload",
+    "recordCount",
+    "completeness",
+    "redistributionClass",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "artifactKind": {"type": "string", "minLength": 1, "maxLength": 64},
+    "sourceKey": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$|^[a-z0-9]$"},
+    "snapshotId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commitSha", "workflow", "runId"],
+      "properties": {
+        "repository": {"const": "StreamScapeTV/halal-food-eu"},
+        "commitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "workflow": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "runId": {"type": "string", "pattern": "^[0-9]{1,32}$"}
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relativePath", "sha256", "byteCount"],
+      "properties": {
+        "relativePath": {"type": "string", "minLength": 1, "maxLength": 240},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "byteCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "recordCount": {"type": "integer", "minimum": 0},
+    "completeness": {"enum": ["complete", "partial"]},
+    "redistributionClass": {"enum": ["restricted", "redistributable", "metadata-only"]},
+    "contentSchemaVersion": {"type": ["string", "null"], "maxLength": 64},
+    "createdAt": {"type": "string", "format": "date-time"}
+  }
+}

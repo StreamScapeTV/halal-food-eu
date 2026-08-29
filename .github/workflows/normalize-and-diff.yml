@@ -1,0 +1,144 @@
+name: Catalog normalize and diff
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      source_artifact_name:
+        required: true
+        type: string
+    outputs:
+      normalized_artifact_name:
+        value: ${{ jobs.normalize.outputs.normalized_artifact_name }}
+      change_artifact_name:
+        value: ${{ jobs.normalize.outputs.change_artifact_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      normalized_artifact_name: ${{ steps.names.outputs.normalized_artifact_name }}
+      change_artifact_name: ${{ steps.names.outputs.change_artifact_name }}
+    steps:
+      - name: Check out trusted workflow code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download source snapshot
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.source_artifact_name }}
+          path: ${{ runner.temp }}/source
+
+      - name: Validate complete source handoff
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/source/handoff.json" \
+            --consumer-stage normalize-diff \
+            --payload-root "$RUNNER_TEMP/source"
+
+      - name: Normalize synthetic fixture into v1 evidence and deterministic change report
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$SOURCE_KEY" != "synthetic-fixture" ]]; then
+            echo "A source-specific normalized adapter must be added by the source issue." >&2
+            exit 2
+          fi
+          python3 Tools/evidence_model.py validate --input Data/evidence/sample-evidence-v1.json
+          python3 Tools/catalog_workflow.py validate-synthetic-normalization \
+            --source "$RUNNER_TEMP/source/payload/source-records.jsonl" \
+            --evidence Data/evidence/sample-evidence-v1.json
+          mkdir -p "$RUNNER_TEMP/normalized/payload" "$RUNNER_TEMP/change/payload"
+          cp Data/evidence/sample-evidence-v1.json "$RUNNER_TEMP/normalized/payload/evidence.json"
+          SOURCE_HANDOFF="$RUNNER_TEMP/source/handoff.json" python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          source_handoff = json.loads(Path(os.environ["SOURCE_HANDOFF"]).read_text(encoding="utf-8"))
+          evidence = Path(os.environ["RUNNER_TEMP"] + "/normalized/payload/evidence.json")
+          report = {
+              "schemaVersion": 1,
+              "sourceKey": os.environ["SOURCE_KEY"],
+              "snapshotId": os.environ["SNAPSHOT_ID"],
+              "sourcePayloadSha256": source_handoff["payload"]["sha256"],
+              "normalizedEvidenceSha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+              "baseline": "synthetic-none",
+              "additions": 2,
+              "changes": 0,
+              "removals": 0,
+              "conflicts": 0,
+              "reviewQueue": [],
+              "fixtureOnly": True,
+          }
+          Path(os.environ["RUNNER_TEMP"] + "/change/payload/change-report.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind normalized-evidence \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow normalize-and-diff.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/normalized/payload/evidence.json" \
+            --payload-relative-path payload/evidence.json \
+            --record-count 2 \
+            --completeness complete \
+            --redistribution-class redistributable \
+            --content-schema-version evidence-envelope-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/normalized/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind change-report \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow normalize-and-diff.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/change/payload/change-report.json" \
+            --payload-relative-path payload/change-report.json \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version change-report-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/change/handoff.json"
+
+      - name: Define artifact names
+        id: names
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          echo "normalized_artifact_name=normalized-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "change_artifact_name=changes-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload normalized evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/normalized
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload change report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.change_artifact_name }}
+          path: ${{ runner.temp }}/change
+          if-no-files-found: error
+          retention-days: 14

@@ -48,7 +48,6 @@
     "methodology-high-interest"
   ],
   "includeEvidenceSignals": [
-    "retailer",
     "certification",
     "review",
     "correction"

@@ -31,7 +31,7 @@
 
 - Validate policy and normalized candidate schemas against the semantic validator field contract.
 - Explicit fresh-produce/plain-milk/plain-water exclusions, including conservative handling when milk/water ingredient count is unknown.
-- Processed/formulation/evidence/category inclusion overrides before basic rules.
+- Processed/formulation/certification-review-correction/category inclusion overrides before basic rules; retailer presence alone does not override a basic-food rule.
 - Missing ingredients and unknown category remain conservative detailed inclusions.
 - Invalid/non-food/source-assigned-no-barcode/wrong-market reasons remain distinct.
 - Remote images are HTTPS metadata only; binary/base64/data-URL fields fail closed.

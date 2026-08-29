@@ -290,9 +290,7 @@
         "en:basil",
         "en:herbs"
       ],
-      "evidenceSignals": [
-        "retailer"
-      ],
+      "evidenceSignals": [],
       "formulationSignals": [],
       "market": "DE",
       "name": "Fresh Basil",
@@ -390,6 +388,29 @@
       "remoteImages": [],
       "retailerKeys": [],
       "sourceRecordID": "plain-milk-missing-ingredients"
+    },
+    {
+      "barcode": "4071234567894",
+      "barcodeKind": "retail-gtin",
+      "categorySignals": [
+        "basic-herb"
+      ],
+      "categoryTags": [
+        "en:parsley",
+        "en:herbs"
+      ],
+      "evidenceSignals": [
+        "review"
+      ],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Fresh Parsley Under Review",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [
+        "demo-retailer"
+      ],
+      "sourceRecordID": "fresh-herb-with-review-evidence"
     }
   ],
   "schemaVersion": 1,

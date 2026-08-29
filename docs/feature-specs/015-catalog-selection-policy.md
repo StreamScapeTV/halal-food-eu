@@ -49,14 +49,14 @@ For an otherwise eligible Germany record, inclusion overrides run before basic-f
 
 A candidate enters the detailed catalog when any accepted signal establishes value, including:
 
-1. existing retailer, certification, review, or correction evidence;
+1. existing certification, review, or correction evidence;
 2. a formulation signal such as multi-ingredient, additive, compound, flavoured, fortified, enzyme, culture, rennet, gelatine, or alcohol-related;
 3. an included category signal such as bakery, prepared food, processed dairy, meat/substitute, confectionery, snack, dessert, sauce/condiment/seasoning, processed spread, formulated beverage, or methodology-high-interest;
 4. a known ingredient count greater than one; or
 5. non-empty ingredient text whose ingredient count is not reliably known.
 
 - **HF-SELECTION-007:** Inclusion evidence wins over a simultaneous basic-food category signal. A processed apple product, flavoured milk, or flavoured water cannot be excluded merely because an upstream taxonomy also places it under fruit, milk, or water.
-- **HF-SELECTION-008:** Existing evidence that makes a product useful to the evidence/review workflow is an inclusion override even if the food itself would otherwise look basic.
+- **HF-SELECTION-008:** Existing certification, review, or correction evidence that makes a product useful to the evidence/review workflow is an inclusion override even if the food itself would otherwise look basic. Retailer presence/observation by itself is not an override and remains orthogonal to formulation/halal relevance.
 
 ## Approved basic-food exclusions
 
@@ -122,6 +122,6 @@ The committed synthetic fixture must cover at least:
 - plain water → basic exclusion;
 - flavoured water → detailed inclusion;
 - processed apple sauce inheriting a fruit signal → detailed inclusion;
-- a basic herb with retailer evidence → detailed inclusion;
+- a basic herb with retailer evidence only → basic exclusion; a basic herb with review evidence → detailed inclusion;
 - optional HTTPS image metadata → retained without bytes;
 - non-food, invalid barcode, source-assigned no-barcode, and wrong-market records → distinct invalid exclusions.

@@ -141,9 +141,13 @@ class DecisionTests(unittest.TestCase):
             ("include-detailed", "conservative-unknown"),
         )
 
-    def test_existing_evidence_is_an_inclusion_override(self):
+    def test_review_evidence_overrides_basic_but_retailer_presence_alone_does_not(self):
         self.assertEqual(
             self.decisions["fresh-herb-with-retailer-evidence"],
+            ("exclude-basic", "basic-fresh-produce"),
+        )
+        self.assertEqual(
+            self.decisions["fresh-herb-with-review-evidence"],
             ("include-detailed", "existing-evidence"),
         )
 
@@ -206,10 +210,10 @@ class DeterminismAndReportingTests(unittest.TestCase):
     def test_report_contains_required_metrics_and_deterministic_sample(self):
         result = MODULE.evaluate_bundle(load(POLICY_PATH), load(INPUT_PATH))
         report = result["report"]
-        self.assertEqual(report["sourceRecordsExamined"], 18)
-        self.assertEqual(report["germanyRelevantCandidates"], 14)
+        self.assertEqual(report["sourceRecordsExamined"], 19)
+        self.assertEqual(report["germanyRelevantCandidates"], 15)
         self.assertEqual(report["includedProducts"], 9)
-        self.assertEqual(report["excludedBasicProducts"], 5)
+        self.assertEqual(report["excludedBasicProducts"], 6)
         self.assertEqual(report["excludedInvalidRecords"], 4)
         self.assertEqual(report["includedWithIngredients"], 5)
         self.assertEqual(report["includedMissingIngredients"], 4)

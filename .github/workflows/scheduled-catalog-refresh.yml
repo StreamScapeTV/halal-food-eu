@@ -99,7 +99,12 @@ jobs:
       normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
       change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
 
+  # Issue #12 owns production evidence-to-SQLite compilation. Until that compiler
+  # admits Open Food Facts evidence, a production refresh succeeds after quality
+  # rather than deliberately entering build-catalog.yml's fail-closed non-fixture
+  # boundary. The synthetic fixture remains the end-to-end workflow proof.
   build:
+    if: needs.trusted-default-branch.outputs.source_key == 'synthetic-fixture' && needs.trusted-default-branch.outputs.mode != 'sample'
     needs: [trusted-default-branch, normalize, quality]
     uses: ./.github/workflows/build-catalog.yml
     with:
@@ -109,6 +114,7 @@ jobs:
       quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
 
   proposal-gate:
+    if: needs.trusted-default-branch.outputs.source_key == 'synthetic-fixture' && needs.trusted-default-branch.outputs.mode != 'sample'
     needs: [trusted-default-branch, quality, build]
     uses: ./.github/workflows/propose-catalog-update.yml
     with:

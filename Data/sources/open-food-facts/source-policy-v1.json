@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "sourceKey": "open-food-facts",
+  "operator": "Open Food Facts",
+  "sourceClass": "open-database",
+  "accessMethod": "public-bulk",
+  "exportURL": "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz",
+  "allowedAcquisitionHosts": [
+    "static.openfoodfacts.org"
+  ],
+  "allowedReferenceHosts": [
+    "images.openfoodfacts.org",
+    "world.openfoodfacts.org"
+  ],
+  "productSchemaVersion": "1004",
+  "apiVersion": "3.6",
+  "tagSchema": "tags_sources",
+  "databaseLicense": {
+    "name": "Open Database License",
+    "identifier": "ODbL",
+    "attributionRequired": true,
+    "shareAlikeRequired": true
+  },
+  "databaseContentsLicense": {
+    "name": "Database Contents License",
+    "identifier": "Database Contents License"
+  },
+  "imageLicense": {
+    "name": "Creative Commons Attribution ShareAlike",
+    "identifier": "CC BY-SA",
+    "redistributionMode": "references-only",
+    "downloadBinaries": false
+  },
+  "attribution": "Contains information from Open Food Facts (https://world.openfoodfacts.org/), made available under the Open Database License. Individual database contents are available under the Database Contents License.",
+  "completenessClaimAllowed": false,
+  "communityRetailerEvidence": {
+    "kind": "community-store-report",
+    "confidence": "low",
+    "officialAvailability": false
+  },
+  "documentation": {
+    "api": "https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/",
+    "schema": "https://openfoodfacts.github.io/documentation/docs/Product-Opener/schemas/schemas/product/",
+    "schemaChangeLog": "https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/ref-api-and-product-schema-change-log/",
+    "license": "https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/tutorials/license-be-on-the-legal-side/"
+  }
+}

@@ -8,6 +8,7 @@ import csv
 import io
 import ipaddress
 import json
+import math
 import re
 import stat
 import zipfile
@@ -17,6 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 ACTION_TARGET = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(?P<sha>[0-9a-f]{40})(?:\s+#.*)?$")
+USES_LINE = re.compile(r"^-?\s*uses\s*:\s*(?P<target>.+?)\s*$")
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -70,6 +72,12 @@ def validate_https_url(
         raise _safe_error("URL", "fragments are forbidden")
     if not parsed.hostname:
         raise _safe_error("URL", "host is required")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise _safe_error("URL", "port is invalid") from exc
+    if port not in {None, 443}:
+        raise _safe_error("URL", "only the default HTTPS port is allowed")
 
     host = parsed.hostname.rstrip(".").lower()
     if host in {"localhost", "localhost.localdomain"} or host.endswith(".local") or _is_disallowed_ip(host):
@@ -80,6 +88,8 @@ def validate_https_url(
         raise _safe_error("URL", "host is not admitted by source policy")
 
     decoded_path = unquote(parsed.path or "/")
+    if unquote(decoded_path) != decoded_path:
+        raise _safe_error("URL", "path contains multiply encoded segments")
     if "\\" in decoded_path or CONTROL.search(decoded_path):
         raise _safe_error("URL", "path is unsafe")
     path_segments = decoded_path.split("/")
@@ -169,7 +179,7 @@ def load_bounded_csv(
     csv.field_size_limit(max_field_length)
     rows: list[list[str]] = []
     try:
-        for index, row in enumerate(csv.reader(io.StringIO(text, newline="")), start=1):
+        for index, row in enumerate(csv.reader(io.StringIO(text, newline=""), strict=True), start=1):
             if index > max_rows:
                 raise _safe_error("CSV", "input exceeds the configured row limit")
             if len(row) > max_columns:
@@ -262,7 +272,10 @@ def load_bounded_json(
                 raise _safe_error("JSON", "array exceeds the configured item limit")
             for nested in item:
                 visit(nested, depth + 1)
-        elif item is None or isinstance(item, (bool, int, float)):
+        elif isinstance(item, float):
+            if not math.isfinite(item):
+                raise _safe_error("JSON", "numeric value is not finite")
+        elif item is None or isinstance(item, (bool, int)):
             return
         else:
             raise _safe_error("JSON", "contains an unsupported value type")
@@ -359,8 +372,8 @@ def sanitize_log_text(value: str, *, max_length: int = 512) -> str:
 def protect_csv_cell(value: str) -> str:
     """Neutralize spreadsheet formula interpretation while preserving visible text."""
     text = str(value)
-    probe = text.lstrip(" \t")
-    if probe.startswith(FORMULA_PREFIXES):
+    probe = text.lstrip()
+    if text.startswith(("\t", "\r", "\n")) or probe.startswith(FORMULA_PREFIXES):
         return "'" + text
     return text
 
@@ -401,12 +414,10 @@ def tooling_sbom(root: Path, dependency_manifest: Path) -> dict[str, Any]:
     for workflow in sorted((root / ".github/workflows").glob("*.yml")):
         for line in workflow.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
-            if stripped.startswith("- uses:"):
-                target = stripped[len("- uses:"):].strip()
-            elif stripped.startswith("uses:"):
-                target = stripped[len("uses:"):].strip()
-            else:
+            uses_match = USES_LINE.fullmatch(stripped)
+            if not uses_match:
                 continue
+            target = uses_match.group("target").strip()
             if target.startswith("./"):
                 continue
             match = ACTION_TARGET.fullmatch(target)

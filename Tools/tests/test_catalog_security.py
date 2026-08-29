@@ -50,8 +50,11 @@ class NetworkSecurityTests(unittest.TestCase):
             "https://evil.example.org/export/products.json",
             "https://static.example.org/private/products.json",
             "https://static.example.org/export/products.json#fragment",
+            "https://static.example.org:8443/export/products.json",
+            "https://static.example.org:notaport/export/products.json",
             "https://static.example.org/export/../private/products.json",
             "https://static.example.org/export/%2e%2e/private/products.json",
+            "https://static.example.org/export/%252e%252e/private/products.json",
             "https://static.example.org/export/%3fadmin=true",
         )
         for value in cases:
@@ -120,6 +123,7 @@ class ParserSecurityTests(unittest.TestCase):
             for name, payload in (
                 ("nan", '{"value": NaN}'),
                 ("infinity", '{"value": Infinity}'),
+                ("overflow", '{"value": 1e9999}'),
                 ("duplicate", '{"value": 1, "value": 2}'),
             ):
                 path = root / f"{name}.json"
@@ -138,6 +142,11 @@ class ParserSecurityTests(unittest.TestCase):
             )
             with self.assertRaises(catalog_security.SecurityError):
                 catalog_security.load_bounded_csv(path, max_bytes=1024, max_rows=1)
+
+            malformed = Path(temporary) / "malformed.csv"
+            malformed.write_text('a,b\n"unterminated,2\n', encoding="utf-8")
+            with self.assertRaisesRegex(catalog_security.SecurityError, "malformed"):
+                catalog_security.load_bounded_csv(malformed, max_bytes=1024)
         with self.assertRaises(catalog_security.SecurityError):
             catalog_security.require_media_type("application/xml", allowed={"application/json"})
 
@@ -201,6 +210,8 @@ class OutputSecurityTests(unittest.TestCase):
         self.assertEqual(catalog_security.sanitize_log_text("ok\x1b[31mBAD\x1b[0m\nnext"), "okBAD next")
         self.assertEqual(catalog_security.protect_csv_cell("=HYPERLINK(\"https://evil\")"), "'=HYPERLINK(\"https://evil\")")
         self.assertEqual(catalog_security.protect_csv_cell("ordinary"), "ordinary")
+        self.assertEqual(catalog_security.protect_csv_cell("\r=1+1"), "'\r=1+1")
+        self.assertEqual(catalog_security.protect_csv_cell("\n@SUM(A1:A2)"), "'\n@SUM(A1:A2)")
 
     def test_secret_canary_fails_without_echoing_canary(self) -> None:
         canary = "VERY_SECRET_CANARY_123"
@@ -279,6 +290,30 @@ class WorkflowHardeningTests(unittest.TestCase):
             "    runs-on: macos-26\n    steps:\n      - run: brew install xcodegen\n"
         )
         with self.assertRaisesRegex(Exception, "reviewed source pin"):
+            catalog_workflow_policy.validate_workflows(root)
+
+    def test_write_all_and_unexpected_write_scopes_are_rejected(self) -> None:
+        for permissions in (
+            "permissions: write-all\n",
+            "permissions:\n  contents: read\n  packages: write\n",
+        ):
+            root = self._write_workflow(
+                "name: bad\non: workflow_dispatch\n" + permissions +
+                "jobs:\n  x:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo safe\n"
+            )
+            with self.assertRaises(Exception):
+                catalog_workflow_policy.validate_workflows(root)
+            self.tearDown()
+            del self.temporary
+
+    def test_spaced_uses_key_cannot_bypass_action_pin_validation(self) -> None:
+        root = self._write_workflow(
+            "name: bad\non: workflow_dispatch\npermissions:\n  contents: read\njobs:\n  x:\n"
+            "    runs-on: ubuntu-latest\n    steps:\n"
+            "      - uses : actions/checkout@v6\n"
+            "        with:\n          persist-credentials: false\n"
+        )
+        with self.assertRaisesRegex(Exception, "unpinned action"):
             catalog_workflow_policy.validate_workflows(root)
 
 

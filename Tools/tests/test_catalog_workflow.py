@@ -46,12 +46,16 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(self.contract.retry_delays(), (5, 10, 20, 40))
 
-    def test_only_fixture_source_is_initially_admitted_and_needs_no_secret(self) -> None:
-        source = self.contract.validate_source("synthetic-fixture", "fixture-2026-08-29", "fixture")
+    def test_fixture_and_open_food_facts_sources_are_admitted_without_secrets(self) -> None:
+        fixture = self.contract.validate_source("synthetic-fixture", "fixture-2026-08-29", "fixture")
+        self.assertFalse(fixture.credentials_required)
+        self.assertEqual(fixture.access_method, "committed-fixture")
+
+        source = self.contract.validate_source("open-food-facts", "2026-08-30", "full")
         self.assertFalse(source.credentials_required)
-        self.assertEqual(source.access_method, "committed-fixture")
-        with self.assertRaisesRegex(catalog_workflow.ContractError, "not registered"):
-            self.contract.validate_source("open-food-facts", "2026-08-29", "full")
+        self.assertEqual(source.source_class, "open-database")
+        self.assertEqual(source.access_method, "https-export")
+        self.assertEqual(source.allowed_hosts, ("static.openfoodfacts.org",))
 
     def test_fixture_source_cannot_be_promoted_to_full_mode(self) -> None:
         with self.assertRaisesRegex(catalog_workflow.ContractError, "fixture mode"):
@@ -67,11 +71,22 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(validated["recordCount"], 2)
         self.assertEqual(validated["completeness"], "complete")
 
-    def test_partial_snapshot_cannot_enter_normalization(self) -> None:
-        partial = copy.deepcopy(self.handoff)
-        partial["completeness"] = "partial"
+    def test_partial_snapshot_can_enter_normalization_but_not_release_gates(self) -> None:
+        partial_source = copy.deepcopy(self.handoff)
+        partial_source["completeness"] = "partial"
+        validated = catalog_workflow.validate_handoff(
+            self.contract,
+            partial_source,
+            consumer_stage="normalize-diff",
+        )
+        self.assertEqual(validated["completeness"], "partial")
+
+        partial_normalized = copy.deepcopy(partial_source)
+        partial_normalized["artifactKind"] = "normalized-evidence"
         with self.assertRaisesRegex(catalog_workflow.ContractError, "rejects partial"):
-            catalog_workflow.validate_handoff(self.contract, partial, consumer_stage="normalize-diff")
+            catalog_workflow.validate_handoff(self.contract, partial_normalized, consumer_stage="quality")
+        with self.assertRaisesRegex(catalog_workflow.ContractError, "rejects partial"):
+            catalog_workflow.validate_handoff(self.contract, partial_normalized, consumer_stage="build")
 
     def test_wrong_artifact_kind_cannot_enter_build(self) -> None:
         with self.assertRaisesRegex(catalog_workflow.ContractError, "does not accept"):
@@ -206,6 +221,13 @@ class WorkflowYamlPolicyTests(unittest.TestCase):
         self.assertIn("source-policy.yml", checked)
         self.assertIn("scheduled-catalog-refresh.yml", checked)
         self.assertIn("catalog-release.yml", checked)
+
+    def test_sample_refresh_preserves_partial_evidence_and_stops_before_release_gates(self) -> None:
+        normalize = (ROOT / ".github/workflows/normalize-and-diff.yml").read_text(encoding="utf-8")
+        scheduled = (ROOT / ".github/workflows/scheduled-catalog-refresh.yml").read_text(encoding="utf-8")
+        self.assertIn('INPUT_COMPLETENESS: ${{ steps.source_handoff.outputs.completeness }}', normalize)
+        self.assertEqual(normalize.count('--completeness "$INPUT_COMPLETENESS"'), 2)
+        self.assertIn("if: needs.trusted-default-branch.outputs.mode != 'sample'", scheduled)
 
     def test_unpinned_action_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -41,6 +41,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Materialize deterministic bundled catalog from integrated reviewed input
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_builder.py \
+            --input Data/sample-products.json \
+            --database HalalFoodEU/Resources/catalog.sqlite3 \
+            --manifest HalalFoodEU/Resources/catalog-manifest.json
+
       - name: Validate bundled catalog before release evidence
         run: |
           set -euo pipefail
@@ -109,6 +117,14 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+
+      - name: Materialize exact attestation subjects from integrated reviewed input
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_builder.py \
+            --input Data/sample-products.json \
+            --database HalalFoodEU/Resources/catalog.sqlite3 \
+            --manifest HalalFoodEU/Resources/catalog-manifest.json
 
       - name: Revalidate attestation subjects
         run: |

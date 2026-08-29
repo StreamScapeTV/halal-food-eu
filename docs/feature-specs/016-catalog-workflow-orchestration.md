@@ -54,7 +54,7 @@ Every cross-stage payload has a v1 handoff envelope with artifact kind, register
 - **HF-WORKFLOW-019:** Scheduled refresh uses an off-hour minute, also exposes `workflow_dispatch`, declares concurrency, and is safe to rerun for the same source/snapshot. Public-repository schedule delay/automatic inactivity disablement is documented as an operational condition, not treated as evidence of a successful refresh.
 - **HF-WORKFLOW-020:** Catalog proposal branch identity is derived deterministically from source/snapshot/catalog digest. Re-running an identical proposal targets the same bounded logical update and material changes are never auto-merged.
 - **HF-WORKFLOW-021:** Health conditions use deterministic source/condition keys so repeated failures update one logical incident instead of creating unbounded duplicate issues. Health reporting must not expose source secrets or raw restricted payloads.
-- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it. An optional manual main-only provenance hook may attest the exact integrated SQLite/manifest pair with GitHub artifact attestations; ordinary fixture validation and normal release evidence do not require attestation permissions or a successful attestation.
+- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The generated bundle files are intentionally not committed, so the v1 release job must materialize the SQLite/manifest pair from the exact integrated `main` revision and the same reviewed local catalog input before validating or hashing those subjects; it must never assume ignored generated files already exist after checkout. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it. An optional manual main-only provenance hook may attest subjects materialized and revalidated from that exact integrated revision with GitHub artifact attestations; ordinary fixture validation and normal release evidence do not require attestation permissions or a successful attestation.
 
 ## Security and data boundaries
 
@@ -75,6 +75,7 @@ The committed tests cover:
 - pinned action references and absence of self-hosted/`pull_request_target` execution;
 - trusted workflow isolation from `pull_request` and manual non-`main` execution;
 - scheduled workflow + manual dispatch policy;
+- release materialization of the intentionally ignored generated SQLite/manifest subjects before release validation;
 - optional pinned main-only release provenance attestation without making it a fixture-validation prerequisite;
 - no-secret synthetic handoff validation; and
 - integration of workflow-contract validation into the existing GitHub-hosted Catalog integrity lane.

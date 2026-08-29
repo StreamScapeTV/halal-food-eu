@@ -22,6 +22,42 @@ def load_fixture():
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
 
+class SchemaParityTests(unittest.TestCase):
+    def test_json_schema_record_fields_match_semantic_validator(self):
+        schema = json.loads(
+            (ROOT / "Data" / "evidence" / "evidence-envelope-v1.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        definitions = {
+            "sources": "source",
+            "identities": "identity",
+            "ingredients": "ingredient",
+            "retailerEvidence": "retailer",
+            "remoteImages": "remoteImage",
+            "packageEvidence": "packageEvidence",
+            "certifications": "certification",
+            "reviews": "review",
+            "assessments": "assessment",
+            "validityEvents": "validityEvent",
+            "currentSelections": "currentSelection",
+            "releases": "release",
+        }
+        for collection, definition in definitions.items():
+            required, optional = MODULE.FIELDS[collection]
+            schema_definition = schema["$defs"][definition]
+            self.assertEqual(
+                set(schema_definition["properties"]),
+                required | optional,
+                f"schema/semantic field mismatch for {collection}",
+            )
+            self.assertEqual(
+                set(schema_definition["required"]),
+                required,
+                f"schema/semantic required-field mismatch for {collection}",
+            )
+
+
 class EvidenceFixtureTests(unittest.TestCase):
     def test_committed_fixture_validates(self):
         data = load_fixture()

@@ -1,7 +1,7 @@
 # 003 — Catalog and SQLite
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-29
 
 ## Storage decision
 
@@ -23,6 +23,9 @@ The product catalog is a versioned SQLite database bundled as an application res
 - **HF-DB-012:** The runtime must fail safely when the database is missing, corrupt, incompatible, or contains an unsupported status; it must not fabricate a result.
 - **HF-DB-013:** The schema must use ISO-8601 UTC timestamps for machine dates and BCP-47 language tags for ingredient text.
 - **HF-DB-014:** Free-text product search, when implemented, must use an indexed strategy such as FTS5 rather than wildcard scanning across the full table.
+- **HF-DB-015:** The production detailed product projection is compiled only from records selected by the accepted versioned catalog-selection policy; source databases are not copied wholesale into SQLite.
+- **HF-DB-016:** Product image binaries/thumbnails/base64 payloads are forbidden in the runtime SQLite catalog. A future physical schema may retain bounded HTTPS image-reference metadata only when a user-facing feature consumes it.
+- **HF-DB-017:** A compact basic-exclusion index is not part of the current physical schema. Issue #30 must measure and explicitly accept its byte/query cost before issue #12 may add it; such an index can never contain an assessment or detailed product evidence.
 
 ## Initial logical schema
 

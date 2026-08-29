@@ -1,7 +1,7 @@
 # 005 — Data sourcing, provenance, and freshness
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-29
 
 ## Source priority
 
@@ -27,6 +27,14 @@ Priority is not absolute: a newer exact package can supersede an older manufactu
 - **HF-DATA-008:** Real product names, brands, images, trademarks, ingredient text, and database records may have different rights; the pipeline must track them independently where required.
 - **HF-DATA-009:** Production imports must retain enough raw source reference to audit the record without storing prohibited personal data.
 - **HF-DATA-010:** Machine translation or OCR must record tool/version and confidence and must not silently replace the source text.
+
+
+## Catalog-selection boundary
+
+- **HF-DATA-011:** Source adapters must normalize source-specific category/taxonomy fields into the accepted selection-candidate contract while retaining the original category tags and the source snapshot/schema/taxonomy version used for the mapping.
+- **HF-DATA-012:** Source taxonomy mapping must be conservative: broad ancestors that can contain processed descendants must not become basic-food exclusion signals without an explicit reviewed mapping.
+- **HF-DATA-013:** Optional source product images remain remote HTTPS references. Acquisition/selection/catalog builds must not download image bytes merely to select or classify a product.
+- **HF-DATA-014:** Catalog selection and evidence precedence are separate concerns. Selection decides whether a product is useful to the detailed Germany catalog; it does not choose which competing formulation/certification evidence is current.
 
 ## Freshness
 

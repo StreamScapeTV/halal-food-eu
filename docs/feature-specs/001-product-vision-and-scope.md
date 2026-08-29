@@ -1,7 +1,7 @@
 # 001 — Product vision and scope
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-08-29
 
 ## Vision
 
@@ -30,6 +30,9 @@ The application does not require an account and does not assume one jurisprudent
 - **HF-PRODUCT-010:** Product data and assessment decisions must be versioned independently from application source code.
 - **HF-PRODUCT-011:** All real-product records must carry lawful source and redistribution metadata.
 - **HF-PRODUCT-012:** The app must state that it is an informational evidence tool, not a fatwa, allergy guarantee, or substitute for checking current packaging and trusted authorities.
+- **HF-PRODUCT-013:** The production detailed catalog prioritizes packaged/processed foods where formulation, processing, certification, or evidence can materially affect the result; it is not required to mirror every upstream whole-food record.
+- **HF-PRODUCT-014:** An approved basic-food exclusion is a catalog-focus decision, not a halal assessment. Omission must never create or imply `halal-certified` or `halal-reviewed`.
+- **HF-PRODUCT-015:** Product presentation images are optional remote metadata and are never required for offline lookup, assessment, or evidence explanation.
 
 ## Initial release boundary
 

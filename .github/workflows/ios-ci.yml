@@ -40,6 +40,24 @@ jobs:
             --output "$RUNNER_TEMP/runtime-projection.json"
           python3 -m unittest discover -s Tools/tests -p 'test_evidence*.py'
 
+      - name: Validate Germany catalog selection policy
+        run: |
+          python3 -m py_compile \
+            Tools/catalog_selection.py \
+            Tools/catalog_selection_contract.py \
+            Tools/catalog_selection_engine.py \
+            Tools/tests/test_catalog_selection.py
+          python3 -m json.tool Data/selection/catalog-selection-policy-v1.schema.json >/dev/null
+          python3 -m json.tool Data/selection/selection-candidates-v1.schema.json >/dev/null
+          python3 Tools/catalog_selection.py validate \
+            --policy Data/selection/catalog-selection-policy-v1.json \
+            --input Data/selection/sample-selection-candidates-v1.json
+          python3 Tools/catalog_selection.py evaluate \
+            --policy Data/selection/catalog-selection-policy-v1.json \
+            --input Data/selection/sample-selection-candidates-v1.json \
+            --output "$RUNNER_TEMP/catalog-selection.json"
+          python3 -m unittest discover -s Tools/tests -p 'test_catalog_selection.py'
+
       - name: Build synthetic SQLite catalog
         run: |
           python3 Tools/catalog_builder.py \

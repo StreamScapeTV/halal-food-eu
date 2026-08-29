@@ -1,0 +1,70 @@
+{
+  "acceptedBarcodeKinds": [
+    "retail-gtin"
+  ],
+  "allowedProductTypes": [
+    "food"
+  ],
+  "auditSampleSize": 20,
+  "basicRules": [
+    {
+      "allowUnknownIngredientCount": true,
+      "categorySignals": [
+        "fresh-fruit",
+        "fresh-vegetable",
+        "basic-herb"
+      ],
+      "code": "basic-fresh-produce",
+      "maxIngredientCount": 1
+    },
+    {
+      "allowUnknownIngredientCount": false,
+      "categorySignals": [
+        "plain-cow-milk"
+      ],
+      "code": "basic-plain-milk",
+      "maxIngredientCount": 1
+    },
+    {
+      "allowUnknownIngredientCount": false,
+      "categorySignals": [
+        "plain-water"
+      ],
+      "code": "basic-plain-water",
+      "maxIngredientCount": 1
+    }
+  ],
+  "includeCategorySignals": [
+    "bakery",
+    "prepared-food",
+    "processed-dairy",
+    "meat-or-substitute",
+    "confectionery",
+    "snack",
+    "dessert",
+    "sauce-condiment-seasoning",
+    "processed-spread",
+    "formulated-beverage",
+    "methodology-high-interest"
+  ],
+  "includeEvidenceSignals": [
+    "certification",
+    "review",
+    "correction"
+  ],
+  "includeFormulationSignals": [
+    "multi-ingredient",
+    "additive",
+    "compound",
+    "flavoured",
+    "fortified",
+    "enzyme",
+    "culture",
+    "rennet",
+    "gelatine",
+    "alcohol-related"
+  ],
+  "policyVersion": "1.0.0",
+  "schemaVersion": 1,
+  "targetMarket": "DE"
+}

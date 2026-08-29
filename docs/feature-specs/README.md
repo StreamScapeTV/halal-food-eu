@@ -13,7 +13,7 @@ Specifications use requirement identifiers so code, tests, catalog validators, i
 - **Future** — intentionally outside the current release boundary.
 - **Rejected** — considered and deliberately excluded, with rationale retained.
 
-Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 014 are **Accepted**. Document 012 is **Future**.
+Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 015 are **Accepted**. Document 012 is **Future**.
 
 ## Product invariant
 
@@ -39,6 +39,7 @@ It must not turn missing information into a positive ruling. A product can be `h
 | [012 Future roadmap](012-future-roadmap.md) | non-binding capabilities and prerequisites |
 | [013 Methodology governance](013-methodology-and-review-governance.md) | qualified review, automation boundaries, auditability |
 | [014 Evidence exchange](014-evidence-exchange-and-runtime-projection.md) | immutable cross-stage evidence contract, deterministic IDs, current selection, runtime projection |
+| [015 Catalog selection](015-catalog-selection-policy.md) | Germany packaged/processed focus, explicit basic exclusions, normalized source-adapter contract, selection metrics |
 
 ## Conflict resolution
 

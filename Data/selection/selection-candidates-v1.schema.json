@@ -1,0 +1,225 @@
+{
+  "$defs": {
+    "candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "barcode": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "barcodeKind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "brand": {
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "categorySignals": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "categoryTags": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "evidenceSignals": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "formulationSignals": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "ingredientCount": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ingredientsText": {
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "market": {
+          "pattern": "^[A-Z]{2}$",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "packageSignals": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "productType": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "remoteImages": {
+          "items": {
+            "$ref": "#/$defs/remoteImage"
+          },
+          "type": "array"
+        },
+        "retailerKeys": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "sourceRecordID": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceRecordID",
+        "barcode",
+        "market",
+        "productType",
+        "barcodeKind",
+        "name",
+        "categoryTags",
+        "categorySignals",
+        "formulationSignals",
+        "evidenceSignals",
+        "retailerKeys",
+        "remoteImages"
+      ],
+      "type": "object"
+    },
+    "remoteImage": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "imageID": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "barcode",
+            "certification",
+            "front",
+            "ingredients",
+            "nutrition"
+          ]
+        },
+        "revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sourceKey": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,79}$",
+          "type": "string"
+        },
+        "url": {
+          "pattern": "^https://",
+          "type": "string"
+        },
+        "width": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "purpose",
+        "url",
+        "sourceKey",
+        "imageID"
+      ],
+      "type": "object"
+    },
+    "sourceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "retrievedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "snapshotID": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sourceKey": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,79}$",
+          "type": "string"
+        },
+        "sourceSchemaVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "taxonomyVersion": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceKey",
+        "snapshotID",
+        "sourceSchemaVersion",
+        "retrievedAt",
+        "taxonomyVersion"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://faruqi.dev/halal-food-eu/schema/selection-candidates-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/candidate"
+      },
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "sourceSnapshot": {
+      "$ref": "#/$defs/sourceSnapshot"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sourceSnapshot",
+    "candidates"
+  ],
+  "title": "Halal Food EU normalized selection candidates v1",
+  "type": "object"
+}

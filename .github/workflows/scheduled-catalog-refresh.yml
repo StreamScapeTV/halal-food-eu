@@ -8,12 +8,12 @@ on:
       source_key:
         description: Registered source key.
         required: true
-        default: synthetic-fixture
+        default: open-food-facts
         type: string
       snapshot_id:
         description: Immutable source snapshot identifier.
         required: true
-        default: fixture-manual
+        default: off-manual-fixture
         type: string
       mode:
         description: Registered acquisition mode.
@@ -26,13 +26,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: catalog-refresh-${{ inputs.source_key || 'synthetic-fixture' }}
+  group: catalog-refresh-${{ inputs.source_key || 'open-food-facts' }}
   cancel-in-progress: false
 
 jobs:
   trusted-default-branch:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    outputs:
+      source_key: ${{ steps.resolve.outputs.source_key }}
+      snapshot_id: ${{ steps.resolve.outputs.snapshot_id }}
+      mode: ${{ steps.resolve.outputs.mode }}
     steps:
       - name: Require reviewed default-branch workflow code
         env:
@@ -41,54 +45,73 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = "$EXPECTED_REF"
 
+      - name: Resolve bounded scheduled or manual source inputs
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_SOURCE_KEY: ${{ inputs.source_key }}
+          INPUT_SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            echo "source_key=open-food-facts" >> "$GITHUB_OUTPUT"
+            echo "snapshot_id=off-scheduled-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "source_key=$INPUT_SOURCE_KEY" >> "$GITHUB_OUTPUT"
+            echo "snapshot_id=$INPUT_SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
+            echo "mode=$INPUT_MODE" >> "$GITHUB_OUTPUT"
+          fi
+
   policy:
     needs: trusted-default-branch
     uses: ./.github/workflows/source-policy.yml
     with:
-      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
-      mode: ${{ inputs.mode || 'fixture' }}
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+      mode: ${{ needs.trusted-default-branch.outputs.mode }}
 
   acquire:
-    needs: policy
+    needs: [trusted-default-branch, policy]
     uses: ./.github/workflows/acquire-catalog.yml
     with:
-      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
-      mode: ${{ inputs.mode || 'fixture' }}
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+      mode: ${{ needs.trusted-default-branch.outputs.mode }}
       policy_artifact_name: ${{ needs.policy.outputs.artifact_name }}
 
   normalize:
-    needs: acquire
+    needs: [trusted-default-branch, acquire]
     uses: ./.github/workflows/normalize-and-diff.yml
     with:
-      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       source_artifact_name: ${{ needs.acquire.outputs.artifact_name }}
 
   quality:
-    needs: normalize
+    needs: [trusted-default-branch, normalize]
     uses: ./.github/workflows/catalog-quality.yml
     with:
-      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
       change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
 
   build:
-    needs: [normalize, quality]
+    needs: [trusted-default-branch, normalize, quality]
     uses: ./.github/workflows/build-catalog.yml
     with:
-      source_key: ${{ inputs.source_key || 'synthetic-fixture' }}
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
       quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
 
   proposal-gate:
-    needs: [quality, build]
+    needs: [trusted-default-branch, quality, build]
     uses: ./.github/workflows/propose-catalog-update.yml
     with:
-      snapshot_id: ${{ inputs.snapshot_id || 'scheduled-fixture' }}
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       database_artifact_name: ${{ needs.build.outputs.database_artifact_name }}
       manifest_artifact_name: ${{ needs.build.outputs.manifest_artifact_name }}
       quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}

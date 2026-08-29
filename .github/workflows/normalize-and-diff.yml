@@ -40,13 +40,20 @@ jobs:
           name: ${{ inputs.source_artifact_name }}
           path: ${{ runner.temp }}/source
 
-      - name: Validate complete source handoff
+      - name: Validate source handoff and capture completeness
+        id: source_handoff
         run: |
           set -euo pipefail
           python3 Tools/catalog_workflow.py validate-handoff \
             --input "$RUNNER_TEMP/source/handoff.json" \
             --consumer-stage normalize-diff \
             --payload-root "$RUNNER_TEMP/source"
+          SOURCE_HANDOFF="$RUNNER_TEMP/source/handoff.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+          handoff = json.loads(Path(os.environ["SOURCE_HANDOFF"]).read_text(encoding="utf-8"))
+          print(f"completeness={handoff['completeness']}")
+          PY
 
       - name: Normalize registered source into v1 evidence and change report
         id: normalize
@@ -112,6 +119,7 @@ jobs:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           RECORD_COUNT: ${{ steps.normalize.outputs.record_count }}
+          INPUT_COMPLETENESS: ${{ steps.source_handoff.outputs.completeness }}
         run: |
           set -euo pipefail
           python3 Tools/catalog_workflow.py emit-handoff \
@@ -124,7 +132,7 @@ jobs:
             --payload "$RUNNER_TEMP/normalized/payload/evidence.json" \
             --payload-relative-path payload/evidence.json \
             --record-count "$RECORD_COUNT" \
-            --completeness complete \
+            --completeness "$INPUT_COMPLETENESS" \
             --redistribution-class redistributable \
             --content-schema-version evidence-envelope-v1 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -139,7 +147,7 @@ jobs:
             --payload "$RUNNER_TEMP/change/payload/change-report.json" \
             --payload-relative-path payload/change-report.json \
             --record-count 1 \
-            --completeness complete \
+            --completeness "$INPUT_COMPLETENESS" \
             --redistribution-class metadata-only \
             --content-schema-version change-report-v1 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

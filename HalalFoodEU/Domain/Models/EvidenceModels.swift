@@ -294,15 +294,6 @@ struct CatalogEvidenceSourceSnapshot: Hashable, Codable, Sendable {
     let retrievedAt: Date
 }
 
-struct CatalogEvidenceCounts: Hashable, Codable, Sendable {
-    let products: Int
-    let ingredientObservations: Int
-    let assessments: Int
-    let currentSelections: Int
-    let remoteImages: Int
-    let packageEvidence: Int
-}
-
 struct CatalogReleaseEvidence: Identifiable, Hashable, Codable, Sendable {
     let id: String
     let catalogVersion: String
@@ -313,7 +304,7 @@ struct CatalogReleaseEvidence: Identifiable, Hashable, Codable, Sendable {
     let commitSHA: String
     let runtimeDigest: String
     let sourceSnapshots: [CatalogEvidenceSourceSnapshot]
-    let counts: CatalogEvidenceCounts
+    let counts: [String: Int]
 }
 
 struct EvidenceEnvelopeV1: Hashable, Codable, Sendable {

@@ -115,6 +115,9 @@ class OpenFoodFactsIntegrationTests(unittest.TestCase):
         self.assertNotIn("ingredientObservationID", sauce_selection)
         self.assertIn("ingredients-missing", sauce_selection["conflictFlags"])
         self.assertEqual(changes["formulationChanges"], 0)
+        self.assertEqual(changes["ingredientFieldDeletions"], [])
+        self.assertEqual(changes["upstreamMergeSignals"], [])
+        self.assertEqual(changes["barcodeChanges"], [])
         self.assertTrue(changes["noCompletenessClaim"])
 
     def test_repeat_of_same_fixture_snapshot_is_byte_and_evidence_idempotent(self):
@@ -262,6 +265,106 @@ class OpenFoodFactsIntegrationTests(unittest.TestCase):
         self.assertIn("supersedesID", new_ingredient)
         self.assertNotIn("assessmentID", current)
 
+    def test_complete_snapshot_reports_present_record_ingredient_field_deletion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first_snapshot = root / "first.jsonl"
+            acquire_fixture(first_snapshot, "fixture-v1")
+            first_evidence, _, _ = normalize_snapshot(
+                snapshot=first_snapshot,
+                policy=self.policy,
+                selection_policy=self.selection_policy,
+            )
+
+            fixture_lines = FIXTURE.read_text(encoding="utf-8").splitlines()
+            changed = json.loads(fixture_lines[0])
+            for key in list(changed):
+                if key == "ingredients_text" or key.startswith("ingredients_text_"):
+                    changed.pop(key)
+            changed.pop("ingredients", None)
+            changed.pop("ingredients_n", None)
+            changed["rev"] = 13
+            fixture_lines[0] = json.dumps(changed, ensure_ascii=False, separators=(",", ":"))
+            changed_fixture = root / "field-deleted.jsonl"
+            changed_fixture.write_text("\n".join(fixture_lines) + "\n", encoding="utf-8")
+
+            second_snapshot = root / "second.jsonl"
+            acquire_fixture(second_snapshot, "fixture-v2", fixture=changed_fixture)
+            second_evidence, reports, changes = normalize_snapshot(
+                snapshot=second_snapshot,
+                policy=self.policy,
+                selection_policy=self.selection_policy,
+                previous_evidence=first_evidence,
+            )
+
+        self.assertEqual(len(changes["ingredientFieldDeletions"]), 1)
+        deletion = changes["ingredientFieldDeletions"][0]
+        self.assertEqual(deletion["gtin"], "04006381333931")
+        self.assertEqual(deletion["classification"], "field-absent-in-present-record")
+        self.assertIn("previousIngredientObservationID", deletion)
+        self.assertEqual(changes["reviewQueue"][0]["reason"], "ingredient-field-deleted")
+        current = next(item for item in second_evidence["currentSelections"] if item["gtin"] == "04006381333931")
+        self.assertNotIn("ingredientObservationID", current)
+        self.assertIn("ingredient-field-deleted", current["conflictFlags"])
+        self.assertEqual(reports["quality"]["warnings"]["ingredientFieldDeletions"], changes["ingredientFieldDeletions"])
+
+    def test_source_record_rekey_and_barcode_change_signals_are_reported_without_guessing_merge(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture_lines = FIXTURE.read_text(encoding="utf-8").splitlines()
+            initial = json.loads(fixture_lines[0])
+            initial["_id"] = "off-stable-record"
+            fixture_lines[0] = json.dumps(initial, ensure_ascii=False, separators=(",", ":"))
+            initial_fixture = root / "initial.jsonl"
+            initial_fixture.write_text("\n".join(fixture_lines) + "\n", encoding="utf-8")
+            first_snapshot = root / "first.jsonl"
+            acquire_fixture(first_snapshot, "fixture-v1", fixture=initial_fixture)
+            first_evidence, _, _ = normalize_snapshot(
+                snapshot=first_snapshot,
+                policy=self.policy,
+                selection_policy=self.selection_policy,
+            )
+
+            rekey_lines = initial_fixture.read_text(encoding="utf-8").splitlines()
+            rekeyed = json.loads(rekey_lines[0])
+            rekeyed["_id"] = "off-rekeyed-record"
+            rekey_lines[0] = json.dumps(rekeyed, ensure_ascii=False, separators=(",", ":"))
+            rekey_fixture = root / "rekey.jsonl"
+            rekey_fixture.write_text("\n".join(rekey_lines) + "\n", encoding="utf-8")
+            rekey_snapshot = root / "rekey-snapshot.jsonl"
+            acquire_fixture(rekey_snapshot, "fixture-v2", fixture=rekey_fixture)
+            _, _, rekey_changes = normalize_snapshot(
+                snapshot=rekey_snapshot,
+                policy=self.policy,
+                selection_policy=self.selection_policy,
+                previous_evidence=first_evidence,
+            )
+
+            barcode_lines = initial_fixture.read_text(encoding="utf-8").splitlines()
+            barcode_changed = json.loads(barcode_lines[0])
+            barcode_changed["code"] = "4006381333948"
+            barcode_lines[0] = json.dumps(barcode_changed, ensure_ascii=False, separators=(",", ":"))
+            barcode_fixture = root / "barcode.jsonl"
+            barcode_fixture.write_text("\n".join(barcode_lines) + "\n", encoding="utf-8")
+            barcode_snapshot = root / "barcode-snapshot.jsonl"
+            acquire_fixture(barcode_snapshot, "fixture-v3", fixture=barcode_fixture)
+            _, _, barcode_changes = normalize_snapshot(
+                snapshot=barcode_snapshot,
+                policy=self.policy,
+                selection_policy=self.selection_policy,
+                previous_evidence=first_evidence,
+            )
+
+        self.assertEqual(len(rekey_changes["upstreamMergeSignals"]), 1)
+        self.assertEqual(
+            rekey_changes["upstreamMergeSignals"][0]["classification"],
+            "source-record-id-changed-same-gtin",
+        )
+        self.assertEqual(len(barcode_changes["barcodeChanges"]), 1)
+        self.assertEqual(barcode_changes["barcodeChanges"][0]["sourceRecordID"], "off-stable-record")
+        self.assertEqual(barcode_changes["barcodeChanges"][0]["previousGtin"], "04006381333931")
+        self.assertEqual(barcode_changes["barcodeChanges"][0]["currentGtin"], "04006381333948")
+
     def test_partial_sample_never_reports_upstream_deletions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -289,6 +392,10 @@ class OpenFoodFactsIntegrationTests(unittest.TestCase):
         self.assertFalse(changes["deletionComparisonAllowed"])
         self.assertEqual(changes["removals"], 0)
         self.assertEqual(changes["removedSelections"], [])
+        self.assertTrue(changes["transientMissingSelections"])
+        self.assertTrue(
+            all(item["classification"] == "not-observed-in-incomplete-snapshot" for item in changes["transientMissingSelections"])
+        )
 
     def test_conflicting_declared_ingredient_language_is_reported_without_rewriting_text(self):
         with tempfile.TemporaryDirectory() as temporary:

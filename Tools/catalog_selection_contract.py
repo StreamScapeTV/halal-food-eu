@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -13,7 +14,6 @@ MARKET_RE = re.compile(r"^[A-Z]{2}$")
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SIGNAL_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SOURCE_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,79}$")
-TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$")
 IMAGE_PURPOSES = {"front", "ingredients", "barcode", "nutrition", "certification"}
 
 POLICY_FIELDS = (
@@ -71,7 +71,7 @@ REMOTE_IMAGE_FIELDS = (
 )
 
 BASIC_RULE_FIELDS = (
-    {"code", "categorySignals", "maxIngredientCount"},
+    {"code", "categorySignals", "maxIngredientCount", "allowUnknownIngredientCount"},
     set(),
 )
 
@@ -142,8 +142,14 @@ def _validate_market(value: Any, path: str) -> str:
 
 def _validate_timestamp(value: Any, path: str) -> str:
     timestamp = _string(value, path)
-    if not TIMESTAMP_RE.fullmatch(timestamp):
-        _fail(path, "must be an ISO-8601 timestamp with explicit timezone")
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise SelectionValidationError(
+            f"{path}: invalid ISO-8601 timestamp {timestamp!r}"
+        ) from error
+    if parsed.tzinfo is None:
+        _fail(path, "timestamp must include an explicit timezone")
     return timestamp
 
 
@@ -238,6 +244,9 @@ def validate_policy(data: Any) -> dict[str, Any]:
         maximum = rule["maxIngredientCount"]
         if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 0:
             _fail(f"{path}.maxIngredientCount", "must be a non-negative integer")
+        allow_unknown = rule["allowUnknownIngredientCount"]
+        if not isinstance(allow_unknown, bool):
+            _fail(f"{path}.allowUnknownIngredientCount", "must be a boolean")
 
     sample_size = policy["auditSampleSize"]
     if (

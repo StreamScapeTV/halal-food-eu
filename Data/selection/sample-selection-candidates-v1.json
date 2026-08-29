@@ -371,6 +371,25 @@
       "remoteImages": [],
       "retailerKeys": [],
       "sourceRecordID": "wrong-market"
+    },
+    {
+      "barcode": "4061234567895",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Dairy",
+      "categorySignals": [
+        "plain-cow-milk"
+      ],
+      "categoryTags": [
+        "en:milks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Unverified Plain Milk Record",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "plain-milk-missing-ingredients"
     }
   ],
   "schemaVersion": 1,

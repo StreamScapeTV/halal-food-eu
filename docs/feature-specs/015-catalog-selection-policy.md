@@ -66,11 +66,12 @@ Version 1 has only three basic exclusion reason codes:
 - `basic-plain-milk` for explicit plain cow-milk signals; and
 - `basic-plain-water` for explicit plain-water signals.
 
-Each rule permits at most one ingredient and is considered only after all inclusion overrides.
+Each rule permits at most one ingredient and is considered only after all inclusion overrides. Each rule also declares whether an unknown ingredient count is sufficient: v1 allows that only for exact fresh-produce signals; plain milk and plain water require known single-ingredient evidence.
 
 - **HF-SELECTION-009:** Exclusion requires an explicit approved basic category signal. Missing ingredient text by itself never excludes a record.
 - **HF-SELECTION-010:** Unknown/unmapped category with missing ingredients remains in the detailed projection under `conservative-unknown` so the app/review flow can represent uncertainty instead of guessing it is basic.
 - **HF-SELECTION-011:** Adding or broadening a basic-food rule requires a policy-version change, reviewed fixtures, and an impact report.
+- **HF-SELECTION-022:** A basic rule must declare whether unknown ingredient count may qualify. Version 1 permits unknown count only for exact fresh-produce signals; plain milk and plain water remain detailed/unknown until single-ingredient evidence is known.
 
 ## Exclusion is not an assessment
 

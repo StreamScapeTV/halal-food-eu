@@ -8,6 +8,7 @@
   "auditSampleSize": 20,
   "basicRules": [
     {
+      "allowUnknownIngredientCount": true,
       "categorySignals": [
         "fresh-fruit",
         "fresh-vegetable",
@@ -17,6 +18,7 @@
       "maxIngredientCount": 1
     },
     {
+      "allowUnknownIngredientCount": false,
       "categorySignals": [
         "plain-cow-milk"
       ],
@@ -24,6 +26,7 @@
       "maxIngredientCount": 1
     },
     {
+      "allowUnknownIngredientCount": false,
       "categorySignals": [
         "plain-water"
       ],

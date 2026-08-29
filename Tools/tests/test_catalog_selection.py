@@ -65,6 +65,17 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(set(schema["properties"]), required | optional, name)
             self.assertEqual(set(schema["required"]), required, name)
 
+    def test_source_snapshot_timestamp_must_be_real_and_timezone_aware(self):
+        bundle = load(INPUT_PATH)
+        bundle["sourceSnapshot"]["retrievedAt"] = "2026-99-99T00:00:00Z"
+        with self.assertRaisesRegex(CONTRACT.SelectionValidationError, "invalid ISO-8601 timestamp"):
+            MODULE.validate_bundle(bundle)
+
+        bundle = load(INPUT_PATH)
+        bundle["sourceSnapshot"]["retrievedAt"] = "2026-08-29T10:00:00"
+        with self.assertRaisesRegex(CONTRACT.SelectionValidationError, "explicit timezone"):
+            MODULE.validate_bundle(bundle)
+
     def test_future_schema_versions_fail_closed(self):
         policy = load(POLICY_PATH)
         policy["schemaVersion"] = 2
@@ -123,6 +134,12 @@ class DecisionTests(unittest.TestCase):
         )
         selected = next(item for item in self.result["selected"] if item["sourceRecordID"] == "unknown-category")
         self.assertNotIn("ingredientsText", selected)
+
+    def test_plain_milk_without_single_ingredient_evidence_stays_detailed(self):
+        self.assertEqual(
+            self.decisions["plain-milk-missing-ingredients"],
+            ("include-detailed", "conservative-unknown"),
+        )
 
     def test_existing_evidence_is_an_inclusion_override(self):
         self.assertEqual(
@@ -189,13 +206,13 @@ class DeterminismAndReportingTests(unittest.TestCase):
     def test_report_contains_required_metrics_and_deterministic_sample(self):
         result = MODULE.evaluate_bundle(load(POLICY_PATH), load(INPUT_PATH))
         report = result["report"]
-        self.assertEqual(report["sourceRecordsExamined"], 17)
-        self.assertEqual(report["germanyRelevantCandidates"], 13)
-        self.assertEqual(report["includedProducts"], 8)
+        self.assertEqual(report["sourceRecordsExamined"], 18)
+        self.assertEqual(report["germanyRelevantCandidates"], 14)
+        self.assertEqual(report["includedProducts"], 9)
         self.assertEqual(report["excludedBasicProducts"], 5)
         self.assertEqual(report["excludedInvalidRecords"], 4)
         self.assertEqual(report["includedWithIngredients"], 5)
-        self.assertEqual(report["includedMissingIngredients"], 3)
+        self.assertEqual(report["includedMissingIngredients"], 4)
         self.assertGreater(report["logicalDetailedPayloadBytes"], report["logicalBasicExclusionIndexBytes"])
         self.assertEqual(
             report["excludedBasicSample"],

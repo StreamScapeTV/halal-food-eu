@@ -112,17 +112,23 @@ def classify_candidate(candidate: dict[str, Any], policy: dict[str, Any]) -> Dec
             candidate,
         )
 
-    effective_count = ingredient_count if ingredient_count is not None else 0
     for rule in policy["basicRules"]:
-        if category_signals & set(rule["categorySignals"]):
-            if effective_count <= rule["maxIngredientCount"]:
-                return Decision(
-                    source_record_id,
-                    DECISION_BASIC,
-                    rule["code"],
-                    gtin,
-                    candidate,
-                )
+        if not (category_signals & set(rule["categorySignals"])):
+            continue
+        if ingredient_count is None:
+            if not rule["allowUnknownIngredientCount"]:
+                continue
+            effective_count = 0
+        else:
+            effective_count = ingredient_count
+        if effective_count <= rule["maxIngredientCount"]:
+            return Decision(
+                source_record_id,
+                DECISION_BASIC,
+                rule["code"],
+                gtin,
+                candidate,
+            )
 
     return Decision(
         source_record_id,

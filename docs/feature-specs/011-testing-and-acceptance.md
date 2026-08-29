@@ -30,7 +30,7 @@
 ### Catalog-selection tests
 
 - Validate policy and normalized candidate schemas against the semantic validator field contract.
-- Explicit fresh-produce/plain-milk/plain-water exclusions.
+- Explicit fresh-produce/plain-milk/plain-water exclusions, including conservative handling when milk/water ingredient count is unknown.
 - Processed/formulation/evidence/category inclusion overrides before basic rules.
 - Missing ingredients and unknown category remain conservative detailed inclusions.
 - Invalid/non-food/source-assigned-no-barcode/wrong-market reasons remain distinct.

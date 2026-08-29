@@ -25,6 +25,8 @@ struct EvidenceModelsTests {
         #expect(envelope.remoteImages.count == 1)
         #expect(envelope.packageEvidence.count == 1)
         #expect(envelope.releases.count == 1)
+        #expect(envelope.releases.first?.counts["products"] == 2)
+        #expect(envelope.releases.first?.counts["ingredientObservations"] == 3)
 
         let dessertIngredients = try #require(
             envelope.ingredients.first {

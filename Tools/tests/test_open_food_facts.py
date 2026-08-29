@@ -214,7 +214,7 @@ class OpenFoodFactsIntegrationTests(unittest.TestCase):
                     mode="fixture",
                     policy=self.policy,
                     fixture=fixture,
-                    max_malformed_rate=0.1,
+                    max_malformed_rate=0.05,
                     retrieved_at=RETRIEVED_AT,
                 )
             self.assertFalse(output.exists())

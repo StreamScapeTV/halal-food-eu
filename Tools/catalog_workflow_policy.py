@@ -21,6 +21,25 @@ DEFAULT_BRANCH_ONLY_WORKFLOWS = {
     "catalog-health.yml",
 }
 PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.*)?$")
+RELEASE_BUILDER = "python3 Tools/catalog_builder.py"
+RELEASE_VALIDATOR = "python3 Tools/validate_catalog.py"
+RELEASE_DATABASE = "HalalFoodEU/Resources/catalog.sqlite3"
+RELEASE_MANIFEST = "HalalFoodEU/Resources/catalog-manifest.json"
+
+
+def _validate_release_materialization(path: Path, text: str) -> None:
+    """Ensure release evidence never assumes ignored generated bundle files exist."""
+    if text.count(RELEASE_BUILDER) < 2:
+        raise ContractError(
+            f"{path.name} must materialize generated catalog subjects in evidence and attestation jobs"
+        )
+    if text.count(RELEASE_VALIDATOR) < 2:
+        raise ContractError(f"{path.name} must validate both generated release subject sets")
+    if text.find(RELEASE_BUILDER) > text.find(RELEASE_VALIDATOR):
+        raise ContractError(f"{path.name} must materialize the catalog before validating release evidence")
+    for required in (RELEASE_DATABASE, RELEASE_MANIFEST, "Data/sample-products.json"):
+        if required not in text:
+            raise ContractError(f"{path.name} is missing integrated release input/path {required}")
 
 
 def validate_workflows(root: Path) -> list[str]:
@@ -43,6 +62,8 @@ def validate_workflows(root: Path) -> list[str]:
         if path.name in DEFAULT_BRANCH_ONLY_WORKFLOWS:
             if "EXPECTED_REF: refs/heads/main" not in text or 'test "$GITHUB_REF" = "$EXPECTED_REF"' not in text:
                 raise ContractError(f"{path.name} must fail closed outside the reviewed default branch")
+        if path.name == "catalog-release.yml":
+            _validate_release_materialization(path, text)
         if path.name not in WRITE_WORKFLOWS:
             for permission in ("contents: write", "pull-requests: write", "issues: write", "attestations: write", "id-token: write"):
                 if permission in text:

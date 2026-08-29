@@ -134,7 +134,10 @@ struct CatalogIntegrationTests {
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
         try executeSQLite(
-            "UPDATE products SET current_observation_id = 999999 WHERE gtin = '0200000000004';",
+            """
+            PRAGMA foreign_keys = OFF;
+            UPDATE products SET current_observation_id = 999999 WHERE gtin = '0200000000004';
+            """,
             databaseURL: fixture.database
         )
         try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)

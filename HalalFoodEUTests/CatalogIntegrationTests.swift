@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import SQLite3
 import Testing
 @testable import HalalFoodEU
 
@@ -50,6 +52,106 @@ struct CatalogIntegrationTests {
             #expect(message.contains("SHA-256"))
         } catch {
             Issue.record("Expected a catalog integrity error, got \(error)")
+        }
+    }
+
+    @Test("Unsupported SQLite schema metadata fails after digest validation")
+    func rejectsUnsupportedSQLiteSchemaVersion() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite("PRAGMA user_version = 999;", databaseURL: fixture.database)
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Unsupported SQLite schema metadata must fail closed")
+        } catch ProductCatalogError.incompatibleSchema(let expected, let actual) {
+            #expect(expected == 1)
+            #expect(actual == 999)
+        } catch {
+            Issue.record("Expected an incompatible schema error, got \(error)")
+        }
+    }
+
+    @Test("Unexpected SQLite application identifiers fail after digest validation")
+    func rejectsUnexpectedApplicationIdentifier() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite("PRAGMA application_id = 0;", databaseURL: fixture.database)
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Unexpected SQLite application identifiers must fail closed")
+        } catch ProductCatalogError.invalidRecord(let message) {
+            #expect(message.contains("application identifier"))
+        } catch {
+            Issue.record("Expected an invalid catalog record error, got \(error)")
+        }
+    }
+
+    @Test("Missing required SQLite tables fail after digest validation")
+    func rejectsMissingRequiredTable() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite("DROP TABLE assessment_reasons;", databaseURL: fixture.database)
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Catalogs missing required tables must fail closed")
+        } catch ProductCatalogError.invalidRecord(let message) {
+            #expect(message.contains("missing required SQLite tables"))
+        } catch {
+            Issue.record("Expected an invalid catalog record error, got \(error)")
+        }
+    }
+
+    @Test("Foreign-key violations fail after digest validation")
+    func rejectsForeignKeyViolations() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite(
+            "UPDATE products SET current_observation_id = 999999 WHERE gtin = '0200000000004';",
+            databaseURL: fixture.database
+        )
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Catalogs with foreign-key violations must fail closed")
+        } catch ProductCatalogError.invalidRecord(let message) {
+            #expect(message.contains("foreign-key check"))
+        } catch {
+            Issue.record("Expected an invalid catalog record error, got \(error)")
         }
     }
 
@@ -146,6 +248,36 @@ struct CatalogIntegrationTests {
         try FileManager.default.copyItem(at: sourceDatabase, to: database)
         try FileManager.default.copyItem(at: sourceManifest, to: manifest)
         return (directory, database, manifest)
+    }
+
+    private func executeSQLite(_ sql: String, databaseURL: URL) throws {
+        var database: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &database,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let database else {
+            if let database {
+                sqlite3_close(database)
+            }
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        defer { sqlite3_close(database) }
+
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private func refreshManifestDigest(databaseURL: URL, manifestURL: URL) throws {
+        let digest = SHA256.hash(data: try Data(contentsOf: databaseURL))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        try mutateManifest(at: manifestURL) { manifest in
+            manifest["sha256"] = digest
+        }
     }
 
     private func mutateManifest(

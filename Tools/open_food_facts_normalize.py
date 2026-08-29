@@ -135,6 +135,23 @@ def _selection_by_key(envelope: dict[str, Any]) -> dict[tuple[str, str], dict[st
     return {(item["gtin"], item["market"]): item for item in envelope["currentSelections"]}
 
 
+def _previous_identity(
+    previous: dict[str, Any] | None,
+    gtin: str,
+    market: str,
+) -> dict[str, Any] | None:
+    if previous is None:
+        return None
+    identities = _by_id(previous["identities"])
+    selection = _selection_by_key(previous).get((gtin, market))
+    if not selection:
+        return None
+    identity_id = selection.get("identityObservationID")
+    if not isinstance(identity_id, str):
+        return None
+    return identities.get(identity_id)
+
+
 def _previous_ingredient(
     previous: dict[str, Any] | None,
     gtin: str,
@@ -150,6 +167,22 @@ def _previous_ingredient(
     if not isinstance(ingredient_id, str):
         return None
     return ingredients.get(ingredient_id)
+
+
+def _previous_identities_by_source_record(previous: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if previous is None:
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for identity in previous["identities"]:
+        if identity.get("sourceKey") != SOURCE_KEY:
+            continue
+        source_record_id = identity.get("sourceRecordID")
+        if not isinstance(source_record_id, str):
+            continue
+        current = result.get(source_record_id)
+        if current is None or str(identity.get("retrievedAt", "")) > str(current.get("retrievedAt", "")):
+            result[source_record_id] = identity
+    return result
 
 
 def _source_reference(metadata: dict[str, Any], policy: SourcePolicy) -> dict[str, Any]:
@@ -357,8 +390,12 @@ def normalize_snapshot(
     envelope = _normalize_previous(previous_evidence)
     envelope["sources"].append(_source_reference(metadata, policy))
     prior_selections = _selection_by_key(envelope)
+    previous_by_source_record = _previous_identities_by_source_record(previous_evidence)
     current_keys: set[tuple[str, str]] = set()
     changed_formulations: list[dict[str, str]] = []
+    ingredient_field_deletions: list[dict[str, str]] = []
+    upstream_merge_signals: list[dict[str, str]] = []
+    barcode_changes: list[dict[str, str]] = []
     additions = 0
     unchanged = 0
     language_conflicts: list[dict[str, Any]] = []
@@ -385,8 +422,35 @@ def normalize_snapshot(
         key = (gtin, selected["market"])
         current_keys.add(key)
 
+        prior_identity = _previous_identity(previous_evidence, gtin, selected["market"])
+        prior_ingredient = _previous_ingredient(previous_evidence, gtin, selected["market"])
         identity = _identity_record(record, selected, metadata["retrievedAt"])
         identity_map[identity["id"]] = identity
+
+        if prior_identity is not None and prior_identity.get("sourceKey") == SOURCE_KEY:
+            prior_source_record_id = prior_identity.get("sourceRecordID")
+            if isinstance(prior_source_record_id, str) and prior_source_record_id != identity["sourceRecordID"]:
+                upstream_merge_signals.append(
+                    {
+                        "gtin": gtin,
+                        "market": selected["market"],
+                        "previousSourceRecordID": prior_source_record_id,
+                        "currentSourceRecordID": identity["sourceRecordID"],
+                        "classification": "source-record-id-changed-same-gtin",
+                    }
+                )
+        same_source_record = previous_by_source_record.get(identity["sourceRecordID"])
+        if same_source_record is not None and same_source_record.get("gtin") != gtin:
+            previous_gtin = same_source_record.get("gtin")
+            if isinstance(previous_gtin, str):
+                barcode_changes.append(
+                    {
+                        "sourceRecordID": identity["sourceRecordID"],
+                        "market": selected["market"],
+                        "previousGtin": previous_gtin,
+                        "currentGtin": gtin,
+                    }
+                )
 
         ingredient, changed = _ingredient_record(
             record, selected, metadata["retrievedAt"], previous_evidence
@@ -401,6 +465,17 @@ def normalize_snapshot(
             unchanged += 1
         else:
             additions += 1
+
+        if ingredient is None and prior_ingredient is not None and prior_ingredient.get("sourceKey") == SOURCE_KEY:
+            ingredient_field_deletions.append(
+                {
+                    "gtin": gtin,
+                    "market": selected["market"],
+                    "sourceRecordID": source_id,
+                    "previousIngredientObservationID": prior_ingredient["id"],
+                    "classification": "field-absent-in-present-record",
+                }
+            )
 
         retailers = _retailer_records(record, selected, metadata["retrievedAt"])
         for retailer in retailers:
@@ -419,6 +494,8 @@ def normalize_snapshot(
             reserved_prefix.append(source_id)
         if ingredient is None:
             flags.add("ingredients-missing")
+            if prior_ingredient is not None:
+                flags.add("ingredient-field-deleted")
 
         prior = prior_selections.get(key)
         if changed and prior is not None and isinstance(prior.get("assessmentID"), str) and ingredient is not None:
@@ -443,11 +520,23 @@ def normalize_snapshot(
         new_selections[key] = current
 
     removals: list[dict[str, str]] = []
+    transient_missing_selections: list[dict[str, str]] = []
     if metadata["downloadComplete"] is True and metadata["mode"] in {"fixture", "full"}:
         for key, prior in prior_selections.items():
             if key not in current_keys:
                 removals.append({"gtin": key[0], "market": key[1], "selectionID": prior["id"]})
                 new_selections.pop(key, None)
+    elif previous_evidence is not None:
+        for key, prior in prior_selections.items():
+            if key not in current_keys:
+                transient_missing_selections.append(
+                    {
+                        "gtin": key[0],
+                        "market": key[1],
+                        "selectionID": prior["id"],
+                        "classification": "not-observed-in-incomplete-snapshot",
+                    }
+                )
 
     envelope["identities"] = sorted(identity_map.values(), key=lambda item: item["id"])
     envelope["ingredients"] = sorted(ingredient_map.values(), key=lambda item: item["id"])
@@ -489,10 +578,13 @@ def normalize_snapshot(
         "warnings": {
             "ingredientLanguageConflicts": language_conflicts,
             "restrictedPrefixProvenanceAmbiguities": sorted(reserved_prefix),
+            "ingredientFieldDeletions": sorted(ingredient_field_deletions, key=lambda item: (item["gtin"], item["sourceRecordID"])),
+            "upstreamMergeSignals": sorted(upstream_merge_signals, key=lambda item: (item["gtin"], item["currentSourceRecordID"])),
+            "barcodeChanges": sorted(barcode_changes, key=lambda item: (item["sourceRecordID"], item["currentGtin"])),
         },
     }
 
-    review_queue = [
+    review_queue: list[dict[str, str]] = [
         {
             "gtin": item["gtin"],
             "sourceRecordID": item["sourceRecordID"],
@@ -501,6 +593,15 @@ def normalize_snapshot(
         }
         for item in sorted(changed_formulations, key=lambda item: (item["gtin"], item["sourceRecordID"]))
     ]
+    review_queue.extend(
+        {
+            "gtin": item["gtin"],
+            "sourceRecordID": item["sourceRecordID"],
+            "previousIngredientObservationID": item["previousIngredientObservationID"],
+            "reason": "ingredient-field-deleted",
+        }
+        for item in sorted(ingredient_field_deletions, key=lambda item: (item["gtin"], item["sourceRecordID"]))
+    )
     change_report = {
         "schemaVersion": 1,
         "sourceKey": SOURCE_KEY,
@@ -513,6 +614,10 @@ def normalize_snapshot(
         "formulationChanges": len(changed_formulations),
         "removals": len(removals),
         "removedSelections": removals,
+        "transientMissingSelections": sorted(transient_missing_selections, key=lambda item: (item["gtin"], item["market"])),
+        "ingredientFieldDeletions": sorted(ingredient_field_deletions, key=lambda item: (item["gtin"], item["sourceRecordID"])),
+        "upstreamMergeSignals": sorted(upstream_merge_signals, key=lambda item: (item["gtin"], item["currentSourceRecordID"])),
+        "barcodeChanges": sorted(barcode_changes, key=lambda item: (item["sourceRecordID"], item["currentGtin"])),
         "reviewQueue": review_queue,
         "selectionPolicyVersion": selection["policyVersion"],
         "selectionDecisionReasons": selection["report"]["decisionReasons"],

@@ -50,6 +50,9 @@ class NetworkSecurityTests(unittest.TestCase):
             "https://evil.example.org/export/products.json",
             "https://static.example.org/private/products.json",
             "https://static.example.org/export/products.json#fragment",
+            "https://static.example.org/export/../private/products.json",
+            "https://static.example.org/export/%2e%2e/private/products.json",
+            "https://static.example.org/export/%3fadmin=true",
         )
         for value in cases:
             with self.subTest(value=value):
@@ -113,6 +116,17 @@ class ParserSecurityTests(unittest.TestCase):
             invalid.write_bytes(b'{"value":"\xff"}')
             with self.assertRaisesRegex(catalog_security.SecurityError, "UTF-8"):
                 catalog_security.load_bounded_json(invalid, max_bytes=1024)
+
+            for name, payload in (
+                ("nan", '{"value": NaN}'),
+                ("infinity", '{"value": Infinity}'),
+                ("duplicate", '{"value": 1, "value": 2}'),
+            ):
+                path = root / f"{name}.json"
+                path.write_text(payload, encoding="utf-8")
+                with self.subTest(name=name):
+                    with self.assertRaises(catalog_security.SecurityError):
+                        catalog_security.load_bounded_json(path, max_bytes=1024)
 
     def test_csv_limits_and_unadmitted_xml_media_type_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -199,10 +213,14 @@ class OutputSecurityTests(unittest.TestCase):
             b"\x89PNG\r\n\x1a\npayload",
             b"\xff\xd8\xffpayload",
             b'<?xml version="1.0"?><svg></svg>',
+            b"BMnot-a-reviewed-image",
+            b"random-binary",
+            b"RIFFxxxxAVI ",
         ):
             with self.subTest(prefix=payload[:8]):
                 with self.assertRaises(catalog_security.SecurityError):
                     catalog_security.reject_product_image_bytes(payload)
+        catalog_security.reject_product_image_bytes(b"")
 
     def test_manifest_is_bound_to_exact_reviewed_source_policy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -9,7 +9,6 @@ import io
 import ipaddress
 import json
 import re
-import shutil
 import stat
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -21,13 +20,6 @@ ACTION_TARGET = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(?P<sha>
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 FORMULA_PREFIXES = ("=", "+", "-", "@")
-IMAGE_SIGNATURES = (
-    b"\x89PNG\r\n\x1a\n",
-    b"\xff\xd8\xff",
-    b"GIF87a",
-    b"GIF89a",
-    b"RIFF",
-)
 
 
 class SecurityError(ValueError):
@@ -90,6 +82,11 @@ def validate_https_url(
     decoded_path = unquote(parsed.path or "/")
     if "\\" in decoded_path or CONTROL.search(decoded_path):
         raise _safe_error("URL", "path is unsafe")
+    path_segments = decoded_path.split("/")
+    if any(segment in {".", ".."} for segment in path_segments):
+        raise _safe_error("URL", "path contains dot-segment traversal")
+    if any(character in decoded_path for character in ("?", "#")):
+        raise _safe_error("URL", "path contains encoded query or fragment delimiters")
     if not any(decoded_path == prefix or decoded_path.startswith(prefix.rstrip("/") + "/") for prefix in allowed_path_prefixes):
         raise _safe_error("URL", "path is outside the admitted source prefix")
     return value
@@ -158,8 +155,11 @@ def load_bounded_csv(
     size = path.stat().st_size
     if size > max_bytes:
         raise _safe_error("CSV", "input exceeds the configured byte limit")
+    raw = path.read_bytes()
+    if len(raw) > max_bytes:
+        raise _safe_error("CSV", "input exceeds the configured byte limit")
     try:
-        text = path.read_bytes().decode("utf-8", errors="strict")
+        text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise _safe_error("CSV", "input is not strict UTF-8") from exc
     if "\x00" in text:
@@ -206,12 +206,32 @@ def load_bounded_json(
     if size > max_bytes:
         raise _safe_error("JSON", "input exceeds the configured byte limit")
     raw = path.read_bytes()
+    if len(raw) > max_bytes:
+        raise _safe_error("JSON", "input exceeds the configured byte limit")
     try:
         text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise _safe_error("JSON", "input is not strict UTF-8") from exc
+
+    def reject_constant(_: str) -> Any:
+        raise _safe_error("JSON", "non-finite numeric constants are forbidden")
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in output:
+                raise _safe_error("JSON", "duplicate object keys are forbidden")
+            output[key] = item
+        return output
+
     try:
-        value = json.loads(text)
+        value = json.loads(
+            text,
+            parse_constant=reject_constant,
+            object_pairs_hook=unique_object,
+        )
+    except SecurityError:
+        raise
     except json.JSONDecodeError as exc:
         raise _safe_error("JSON", "input is malformed") from exc
 
@@ -353,14 +373,8 @@ def assert_no_secret_canaries(text: str, canaries: tuple[str, ...] | list[str]) 
 
 def reject_product_image_bytes(data: bytes) -> None:
     """Keep the current product-image boundary metadata-only."""
-    if not data:
-        return
-    if any(data.startswith(signature) for signature in IMAGE_SIGNATURES):
-        if data.startswith(b"RIFF") and data[8:12] != b"WEBP":
-            return
+    if data:
         raise _safe_error("product image", "binary image payloads are outside the admitted catalog contract")
-    if data.startswith(b"<?xml") or b"<svg" in data[:512].lower():
-        raise _safe_error("product image", "SVG/XML image payloads are outside the admitted catalog contract")
 
 
 def _load_dependency_manifest(path: Path) -> dict[str, Any]:
@@ -434,10 +448,13 @@ def source_policy_identity(source_policy: Path) -> dict[str, Any]:
     )
     if not isinstance(raw, dict) or raw.get("schemaVersion") != 1:
         raise _safe_error("source policy", "unsupported or missing schemaVersion")
+    contract_version = raw.get("contractVersion")
+    if not isinstance(contract_version, str) or not contract_version:
+        raise _safe_error("source policy", "missing contractVersion")
     import hashlib
     return {
         "schemaVersion": 1,
-        "contractVersion": str(raw.get("contractVersion", "")),
+        "contractVersion": contract_version,
         "sha256": hashlib.sha256(raw_bytes).hexdigest(),
     }
 

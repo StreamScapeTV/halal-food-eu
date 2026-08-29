@@ -60,6 +60,17 @@ jobs:
             --output "$RUNNER_TEMP/catalog-selection.json"
           python3 -m unittest discover -s Tools/tests -p 'test_catalog_selection.py'
 
+      - name: Validate Open Food Facts source adapter
+        run: |
+          python3 -m py_compile \
+            Tools/open_food_facts.py \
+            Tools/open_food_facts_common.py \
+            Tools/open_food_facts_acquire.py \
+            Tools/open_food_facts_normalize.py \
+            Tools/tests/test_open_food_facts.py
+          python3 -m json.tool Data/sources/open-food-facts/source-policy-v1.json >/dev/null
+          python3 -m unittest discover -s Tools/tests -p 'test_open_food_facts.py'
+
       - name: Validate catalog workflow contract and trust boundaries
         run: |
           python3 -m py_compile \

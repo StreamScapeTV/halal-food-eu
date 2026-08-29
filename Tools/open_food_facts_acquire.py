@@ -76,6 +76,7 @@ class Counters:
     examined: int = 0
     emitted: int = 0
     wrong_market: int = 0
+    unsupported_schema: int = 0
     malformed: int = 0
     oversized: int = 0
 
@@ -227,13 +228,15 @@ def acquire(
             try:
                 for record in _iter_json_lines(decoded_stream, counters):
                     version = _schema_version(record)
-                    if version is not None:
-                        schemas[version] += 1
+                    schemas[version or "missing"] += 1
                     market = market_for_record(record)
                     if market != SELECTION_MARKET:
                         counters.wrong_market += 1
                         if mode != "fixture":
                             continue
+                    if version != policy.product_schema_version:
+                        counters.unsupported_schema += 1
+                        continue
                     projected = project_source_record(record)
                     destination.write(json.dumps(projected, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n")
                     counters.emitted += 1
@@ -249,8 +252,16 @@ def acquire(
                 raise AdapterError(
                     f"malformed rate {counters.malformed_rate:.6f} exceeds {max_malformed_rate:.6f}"
                 )
-            if mode in {"fixture", "full"} and schemas and set(schemas) != {policy.product_schema_version}:
-                raise AdapterError(f"unsupported source schemas {sorted(schemas)}; expected {policy.product_schema_version}")
+            if mode == "fixture" and counters.unsupported_schema:
+                raise AdapterError(
+                    f"fixture contains {counters.unsupported_schema} unsupported schema records; "
+                    f"expected {policy.product_schema_version}"
+                )
+            if mode == "full" and counters.emitted == 0:
+                raise AdapterError(
+                    f"full export contained no {SELECTION_MARKET} records on supported schema "
+                    f"{policy.product_schema_version}"
+                )
 
             assert digest_reader is not None
             if mode == "full":
@@ -283,6 +294,7 @@ def acquire(
                 "recordsExamined": counters.examined,
                 "recordsEmitted": counters.emitted,
                 "coarseExcludedWrongMarket": counters.wrong_market,
+                "unsupportedSchemaRecords": counters.unsupported_schema,
                 "malformedRecords": counters.malformed,
                 "oversizedLines": counters.oversized,
                 "malformedRate": counters.malformed_rate,

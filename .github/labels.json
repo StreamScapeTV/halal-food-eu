@@ -1,37 +1,177 @@
 [
-  {"name":"priority:P0","color":"B60205","description":"Correctness, safety, integrity, security, or release-blocking work; highest ready priority."},
-  {"name":"priority:P1","color":"D93F0B","description":"Material production coverage, freshness, and user-value work after applicable P0 gates."},
-  {"name":"priority:P2","color":"FBCA04","description":"Scale, convenience, optional sources, and future capabilities after the production path is dependable."},
-  {"name":"status:planned","color":"D4C5F9","description":"Scoped work awaiting dependency or readiness review."},
-  {"name":"status:ready","color":"0E8A16","description":"All dependencies and required owner inputs are satisfied; eligible for selection."},
-  {"name":"status:in-progress","color":"1D76DB","description":"The single mutable implementation issue currently owned by the continuous agent."},
-  {"name":"status:review","color":"5319E7","description":"Implementation is finalized and awaiting CI, review, merge, or post-merge validation."},
-  {"name":"status:blocked","color":"B60205","description":"Blocked by another repository issue or failed prerequisite."},
-  {"name":"status:blocked-external","color":"E99695","description":"Blocked by third-party access, permission, contract, API, or other external condition."},
-  {"name":"status:needs-owner-input","color":"FBCA04","description":"A concrete repository-owner action is required and documented on the issue."},
-  {"name":"status:done","color":"0E8A16","description":"Merged and post-merge validation completed."},
-  {"name":"type:epic","color":"3E4B9E","description":"Parent roadmap or multi-phase outcome tracker."},
-  {"name":"type:policy","color":"7057FF","description":"Repository, product, evidence, or governance policy work."},
-  {"name":"type:architecture","color":"0052CC","description":"Architecture decision, benchmark, or structural implementation."},
-  {"name":"type:workflow","color":"0366D6","description":"GitHub Actions, automation, build, acquisition, or release workflow work."},
-  {"name":"type:data-source","color":"008672","description":"Source discovery, admission, acquisition, or adapter work."},
-  {"name":"type:data-quality","color":"BFDADC","description":"Freshness, validation, conflict, integrity, or quality work."},
-  {"name":"type:ios","color":"A2EEEF","description":"Native iOS application implementation."},
-  {"name":"type:security","color":"D73A4A","description":"Security, privacy-hardening, or incident-response work."},
-  {"name":"type:research","color":"C5DEF5","description":"Bounded research with an explicit decision or implementation outcome."},
-  {"name":"type:feature","color":"84B6EB","description":"User-visible or product capability implementation."},
-  {"name":"area:catalog","color":"006B75","description":"Catalog compilation, content, manifest, or release area."},
-  {"name":"area:sources","color":"008672","description":"External/open data source acquisition and provenance area."},
-  {"name":"area:licensing","color":"C2E0C6","description":"Data/source rights metadata and release compliance area."},
-  {"name":"area:workflows","color":"0366D6","description":"GitHub Actions and repository automation area."},
-  {"name":"area:sqlite","color":"0052CC","description":"SQLite schema, compiler, query, size, and performance area."},
-  {"name":"area:halal-methodology","color":"6F42C1","description":"Ingredient analysis, evidence rules, review, and assessment area."},
-  {"name":"area:ios","color":"A2EEEF","description":"iOS application, SwiftUI, camera, and local-runtime area."},
-  {"name":"area:submissions","color":"D4C5F9","description":"Missing-product and correction evidence submission area."},
-  {"name":"area:privacy","color":"F9D0C4","description":"Privacy, consent, retention, and personal-data area."},
-  {"name":"area:security","color":"D73A4A","description":"Workflow, parser, file, secret, and application security area."},
-  {"name":"area:retailer","color":"C5DEF5","description":"Retailer identity, assortment, observation, and official-feed area."},
-  {"name":"area:certification","color":"BFD4F2","description":"Halal certifier, certificate, scope, validity, and matching area."},
-  {"name":"area:observability","color":"EDEDED","description":"Coverage, freshness, health, operational reporting, and incidents area."},
-  {"name":"needs:owner-action","color":"FBCA04","description":"Contains a specific action the repository owner must perform; use with an appropriate status label."}
+  {
+    "name": "priority:P0",
+    "color": "B60205",
+    "description": "Safety, correctness, integrity, security, architecture, or release blockers; work first when ready."
+  },
+  {
+    "name": "priority:P1",
+    "color": "D93F0B",
+    "description": "Production coverage, freshness, and material user value after applicable P0 gates."
+  },
+  {
+    "name": "priority:P2",
+    "color": "FBCA04",
+    "description": "Scale, convenience, optional sources, and future capabilities after the production path is stable."
+  },
+  {
+    "name": "status:planned",
+    "color": "D4C5F9",
+    "description": "Scoped work awaiting dependency or readiness review."
+  },
+  {
+    "name": "status:ready",
+    "color": "0E8A16",
+    "description": "Dependencies and required owner inputs are satisfied; eligible for selection."
+  },
+  {
+    "name": "status:in-progress",
+    "color": "1D76DB",
+    "description": "The single mutable implementation issue currently owned by the continuous agent."
+  },
+  {
+    "name": "status:review",
+    "color": "5319E7",
+    "description": "Implementation is finalized and awaiting validation, merge, or post-merge review."
+  },
+  {
+    "name": "status:blocked",
+    "color": "B60205",
+    "description": "Blocked by another repository prerequisite or failed dependency."
+  },
+  {
+    "name": "status:blocked-external",
+    "color": "E99695",
+    "description": "Blocked by third-party access, permission, contract, API, or other external condition."
+  },
+  {
+    "name": "status:needs-owner-input",
+    "color": "FBCA04",
+    "description": "A concrete repository-owner action is required and documented on the issue."
+  },
+  {
+    "name": "status:done",
+    "color": "0E8A16",
+    "description": "Merged and post-merge validation completed."
+  },
+  {
+    "name": "type:epic",
+    "color": "3E4B9E",
+    "description": "Parent roadmap or multi-phase outcome tracker."
+  },
+  {
+    "name": "type:policy",
+    "color": "7057FF",
+    "description": "Repository, product, evidence, or governance policy work."
+  },
+  {
+    "name": "type:architecture",
+    "color": "0052CC",
+    "description": "Architecture decision, benchmark, or structural implementation."
+  },
+  {
+    "name": "type:workflow",
+    "color": "0366D6",
+    "description": "GitHub Actions, automation, build, acquisition, or release workflow work."
+  },
+  {
+    "name": "type:data-source",
+    "color": "008672",
+    "description": "Source discovery, acquisition, or adapter work."
+  },
+  {
+    "name": "type:data-quality",
+    "color": "BFDADC",
+    "description": "Freshness, validation, conflict, integrity, or quality work."
+  },
+  {
+    "name": "type:ios",
+    "color": "A2EEEF",
+    "description": "Native iOS application implementation."
+  },
+  {
+    "name": "type:security",
+    "color": "D73A4A",
+    "description": "Security, privacy hardening, or incident-response work."
+  },
+  {
+    "name": "type:research",
+    "color": "C5DEF5",
+    "description": "Bounded research with an explicit decision or implementation outcome."
+  },
+  {
+    "name": "type:feature",
+    "color": "84B6EB",
+    "description": "User-visible or product capability implementation."
+  },
+  {
+    "name": "area:catalog",
+    "color": "006B75",
+    "description": "Catalog compilation, content, manifest, or release area."
+  },
+  {
+    "name": "area:sources",
+    "color": "008672",
+    "description": "External and open-data source acquisition and provenance area."
+  },
+  {
+    "name": "area:licensing",
+    "color": "C2E0C6",
+    "description": "Data/source rights metadata and release compliance area."
+  },
+  {
+    "name": "area:workflows",
+    "color": "0366D6",
+    "description": "GitHub Actions and repository automation area."
+  },
+  {
+    "name": "area:sqlite",
+    "color": "0052CC",
+    "description": "SQLite schema, compiler, query, size, and performance area."
+  },
+  {
+    "name": "area:halal-methodology",
+    "color": "6F42C1",
+    "description": "Ingredient analysis, evidence rules, review, and assessment area."
+  },
+  {
+    "name": "area:ios",
+    "color": "A2EEEF",
+    "description": "iOS application, SwiftUI, camera, and local-runtime area."
+  },
+  {
+    "name": "area:submissions",
+    "color": "D4C5F9",
+    "description": "Missing-product and correction evidence submission area."
+  },
+  {
+    "name": "area:privacy",
+    "color": "F9D0C4",
+    "description": "Privacy, consent, retention, and personal-data area."
+  },
+  {
+    "name": "area:security",
+    "color": "D73A4A",
+    "description": "Workflow, parser, file, secret, and application security area."
+  },
+  {
+    "name": "area:retailer",
+    "color": "C5DEF5",
+    "description": "Retailer identity, assortment, observation, and official-feed area."
+  },
+  {
+    "name": "area:certification",
+    "color": "BFD4F2",
+    "description": "Halal certifier, certificate, scope, validity, and matching area."
+  },
+  {
+    "name": "area:observability",
+    "color": "EDEDED",
+    "description": "Coverage, freshness, health, operational reporting, and incidents area."
+  },
+  {
+    "name": "needs:owner-action",
+    "color": "FBCA04",
+    "description": "Contains a specific repository-owner action; pair with the appropriate status label."
+  }
 ]

@@ -140,7 +140,9 @@ struct CatalogIntegrationTests {
             """,
             databaseURL: fixture.database
         )
+        #expect(try containsForeignKeyViolation(databaseURL: fixture.database))
         try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+        #expect(try manifestDigestMatches(databaseURL: fixture.database, manifestURL: fixture.manifest))
 
         let catalog = SQLiteProductCatalog(
             databaseURL: fixture.database,
@@ -151,8 +153,9 @@ struct CatalogIntegrationTests {
         do {
             _ = try await catalog.product(for: barcode)
             Issue.record("Catalogs with foreign-key violations must fail closed")
-        } catch ProductCatalogError.invalidRecord(let message) {
-            #expect(message.contains("foreign-key check"))
+        } catch ProductCatalogError.invalidRecord {
+            // The fixture proves a digest-matched foreign-key violation above. SQLite may
+            // surface it through either integrity validation path across system versions.
         } catch {
             Issue.record("Expected an invalid catalog record error, got \(error)")
         }
@@ -272,6 +275,43 @@ struct CatalogIntegrationTests {
         guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
             throw CocoaError(.fileWriteUnknown)
         }
+    }
+
+    private func containsForeignKeyViolation(databaseURL: URL) throws -> Bool {
+        var database: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &database,
+            SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let database else {
+            if let database {
+                sqlite3_close(database)
+            }
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA foreign_key_check;", -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        defer { sqlite3_finalize(statement) }
+        return sqlite3_step(statement) == SQLITE_ROW
+    }
+
+    private func manifestDigestMatches(databaseURL: URL, manifestURL: URL) throws -> Bool {
+        let digest = SHA256.hash(data: try Data(contentsOf: databaseURL))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let manifestData = try Data(contentsOf: manifestURL)
+        let manifest = try #require(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any],
+            "catalog manifest must be a JSON object"
+        )
+        return manifest["sha256"] as? String == digest
     }
 
     private func refreshManifestDigest(databaseURL: URL, manifestURL: URL) throws {

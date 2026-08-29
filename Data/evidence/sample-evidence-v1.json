@@ -1,0 +1,316 @@
+{
+  "assessments": [
+    {
+      "assessedAt": "2026-01-11T00:00:00Z",
+      "certificationIDs": [],
+      "evidenceIDs": [
+        "hfeu:ingredient:sha256:13afc16980333cca61a6f094d7ae884cef4c8d6fb3d115366642fb5af469d048"
+      ],
+      "gtin": "00200000000028",
+      "id": "hfeu:assessment:sha256:13475ded3c4458643b92feb9bfcebfea8ae8e91deef6d70cd36c65d8acb2ce22",
+      "ingredientObservationID": "hfeu:ingredient:sha256:13afc16980333cca61a6f094d7ae884cef4c8d6fb3d115366642fb5af469d048",
+      "market": "DE",
+      "methodologyVersion": "demo-methodology-1",
+      "reasons": [
+        {
+          "code": "AMBIGUOUS-E471-SOURCE",
+          "detail": "The older synthetic formulation did not establish the source of E471.",
+          "evidenceIDs": [
+            "hfeu:ingredient:sha256:13afc16980333cca61a6f094d7ae884cef4c8d6fb3d115366642fb5af469d048"
+          ],
+          "ingredient": "mono- and diglycerides of fatty acids (E471)",
+          "severity": "caution",
+          "title": "E471 source was ambiguous"
+        }
+      ],
+      "status": "questionable"
+    },
+    {
+      "assessedAt": "2026-08-29T01:00:00Z",
+      "certificationIDs": [],
+      "evidenceIDs": [
+        "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5",
+        "hfeu:package-evidence:sha256:b5c9e29e5c75af9653fcc22dd90979d3c57b50f735562a180af9fb57d345b0a7"
+      ],
+      "gtin": "00200000000028",
+      "id": "hfeu:assessment:sha256:faeac464608ecd9d7d3fc88c42649f0ce5a8a5d82e519c31bcdf7782913ba394",
+      "ingredientObservationID": "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5",
+      "market": "DE",
+      "methodologyVersion": "demo-methodology-1",
+      "reasons": [
+        {
+          "code": "FLAVOUR-CARRIER-UNKNOWN",
+          "detail": "The current synthetic formulation states plant-based E471 but does not establish the flavour carrier.",
+          "evidenceIDs": [
+            "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5"
+          ],
+          "ingredient": "natural vanilla flavouring",
+          "severity": "caution",
+          "title": "Flavour carrier is not documented"
+        }
+      ],
+      "recheckAt": "2027-02-28T00:00:00Z",
+      "status": "questionable"
+    },
+    {
+      "assessedAt": "2026-08-29T01:00:00Z",
+      "certificationIDs": [
+        "hfeu:certification:sha256:2606a82662763e1ba17b17525f11846cf407904da6e8feac5818a0e1ce6b38f2"
+      ],
+      "evidenceIDs": [
+        "hfeu:ingredient:sha256:a6941a816872484b824d91f955e93306610ffb7af2d006dfaf5aef0486669106",
+        "hfeu:certification:sha256:2606a82662763e1ba17b17525f11846cf407904da6e8feac5818a0e1ce6b38f2"
+      ],
+      "gtin": "00200000000004",
+      "id": "hfeu:assessment:sha256:c3ae677f2d5f3b47085e5d58a1ab3fdf824c04e395b5e5c0070a74ac168bfc5b",
+      "ingredientObservationID": "hfeu:ingredient:sha256:a6941a816872484b824d91f955e93306610ffb7af2d006dfaf5aef0486669106",
+      "market": "DE",
+      "methodologyVersion": "demo-methodology-1",
+      "reasons": [
+        {
+          "code": "SYNTHETIC-CERTIFICATE-MATCH",
+          "detail": "A synthetic current certificate is linked to the exact demonstration GTIN.",
+          "evidenceIDs": [
+            "hfeu:certification:sha256:2606a82662763e1ba17b17525f11846cf407904da6e8feac5818a0e1ce6b38f2"
+          ],
+          "severity": "positive",
+          "title": "Synthetic certificate matches exact product"
+        }
+      ],
+      "recheckAt": "2027-08-01T00:00:00Z",
+      "status": "halal-certified"
+    }
+  ],
+  "certifications": [
+    {
+      "certificateReference": "DEMO-CERT-0001",
+      "certifier": "Synthetic Halal Review Body",
+      "effectiveAt": "2026-08-01T00:00:00Z",
+      "evidenceHash": "e6f4b298fca272af2f4450194f7e14f85adcb778b44b69ac59c165197bdb0195",
+      "expiryAt": "2027-08-01T00:00:00Z",
+      "gtin": "00200000000004",
+      "id": "hfeu:certification:sha256:2606a82662763e1ba17b17525f11846cf407904da6e8feac5818a0e1ce6b38f2",
+      "issueAt": "2026-08-01T00:00:00Z",
+      "lastCheckedAt": "2026-08-29T00:00:00Z",
+      "market": "DE",
+      "matchBasis": "Exact synthetic GTIN and product fixture",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "scheme": "synthetic-demo-scheme",
+      "scope": "Synthetic demonstration product only",
+      "sourceKey": "synthetic-certifier",
+      "sourceRecordID": "demo-cert-0001",
+      "sourceRevision": "v1"
+    }
+  ],
+  "currentSelections": [
+    {
+      "assessmentID": "hfeu:assessment:sha256:faeac464608ecd9d7d3fc88c42649f0ce5a8a5d82e519c31bcdf7782913ba394",
+      "certificationIDs": [],
+      "conflictFlags": [],
+      "gtin": "00200000000028",
+      "id": "hfeu:current-selection:sha256:1510cd14b9409a86bd65d47ba9d6534329a87fd9ea77acf2a29c8c511d7ccc33",
+      "identityObservationID": "hfeu:identity:sha256:090ae1b11f82430cbc64b8f346b4051e923157dcc03865750dfbf35736d8bc2c",
+      "ingredientObservationID": "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5",
+      "market": "DE",
+      "remoteImageIDs": [
+        "hfeu:remote-image:sha256:fd0d78222a6d199ea1706c429c6dfa3fdf1f9d2c621a5b9d20f479ff91a30586"
+      ],
+      "retailerEvidenceIDs": [
+        "hfeu:retailer:sha256:99a2966145318a1ee5376c1c54d560c6d60e2b82fc7e29118832d588139c33e1"
+      ]
+    },
+    {
+      "assessmentID": "hfeu:assessment:sha256:c3ae677f2d5f3b47085e5d58a1ab3fdf824c04e395b5e5c0070a74ac168bfc5b",
+      "certificationIDs": [
+        "hfeu:certification:sha256:2606a82662763e1ba17b17525f11846cf407904da6e8feac5818a0e1ce6b38f2"
+      ],
+      "conflictFlags": [],
+      "gtin": "00200000000004",
+      "id": "hfeu:current-selection:sha256:35c3176f11793abe414283c87141a305cfc7a11bbc34ac6b263498159da168bc",
+      "identityObservationID": "hfeu:identity:sha256:1390da13c36e679599c34946dc8d4a1bebbe6625a555af7b79b2ae0ac62a9669",
+      "ingredientObservationID": "hfeu:ingredient:sha256:a6941a816872484b824d91f955e93306610ffb7af2d006dfaf5aef0486669106",
+      "market": "DE",
+      "remoteImageIDs": [],
+      "retailerEvidenceIDs": []
+    }
+  ],
+  "identities": [
+    {
+      "brand": "Halal Food EU Demo",
+      "brandOwner": "StreamScapeTV Demo",
+      "categories": ["desserts", "dairy-desserts"],
+      "confidence": "high",
+      "gtin": "00200000000028",
+      "id": "hfeu:identity:sha256:090ae1b11f82430cbc64b8f346b4051e923157dcc03865750dfbf35736d8bc2c",
+      "market": "DE",
+      "name": "Demonstration Vanilla Dessert",
+      "observedAt": "2026-08-29T00:00:00Z",
+      "originalBarcode": "0200000000028",
+      "packaging": ["cup"],
+      "quantity": "150 g",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "sourceKey": "synthetic-core",
+      "sourceRecordID": "demo-dessert",
+      "sourceRevision": "identity-v1"
+    },
+    {
+      "brand": "Halal Food EU Demo",
+      "brandOwner": "StreamScapeTV Demo",
+      "categories": ["plant-based-drinks"],
+      "confidence": "high",
+      "gtin": "00200000000004",
+      "id": "hfeu:identity:sha256:1390da13c36e679599c34946dc8d4a1bebbe6625a555af7b79b2ae0ac62a9669",
+      "market": "DE",
+      "name": "Demonstration Oat Drink",
+      "observedAt": "2026-08-29T00:00:00Z",
+      "originalBarcode": "0200000000004",
+      "packaging": ["carton"],
+      "quantity": "1 L",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "sourceKey": "synthetic-core",
+      "sourceRecordID": "demo-oat-drink",
+      "sourceRevision": "identity-v1"
+    }
+  ],
+  "ingredients": [
+    {
+      "allergensText": "Milk.",
+      "captureMethod": "source-text",
+      "contentHash": "0a06efec58a22bd76f8db5d1789a2649bd258df72b2615771dcc11e03952a003",
+      "gtin": "00200000000028",
+      "id": "hfeu:ingredient:sha256:13afc16980333cca61a6f094d7ae884cef4c8d6fb3d115366642fb5af469d048",
+      "ingredientsText": "Milk, sugar, mono- and diglycerides of fatty acids (E471), natural vanilla flavouring.",
+      "languageCode": "en",
+      "market": "DE",
+      "observedAt": "2026-01-10T00:00:00Z",
+      "retrievedAt": "2026-01-10T00:00:00Z",
+      "sourceKey": "synthetic-core",
+      "sourceRecordID": "demo-dessert",
+      "sourceRevision": "formula-v1",
+      "tracesText": null,
+      "verificationState": "human-verified"
+    },
+    {
+      "allergensText": "Milk.",
+      "captureMethod": "source-text",
+      "contentHash": "8d9eb63fc3aad7664acac41616c3c0d66e5d8549096a71699582d988b205a69d",
+      "gtin": "00200000000028",
+      "id": "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5",
+      "ingredientsText": "Milk, sugar, plant-based mono- and diglycerides of fatty acids (E471), natural vanilla flavouring.",
+      "languageCode": "en",
+      "market": "DE",
+      "observedAt": "2026-08-29T00:00:00Z",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "sourceKey": "synthetic-core",
+      "sourceRecordID": "demo-dessert",
+      "sourceRevision": "formula-v2",
+      "supersedesID": "hfeu:ingredient:sha256:13afc16980333cca61a6f094d7ae884cef4c8d6fb3d115366642fb5af469d048",
+      "tracesText": null,
+      "verificationState": "human-verified"
+    },
+    {
+      "allergensText": "Oats.",
+      "captureMethod": "source-text",
+      "contentHash": "2349176f66e0f8ca973026ff593b2c07de0e7833cd3d92ee8cfa8c05bc484443",
+      "gtin": "00200000000004",
+      "id": "hfeu:ingredient:sha256:a6941a816872484b824d91f955e93306610ffb7af2d006dfaf5aef0486669106",
+      "ingredientsText": "Water, oats (12%), sunflower oil, sea salt.",
+      "languageCode": "en",
+      "market": "DE",
+      "observedAt": "2026-08-29T00:00:00Z",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "sourceKey": "synthetic-core",
+      "sourceRecordID": "demo-oat-drink",
+      "sourceRevision": "formula-v1",
+      "tracesText": null,
+      "verificationState": "human-verified"
+    }
+  ],
+  "packageEvidence": [
+    {
+      "consentState": "recorded",
+      "gtin": "00200000000028",
+      "id": "hfeu:package-evidence:sha256:b5c9e29e5c75af9653fcc22dd90979d3c57b50f735562a180af9fb57d345b0a7",
+      "internalReference": "review-artifact:synthetic/package/demo-dessert-v2",
+      "market": "DE",
+      "observedAt": "2026-08-29T00:00:00Z",
+      "privacyState": "screened",
+      "purpose": "ingredients",
+      "redactionState": "not-required",
+      "sha256": "a9450f146528679d473ace458db061fa3f7e1386cd1a2a07e63efa8011df369c",
+      "verificationState": "human-verified"
+    }
+  ],
+  "releases": [
+    {
+      "builderVersion": "evidence-model-v1",
+      "catalogVersion": "0.2.0-demo.1",
+      "commitSHA": "eef9642",
+      "counts": {"assessments": 3, "currentSelections": 2, "ingredientObservations": 3, "packageEvidence": 1, "products": 2, "remoteImages": 1},
+      "generatedAt": "2026-08-29T03:00:00Z",
+      "id": "hfeu:release:sha256:80d34f793c14355b59b44abc00359684788b10efdf444c53d2ab0e6e09297999",
+      "methodologyVersion": "demo-methodology-1",
+      "runtimeDigest": "513cb51c4dc1b3ad14505efab9b850436139ec226e21f2ccede8fc4042c21b4a",
+      "selectionPolicyVersion": "demo-selection-1",
+      "sourceSnapshots": [
+        {"digest":"0978ecda19fa41732fdf76cbe1720709fc72d7fed15e8fe1f968ed6604439550","retrievedAt":"2026-08-29T00:00:00Z","snapshotID":"synthetic-core-2026-08-29","sourceKey":"synthetic-core"},
+        {"digest":"28297bae5c91b37548ad3d3e3eb31743789c346fe91edd4881bc56091a4b8e24","retrievedAt":"2026-08-29T00:00:00Z","snapshotID":"synthetic-retailer-2026-08-29","sourceKey":"synthetic-retailer"},
+        {"digest":"f58f31e917d3dd5768f03461fffa8f4f8aa7338b72b15da8b3cc292c9b9f246c","retrievedAt":"2026-08-29T00:00:00Z","snapshotID":"synthetic-certifier-2026-08-29","sourceKey":"synthetic-certifier"}
+      ]
+    }
+  ],
+  "remoteImages": [
+    {
+      "gtin": "00200000000028",
+      "height": 1200,
+      "id": "hfeu:remote-image:sha256:fd0d78222a6d199ea1706c429c6dfa3fdf1f9d2c621a5b9d20f479ff91a30586",
+      "imageID": "demo-dessert-front-v1",
+      "market": "DE",
+      "purpose": "front",
+      "retrievedAt": "2026-08-29T00:00:00Z",
+      "revision": "v1",
+      "sourceKey": "synthetic-core",
+      "url": "https://images.example.invalid/halal-food-eu/demo-dessert-front.jpg",
+      "width": 1200
+    }
+  ],
+  "retailerEvidence": [
+    {
+      "confidence": "synthetic-reviewed",
+      "gtin": "00200000000028",
+      "id": "hfeu:retailer:sha256:99a2966145318a1ee5376c1c54d560c6d60e2b82fc7e29118832d588139c33e1",
+      "kind": "retailer-observation",
+      "limitations": "Dated store observation only; not current stock or nationwide availability.",
+      "locationID": "demo-store-koblenz",
+      "market": "DE",
+      "observedAt": "2026-08-20T15:30:00Z",
+      "retailerKey": "demo-retailer",
+      "retrievedAt": "2026-08-21T09:00:00Z",
+      "scope": "single synthetic store observation",
+      "sourceKey": "synthetic-retailer",
+      "sourceRecordID": "price-proof-1001",
+      "sourceRevision": "v1"
+    }
+  ],
+  "reviews": [
+    {"decisionCode":"DEMO-APPROVED","id":"hfeu:review:sha256:af22cc3e07d164eaf7c3f3b8891d2d1eb3e249b2a5123aa35fa98bf4cdfce943","methodologyVersion":"demo-methodology-1","reason":"Synthetic historical assessment reviewed.","reviewedAt":"2026-01-11T01:00:00Z","reviewerID":"demo-reviewer-1","state":"approved","targetID":"hfeu:assessment:sha256:13475ded3c4458643b92feb9bfcebfea8ae8e91deef6d70cd36c65d8acb2ce22","targetType":"assessment"},
+    {"decisionCode":"DEMO-APPROVED","id":"hfeu:review:sha256:c836ceb8f1525bb0295ddf3c98aeee96a69b451463c12b37e1f3c30131cd9620","methodologyVersion":"demo-methodology-1","reason":"Synthetic current assessment reviewed.","reviewedAt":"2026-08-29T02:00:00Z","reviewerID":"demo-reviewer-2","state":"approved","targetID":"hfeu:assessment:sha256:faeac464608ecd9d7d3fc88c42649f0ce5a8a5d82e519c31bcdf7782913ba394","targetType":"assessment"},
+    {"decisionCode":"DEMO-APPROVED","id":"hfeu:review:sha256:4c4cea3a90a749af0eb928e24de6d50b3bb8337f404ee075c96dcc9a1af1f7f4","methodologyVersion":"demo-methodology-1","reason":"Synthetic certificate assessment reviewed.","reviewedAt":"2026-08-29T02:00:00Z","reviewerID":"demo-reviewer-2","state":"approved","targetID":"hfeu:assessment:sha256:c3ae677f2d5f3b47085e5d58a1ab3fdf824c04e395b5e5c0070a74ac168bfc5b","targetType":"assessment"}
+  ],
+  "schemaVersion": 1,
+  "sources": [
+    {"accessMethod":"synthetic","markets":["DE"],"operator":"Halal Food EU synthetic fixtures","reference":"urn:halal-food-eu:synthetic-core:v1","retrievedAt":"2026-08-29T00:00:00Z","sourceClass":"synthetic","sourceKey":"synthetic-core","sourceRevision":"v1","sourceSnapshotID":"synthetic-core-2026-08-29"},
+    {"accessMethod":"synthetic","markets":["DE"],"operator":"Halal Food EU synthetic retailer fixtures","reference":"urn:halal-food-eu:synthetic-retailer:v1","retrievedAt":"2026-08-29T00:00:00Z","sourceClass":"synthetic","sourceKey":"synthetic-retailer","sourceRevision":"v1","sourceSnapshotID":"synthetic-retailer-2026-08-29"},
+    {"accessMethod":"synthetic","markets":["DE"],"operator":"Halal Food EU synthetic certifier fixtures","reference":"urn:halal-food-eu:synthetic-certifier:v1","retrievedAt":"2026-08-29T00:00:00Z","sourceClass":"synthetic","sourceKey":"synthetic-certifier","sourceRevision":"v1","sourceSnapshotID":"synthetic-certifier-2026-08-29"}
+  ],
+  "validityEvents": [
+    {
+      "assessmentID": "hfeu:assessment:sha256:13475ded3c4458643b92feb9bfcebfea8ae8e91deef6d70cd36c65d8acb2ce22",
+      "id": "hfeu:validity-event:sha256:57a1e5098b2e8980ba97cc7dafe0c236eecb1832afec9e92be911b288d7590c0",
+      "kind": "invalidated",
+      "occurredAt": "2026-08-29T00:30:00Z",
+      "reason": "Synthetic formulation v2 superseded the ingredient observation.",
+      "triggeredByEvidenceID": "hfeu:ingredient:sha256:c222d3ce6d0c20d9c4d95ea3a52ff419ae0c86695419159dbd3b7c9cacfe08e5"
+    }
+  ]
+}

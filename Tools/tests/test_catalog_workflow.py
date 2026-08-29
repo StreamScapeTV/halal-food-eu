@@ -46,12 +46,16 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(self.contract.retry_delays(), (5, 10, 20, 40))
 
-    def test_only_fixture_source_is_initially_admitted_and_needs_no_secret(self) -> None:
-        source = self.contract.validate_source("synthetic-fixture", "fixture-2026-08-29", "fixture")
+    def test_fixture_and_open_food_facts_sources_are_admitted_without_secrets(self) -> None:
+        fixture = self.contract.validate_source("synthetic-fixture", "fixture-2026-08-29", "fixture")
+        self.assertFalse(fixture.credentials_required)
+        self.assertEqual(fixture.access_method, "committed-fixture")
+
+        source = self.contract.validate_source("open-food-facts", "2026-08-30", "full")
         self.assertFalse(source.credentials_required)
-        self.assertEqual(source.access_method, "committed-fixture")
-        with self.assertRaisesRegex(catalog_workflow.ContractError, "not registered"):
-            self.contract.validate_source("open-food-facts", "2026-08-29", "full")
+        self.assertEqual(source.source_class, "open-database")
+        self.assertEqual(source.access_method, "https-export")
+        self.assertEqual(source.allowed_hosts, ("static.openfoodfacts.org",))
 
     def test_fixture_source_cannot_be_promoted_to_full_mode(self) -> None:
         with self.assertRaisesRegex(catalog_workflow.ContractError, "fixture mode"):

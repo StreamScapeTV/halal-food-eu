@@ -27,7 +27,7 @@ Source-specific adapters extend the admitted source registry and repository tool
 ## Trusted events and permissions
 
 - **HF-WORKFLOW-005:** Pull-request validation never runs credential-bearing acquisition or repository-write jobs. `pull_request_target` is forbidden for catalog workflow code.
-- **HF-WORKFLOW-006:** Scheduled/manual acquisition and catalog mutation run only from reviewed default-branch workflow code. Untrusted PR/fork refs cannot select secret names, environments, commands, hosts, output paths, or write refs.
+- **HF-WORKFLOW-006:** Scheduled/manual acquisition and catalog mutation run only from reviewed default-branch workflow code. Untrusted PR/fork refs cannot select secret names, environments, commands, hosts, output paths, or write refs. Trusted scheduled, release, and health entrypoints fail closed when manually dispatched from a non-`main` ref.
 - **HF-WORKFLOW-007:** Workflow permissions are explicit and least privilege. Ordinary validation/acquisition defaults to `contents: read`; write capabilities are confined to the proposal, health, and release jobs that actually need them.
 - **HF-WORKFLOW-008:** Ordinary fixture validation requires no third-party secret, Central CI, self-hosted runner, signing identity, backend, or manually created `GITHUB_TOKEN` secret.
 - **HF-WORKFLOW-009:** Every external GitHub Action reference introduced by this workflow framework is pinned to a reviewed full commit SHA. Checkout does not persist Git credentials unless a narrowly reviewed write step requires an authenticated checkout.
@@ -54,7 +54,7 @@ Every cross-stage payload has a v1 handoff envelope with artifact kind, register
 - **HF-WORKFLOW-019:** Scheduled refresh uses an off-hour minute, also exposes `workflow_dispatch`, declares concurrency, and is safe to rerun for the same source/snapshot. Public-repository schedule delay/automatic inactivity disablement is documented as an operational condition, not treated as evidence of a successful refresh.
 - **HF-WORKFLOW-020:** Catalog proposal branch identity is derived deterministically from source/snapshot/catalog digest. Re-running an identical proposal targets the same bounded logical update and material changes are never auto-merged.
 - **HF-WORKFLOW-021:** Health conditions use deterministic source/condition keys so repeated failures update one logical incident instead of creating unbounded duplicate issues. Health reporting must not expose source secrets or raw restricted payloads.
-- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it.
+- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it. An optional manual main-only provenance hook may attest the exact integrated SQLite/manifest pair with GitHub artifact attestations; ordinary fixture validation and normal release evidence do not require attestation permissions or a successful attestation.
 
 ## Security and data boundaries
 
@@ -73,7 +73,8 @@ The committed tests cover:
 - payload path traversal, digest, byte/record limits, completeness, and redistribution class;
 - deterministic proposal and health keys;
 - pinned action references and absence of self-hosted/`pull_request_target` execution;
-- trusted workflow isolation from `pull_request`;
+- trusted workflow isolation from `pull_request` and manual non-`main` execution;
 - scheduled workflow + manual dispatch policy;
+- optional pinned main-only release provenance attestation without making it a fixture-validation prerequisite;
 - no-secret synthetic handoff validation; and
 - integration of workflow-contract validation into the existing GitHub-hosted Catalog integrity lane.

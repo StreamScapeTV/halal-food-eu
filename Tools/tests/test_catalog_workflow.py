@@ -205,6 +205,17 @@ class WorkflowYamlPolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(catalog_workflow.ContractError, "reviewed default branch"):
                 catalog_workflow.validate_workflows(root)
 
+    def test_release_attestation_hook_is_pinned_and_opt_in(self) -> None:
+        release = (ROOT / ".github/workflows/catalog-release.yml").read_text(encoding="utf-8")
+        self.assertIn("default: false", release)
+        self.assertIn("id-token: write", release)
+        self.assertIn("attestations: write", release)
+        self.assertIn(
+            "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+            release,
+        )
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.attest", release)
+
 
 if __name__ == "__main__":
     unittest.main()

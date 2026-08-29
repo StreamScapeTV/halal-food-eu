@@ -1,0 +1,384 @@
+{
+  "candidates": [
+    {
+      "barcode": "4012345678901",
+      "barcodeKind": "retail-gtin",
+      "brand": null,
+      "categorySignals": [
+        "fresh-fruit"
+      ],
+      "categoryTags": [
+        "en:apples",
+        "en:fresh-fruits"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Fresh Apple",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "apple"
+    },
+    {
+      "barcode": "4006381333931",
+      "barcodeKind": "retail-gtin",
+      "brand": null,
+      "categorySignals": [
+        "fresh-vegetable"
+      ],
+      "categoryTags": [
+        "en:cucumbers",
+        "en:fresh-vegetables"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Fresh Cucumber",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "cucumber"
+    },
+    {
+      "barcode": "5901234123457",
+      "barcodeKind": "retail-gtin",
+      "categorySignals": [
+        "fresh-vegetable"
+      ],
+      "categoryTags": [
+        "en:tomatoes",
+        "en:fresh-vegetables"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Fresh Tomato",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "tomato"
+    },
+    {
+      "barcode": "1234567890128",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Dairy",
+      "categorySignals": [
+        "plain-cow-milk"
+      ],
+      "categoryTags": [
+        "en:milks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "ingredientCount": 1,
+      "ingredientsText": "Cow milk.",
+      "market": "DE",
+      "name": "Whole Milk",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "plain-milk"
+    },
+    {
+      "barcode": "5012345678900",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Dairy",
+      "categorySignals": [
+        "plain-cow-milk",
+        "processed-dairy"
+      ],
+      "categoryTags": [
+        "en:flavoured-milks",
+        "en:milks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [
+        "flavoured",
+        "multi-ingredient"
+      ],
+      "ingredientCount": 3,
+      "ingredientsText": "Milk, sugar, vanilla flavouring.",
+      "market": "DE",
+      "name": "Vanilla Milk",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "flavoured-milk"
+    },
+    {
+      "barcode": "7612345678900",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Bakery",
+      "categorySignals": [
+        "bakery"
+      ],
+      "categoryTags": [
+        "en:bread-rolls",
+        "en:breads"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Bakery Roll",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [
+        "demo-retailer"
+      ],
+      "sourceRecordID": "bakery-missing-ingredients"
+    },
+    {
+      "barcode": "8001234567897",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Bakery",
+      "categorySignals": [
+        "bakery"
+      ],
+      "categoryTags": [
+        "en:toast-breads",
+        "en:breads"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [
+        "enzyme",
+        "multi-ingredient"
+      ],
+      "ingredientCount": 5,
+      "ingredientsText": "Wheat flour, water, yeast, enzyme, emulsifier.",
+      "market": "DE",
+      "name": "Toast Bread",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [
+        "demo-retailer"
+      ],
+      "sourceRecordID": "bread-enzymes"
+    },
+    {
+      "barcode": "9780201379624",
+      "barcodeKind": "retail-gtin",
+      "brand": "Mystery Brand",
+      "categorySignals": [],
+      "categoryTags": [],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Unknown Packaged Product",
+      "packageSignals": [
+        "packaged"
+      ],
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "unknown-category"
+    },
+    {
+      "barcode": "8712345678906",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Water",
+      "categorySignals": [
+        "plain-water"
+      ],
+      "categoryTags": [
+        "en:waters"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "ingredientCount": 1,
+      "ingredientsText": "Water.",
+      "market": "DE",
+      "name": "Still Water",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "plain-water"
+    },
+    {
+      "barcode": "9001234567896",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Water",
+      "categorySignals": [
+        "plain-water",
+        "formulated-beverage"
+      ],
+      "categoryTags": [
+        "en:flavoured-waters",
+        "en:waters"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [
+        "flavoured",
+        "multi-ingredient"
+      ],
+      "ingredientCount": 3,
+      "ingredientsText": "Water, lemon juice, natural flavouring.",
+      "market": "DE",
+      "name": "Lemon Water",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "flavoured-water"
+    },
+    {
+      "barcode": "3212345678906",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Pantry",
+      "categorySignals": [
+        "fresh-fruit",
+        "sauce-condiment-seasoning"
+      ],
+      "categoryTags": [
+        "en:apple-sauces",
+        "en:fruits"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [
+        "multi-ingredient"
+      ],
+      "ingredientCount": 3,
+      "ingredientsText": "Apples, sugar, antioxidant: ascorbic acid.",
+      "market": "DE",
+      "name": "Apple Sauce",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "apple-sauce"
+    },
+    {
+      "barcode": "4251234567890",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Snack",
+      "categorySignals": [
+        "snack"
+      ],
+      "categoryTags": [
+        "en:snacks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [
+        "multi-ingredient"
+      ],
+      "ingredientCount": 3,
+      "ingredientsText": "Potatoes, sunflower oil, seasoning.",
+      "market": "DE",
+      "name": "Paprika Snack",
+      "productType": "food",
+      "remoteImages": [
+        {
+          "height": 800,
+          "imageID": "snack-front-v1",
+          "purpose": "front",
+          "revision": "v1",
+          "sourceKey": "synthetic-selection",
+          "url": "https://images.example.invalid/products/snack-front.jpg",
+          "width": 800
+        }
+      ],
+      "retailerKeys": [
+        "demo-retailer"
+      ],
+      "sourceRecordID": "snack-image"
+    },
+    {
+      "barcode": "4041234567897",
+      "barcodeKind": "retail-gtin",
+      "categorySignals": [
+        "basic-herb"
+      ],
+      "categoryTags": [
+        "en:basil",
+        "en:herbs"
+      ],
+      "evidenceSignals": [
+        "retailer"
+      ],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Fresh Basil",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [
+        "demo-retailer"
+      ],
+      "sourceRecordID": "fresh-herb-with-retailer-evidence"
+    },
+    {
+      "barcode": "4301234567892",
+      "barcodeKind": "retail-gtin",
+      "brand": "Demo Care",
+      "categorySignals": [],
+      "categoryTags": [
+        "en:cosmetics"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Hand Cream",
+      "productType": "beauty",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "non-food"
+    },
+    {
+      "barcode": "1234567890123",
+      "barcodeKind": "retail-gtin",
+      "categorySignals": [
+        "snack"
+      ],
+      "categoryTags": [
+        "en:snacks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "Broken Barcode Product",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "invalid-barcode"
+    },
+    {
+      "barcode": "2001234567893",
+      "barcodeKind": "source-assigned-no-barcode",
+      "categorySignals": [],
+      "categoryTags": [
+        "en:foods"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "DE",
+      "name": "No Barcode Product",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "source-assigned-no-barcode"
+    },
+    {
+      "barcode": "4260123456788",
+      "barcodeKind": "retail-gtin",
+      "categorySignals": [
+        "snack"
+      ],
+      "categoryTags": [
+        "en:snacks"
+      ],
+      "evidenceSignals": [],
+      "formulationSignals": [],
+      "market": "FR",
+      "name": "French Packaged Product",
+      "productType": "food",
+      "remoteImages": [],
+      "retailerKeys": [],
+      "sourceRecordID": "wrong-market"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceSnapshot": {
+    "retrievedAt": "2026-08-29T10:00:00Z",
+    "snapshotID": "selection-fixture-2026-08-29",
+    "sourceKey": "synthetic-selection",
+    "sourceSchemaVersion": "synthetic-v1",
+    "taxonomyVersion": "synthetic-taxonomy-v1"
+  }
+}

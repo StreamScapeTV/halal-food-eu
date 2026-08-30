@@ -79,10 +79,11 @@ jobs:
             Tools/open_prices_common.py \
             Tools/open_prices_acquire.py \
             Tools/open_prices_normalize.py \
-            Tools/tests/test_open_prices.py
+            Tools/tests/test_open_prices.py \
+            Tools/tests/test_open_prices_hardening.py
           python3 -m json.tool Data/sources/open-prices/source-policy-v1.json >/dev/null
           python3 -m json.tool Data/sources/open-prices/retailer-aliases-v1.json >/dev/null
-          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_open_prices.py'
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_open_prices*.py'
           mkdir -p "$RUNNER_TEMP/open-prices"
           PYTHONPATH=Tools python3 Tools/open_prices.py acquire \
             --output "$RUNNER_TEMP/open-prices/source-records.jsonl" \

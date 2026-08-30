@@ -5,14 +5,18 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import os
+import socket
 import tempfile
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, BinaryIO, Iterator
+from urllib.parse import urlparse
 
+import catalog_security
 import open_prices_common as common
 
 MAX_DEFAULT_COMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
@@ -21,10 +25,13 @@ MAX_DEFAULT_RECORDS = 20_000_000
 MAX_DEFAULT_PAYLOAD_BYTES = 5 * 1024 * 1024 * 1024
 MAX_LINE_BYTES = 2 * 1024 * 1024
 MAX_MALFORMED_RATE = 0.001
+MAX_JSON_DEPTH = 32
+MAX_JSON_NODES = 100_000
+ALLOWED_EXPORT_PATH_PREFIXES = ("/data",)
 
 PROJECTED_FIELDS = {
     "locations": {
-        "id", "type", "osm_id", "osm_type", "osm_name", "osm_display_name",
+        "id", "type", "osm_id", "osm_type", "osm_name",
         "osm_tag_key", "osm_tag_value", "osm_brand", "osm_address_postcode",
         "osm_address_city", "osm_address_country", "osm_address_country_code",
         "osm_version", "source", "created", "updated",
@@ -38,18 +45,64 @@ PROJECTED_FIELDS = {
 }
 
 
-class _NoAuthRedirect(urllib.request.HTTPRedirectHandler):
-    """Drop authorization on redirect and leave final URL validation to policy."""
+class _RejectRedirect(urllib.request.HTTPRedirectHandler):
+    """Reject redirects before urllib can issue a second network request."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
-        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if redirected is not None:
-            redirected.remove_header("Authorization")
-        return redirected
+        raise common.AdapterError("Open Prices export redirects are forbidden by source policy")
 
 
 def _project(kind: str, record: dict[str, Any]) -> dict[str, Any]:
     return {key: record[key] for key in sorted(PROJECTED_FIELDS[kind]) if key in record}
+
+
+def _strict_json_object(raw: bytes) -> dict[str, Any] | None:
+    try:
+        text = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return None
+
+    def reject_constant(_: str) -> Any:
+        raise ValueError("non-finite JSON constant")
+
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in output:
+                raise ValueError("duplicate JSON key")
+            output[key] = value
+        return output
+
+    try:
+        value = json.loads(text, parse_constant=reject_constant, object_pairs_hook=unique_object)
+    except (json.JSONDecodeError, RecursionError, ValueError):
+        return None
+    if not isinstance(value, dict):
+        return None
+
+    nodes = 0
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > MAX_JSON_NODES or depth > MAX_JSON_DEPTH:
+            return None
+        if isinstance(item, str):
+            if common.CONTROL.search(item):
+                return None
+        elif isinstance(item, dict):
+            stack.extend((key, depth + 1) for key in item)
+            stack.extend((nested, depth + 1) for nested in item.values())
+        elif isinstance(item, list):
+            stack.extend((nested, depth + 1) for nested in item)
+        elif isinstance(item, float):
+            if not math.isfinite(item):
+                return None
+        elif item is None or isinstance(item, (bool, int)):
+            continue
+        else:
+            return None
+    return value
 
 
 def _iter_jsonl(
@@ -77,12 +130,8 @@ def _iter_jsonl(
                 break
             raise common.AdapterError("Open Prices export exceeds configured record limit")
         records += 1
-        try:
-            value = json.loads(line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            yield None, len(line)
-            continue
-        yield value if isinstance(value, dict) else None, len(line)
+        value = _strict_json_object(line)
+        yield value, len(line)
 
 
 def _fixture_records(path: Path, *, record_limit: int, max_expanded_bytes: int, allow_partial: bool) -> Iterator[dict[str, Any] | None]:
@@ -93,24 +142,49 @@ def _fixture_records(path: Path, *, record_limit: int, max_expanded_bytes: int, 
             yield record
 
 
+def _validate_network_target(kind: str, url: str, policy: common.SourcePolicy) -> None:
+    if kind not in common.EXPORT_KINDS or policy.export_urls.get(kind) != url:
+        raise common.AdapterError("Open Prices export URL does not match admitted source policy")
+    try:
+        catalog_security.validate_https_url(
+            url,
+            allowed_hosts=frozenset(policy.allowed_hosts),
+            allowed_path_prefixes=ALLOWED_EXPORT_PATH_PREFIXES,
+        )
+        host = urlparse(url).hostname
+        if not host:
+            raise common.AdapterError("Open Prices export URL is missing a host")
+        try:
+            resolved = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        except socket.gaierror as exc:
+            raise common.AdapterError("Open Prices export host resolution failed") from exc
+        addresses = sorted({entry[4][0] for entry in resolved if entry[4]})
+        catalog_security.validate_resolved_addresses(addresses)
+    except catalog_security.SecurityError as exc:
+        raise common.AdapterError("Open Prices export failed network security policy") from exc
+
+
 def _download(kind: str, url: str, policy: common.SourcePolicy, *, max_compressed_bytes: int, retries: int = 4) -> tuple[Path, dict[str, Any]]:
-    opener = urllib.request.build_opener(_NoAuthRedirect())
+    opener = urllib.request.build_opener(_RejectRedirect())
     request = urllib.request.Request(url, headers={"Accept": "application/octet-stream", "User-Agent": "HalalFoodEU/1.0 (Open Prices bulk importer)"})
     last_error: Exception | None = None
     for attempt in range(retries + 1):
         temp_path: Path | None = None
         try:
+            _validate_network_target(kind, url, policy)
             with opener.open(request, timeout=60) as response:
                 final_url = response.geturl()
                 if final_url != url:
-                    raise common.AdapterError(f"{kind} export redirected away from its admitted exact URL")
-                declared = response.headers.get("Content-Length")
-                if declared:
+                    raise common.AdapterError(f"{kind} export response URL did not match its admitted exact URL")
+                declared_raw = response.headers.get("Content-Length")
+                declared: int | None = None
+                if declared_raw:
                     try:
-                        if int(declared) > max_compressed_bytes:
-                            raise common.AdapterError(f"{kind} export Content-Length exceeds configured bound")
+                        declared = int(declared_raw)
                     except ValueError as exc:
                         raise common.AdapterError(f"{kind} export has invalid Content-Length") from exc
+                    if declared <= 0 or declared > max_compressed_bytes:
+                        raise common.AdapterError(f"{kind} export Content-Length exceeds configured bound or is empty")
                 fd, name = tempfile.mkstemp(prefix=f"hfeu-open-prices-{kind}-", suffix=".jsonl.gz")
                 os.close(fd)
                 temp_path = Path(name)
@@ -128,6 +202,8 @@ def _download(kind: str, url: str, policy: common.SourcePolicy, *, max_compresse
                         output.write(chunk)
                 if total == 0:
                     raise common.AdapterError(f"{kind} export was empty")
+                if declared is not None and total != declared:
+                    raise common.AdapterError(f"{kind} export byte count did not match Content-Length")
                 return temp_path, {
                     "url": url,
                     "sha256": digest.hexdigest(),
@@ -207,12 +283,14 @@ def acquire(
                     upstream[kind] = metadata
                     stream = gzip.open(temp, "rb")
                     iterator = _iter_jsonl(stream, record_limit=limit, max_expanded_bytes=max_expanded_bytes, allow_partial=mode == "sample")
+
                     def generated() -> Iterator[dict[str, Any] | None]:
                         try:
                             for value, _ in iterator:
                                 yield value
                         finally:
                             stream.close()
+
                     records = generated()
 
                 seen = 0

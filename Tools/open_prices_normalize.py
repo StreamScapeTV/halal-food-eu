@@ -57,9 +57,19 @@ def _iter_multiplex(path: Path) -> Iterator[tuple[str | None, dict[str, Any] | N
             yield kind, envelope["record"]
 
 
-def _load_joins(path: Path) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]], Counter[str]]:
+def _load_joins(
+    path: Path,
+) -> tuple[
+    dict[int, dict[str, Any]],
+    dict[int, dict[str, Any]],
+    frozenset[int],
+    frozenset[int],
+    Counter[str],
+]:
     locations: dict[int, dict[str, Any]] = {}
     proofs: dict[int, dict[str, Any]] = {}
+    conflicted_locations: set[int] = set()
+    conflicted_proofs: set[int] = set()
     counters: Counter[str] = Counter()
     for kind, record in _iter_multiplex(path):
         if kind is None or record is None:
@@ -71,23 +81,39 @@ def _load_joins(path: Path) -> tuple[dict[int, dict[str, Any]], dict[int, dict[s
             except common.AdapterError:
                 counters["invalidLocationIDs"] += 1
                 continue
-            if record_id in locations and locations[record_id] != record:
-                counters["conflictingLocationIDs"] += 1
+            if record_id in conflicted_locations:
+                counters["conflictingLocationIDRepeats"] += 1
                 continue
-            locations[record_id] = record
+            previous = locations.get(record_id)
+            if previous is None:
+                locations[record_id] = record
+            elif previous == record:
+                counters["duplicateLocationIDs"] += 1
+            else:
+                counters["conflictingLocationIDs"] += 1
+                locations.pop(record_id, None)
+                conflicted_locations.add(record_id)
         elif kind == "proof":
             try:
                 record_id = common.require_int(record.get("id"), "proof.id")
             except common.AdapterError:
                 counters["invalidProofIDs"] += 1
                 continue
-            if record_id in proofs and proofs[record_id] != record:
-                counters["conflictingProofIDs"] += 1
+            if record_id in conflicted_proofs:
+                counters["conflictingProofIDRepeats"] += 1
                 continue
-            proofs[record_id] = record
+            previous = proofs.get(record_id)
+            if previous is None:
+                proofs[record_id] = record
+            elif previous == record:
+                counters["duplicateProofIDs"] += 1
+            else:
+                counters["conflictingProofIDs"] += 1
+                proofs.pop(record_id, None)
+                conflicted_proofs.add(record_id)
         elif kind not in {"price"}:
             counters["unknownKinds"] += 1
-    return locations, proofs, counters
+    return locations, proofs, frozenset(conflicted_locations), frozenset(conflicted_proofs), counters
 
 
 def _iter_prices(path: Path) -> Iterator[dict[str, Any]]:
@@ -184,6 +210,60 @@ def _bounded_alias_map(values: Counter[str]) -> dict[str, int]:
     return {key: count for key, count in ranked}
 
 
+def _validate_metadata(metadata: dict[str, Any], snapshot: Path) -> None:
+    required_metadata = {
+        "schemaVersion", "sourceKey", "snapshotID", "mode", "retrievedAt", "downloadComplete",
+        "recordsEmitted", "recordCounts", "malformedRecords", "payloadSha256", "payloadBytes",
+        "upstreamExports", "proofImageBinariesIncluded", "personalContributorFieldsIncluded", "noCompletenessClaim",
+    }
+    if set(metadata) != required_metadata:
+        raise common.AdapterError("acquisition metadata shape is unsupported")
+    if metadata["schemaVersion"] != 1 or metadata["sourceKey"] != common.SOURCE_KEY:
+        raise common.AdapterError("acquisition metadata source/version mismatch")
+    if metadata["mode"] not in {"fixture", "sample", "full"}:
+        raise common.AdapterError("acquisition metadata has unsupported mode")
+    expected_complete = metadata["mode"] != "sample"
+    if metadata["downloadComplete"] is not expected_complete:
+        raise common.AdapterError("acquisition completeness contradicts acquisition mode")
+    common.parse_retrieved_at(metadata["retrievedAt"])
+    if metadata["proofImageBinariesIncluded"] is not False or metadata["personalContributorFieldsIncluded"] is not False or metadata["noCompletenessClaim"] is not True:
+        raise common.AdapterError("acquisition metadata violates privacy/completeness boundary")
+
+    if not isinstance(metadata["payloadSha256"], str) or len(metadata["payloadSha256"]) != 64 or any(character not in "0123456789abcdef" for character in metadata["payloadSha256"]):
+        raise common.AdapterError("acquisition payload digest is invalid")
+    payload_bytes = common.require_int(metadata["payloadBytes"], "metadata.payloadBytes")
+    emitted = common.require_int(metadata["recordsEmitted"], "metadata.recordsEmitted")
+
+    counts = metadata["recordCounts"]
+    malformed = metadata["malformedRecords"]
+    if not isinstance(counts, dict) or set(counts) != set(common.EXPORT_KINDS):
+        raise common.AdapterError("acquisition recordCounts are invalid")
+    if not isinstance(malformed, dict) or set(malformed) != set(common.EXPORT_KINDS):
+        raise common.AdapterError("acquisition malformedRecords are invalid")
+    normalized_counts = {kind: common.require_int(counts[kind], f"recordCounts.{kind}") for kind in common.EXPORT_KINDS}
+    for kind in common.EXPORT_KINDS:
+        common.require_int(malformed[kind], f"malformedRecords.{kind}")
+    if sum(normalized_counts.values()) != emitted:
+        raise common.AdapterError("acquisition record count does not match per-export counts")
+
+    upstream = metadata["upstreamExports"]
+    if not isinstance(upstream, dict) or set(upstream) != set(common.EXPORT_KINDS):
+        raise common.AdapterError("acquisition upstream export metadata is invalid")
+    for kind in common.EXPORT_KINDS:
+        entry = upstream[kind]
+        if not isinstance(entry, dict):
+            raise common.AdapterError("acquisition upstream export metadata is invalid")
+        digest = entry.get("sha256")
+        size = entry.get("compressedBytes")
+        if not isinstance(digest, str) or len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise common.AdapterError("acquisition upstream export digest is invalid")
+        common.require_int(size, f"upstreamExports.{kind}.compressedBytes")
+
+    actual_digest, actual_size = _snapshot_digest(snapshot)
+    if actual_digest != metadata["payloadSha256"] or actual_size != payload_bytes:
+        raise common.AdapterError("source snapshot digest/size does not match acquisition metadata")
+
+
 def normalize_snapshot(
     *,
     snapshot: Path,
@@ -195,29 +275,15 @@ def normalize_snapshot(
     metadata = common.load_json(metadata_path)
     if not isinstance(metadata, dict):
         raise common.AdapterError("acquisition metadata must be an object")
-    required_metadata = {
-        "schemaVersion", "sourceKey", "snapshotID", "mode", "retrievedAt", "downloadComplete",
-        "recordsEmitted", "recordCounts", "malformedRecords", "payloadSha256", "payloadBytes",
-        "upstreamExports", "proofImageBinariesIncluded", "personalContributorFieldsIncluded", "noCompletenessClaim",
-    }
-    if set(metadata) != required_metadata:
-        raise common.AdapterError("acquisition metadata shape is unsupported")
-    if metadata["schemaVersion"] != 1 or metadata["sourceKey"] != common.SOURCE_KEY:
-        raise common.AdapterError("acquisition metadata source/version mismatch")
-    common.parse_retrieved_at(metadata["retrievedAt"])
-    if metadata["proofImageBinariesIncluded"] is not False or metadata["personalContributorFieldsIncluded"] is not False or metadata["noCompletenessClaim"] is not True:
-        raise common.AdapterError("acquisition metadata violates privacy/completeness boundary")
-    actual_digest, actual_size = _snapshot_digest(snapshot)
-    if actual_digest != metadata["payloadSha256"] or actual_size != metadata["payloadBytes"]:
-        raise common.AdapterError("source snapshot digest/size does not match acquisition metadata")
+    _validate_metadata(metadata, snapshot)
 
-    locations, proofs, counters = _load_joins(snapshot)
+    locations, proofs, conflicted_locations, conflicted_proofs, counters = _load_joins(snapshot)
     observations_by_id: dict[str, dict[str, Any]] = {}
-    retailer_counts: Counter[str] = Counter()
-    proof_types: Counter[str] = Counter()
+    observation_context: dict[str, tuple[str, str, str]] = {}
     unmatched_aliases: Counter[str] = Counter()
     ambiguous_aliases: Counter[str] = Counter()
-    seen_price_ids: dict[int, str] = {}
+    seen_price_ids: dict[int, tuple[str, str]] = {}
+    conflicted_price_ids: set[int] = set()
     location_matches: dict[int, tuple[str | None, str, str | None]] = {}
 
     for price in _iter_prices(snapshot):
@@ -225,6 +291,9 @@ def normalize_snapshot(
             price_id = common.require_int(price.get("id"), "price.id")
         except common.AdapterError:
             counters["invalidPriceIDs"] += 1
+            continue
+        if price_id in conflicted_price_ids:
+            counters["conflictingPriceIDRepeats"] += 1
             continue
         if price.get("type") not in (None, "PRODUCT"):
             counters["nonProductPrices"] += 1
@@ -244,6 +313,12 @@ def normalize_snapshot(
             proof_id = common.require_int(price.get("proof_id"), "price.proof_id")
         except common.AdapterError:
             counters["invalidJoinIDs"] += 1
+            continue
+        if location_id in conflicted_locations:
+            counters["conflictingLocationJoin"] += 1
+            continue
+        if proof_id in conflicted_proofs:
+            counters["conflictingProofJoin"] += 1
             continue
         location = locations.get(location_id)
         proof = proofs.get(proof_id)
@@ -287,19 +362,33 @@ def normalize_snapshot(
         except common.AdapterError:
             counters["invalidPriceContext"] += 1
             continue
+
+        raw_fingerprint = hashlib.sha256(common.canonical_json(price).encode("utf-8")).hexdigest()
         prior = seen_price_ids.get(price_id)
         if prior is not None:
-            if prior != record["id"]:
+            prior_fingerprint, prior_evidence_id = prior
+            if prior_fingerprint != raw_fingerprint:
                 counters["conflictingPriceIDs"] += 1
+                conflicted_price_ids.add(price_id)
+                seen_price_ids.pop(price_id, None)
+                observations_by_id.pop(prior_evidence_id, None)
+                observation_context.pop(prior_evidence_id, None)
             else:
                 counters["duplicatePriceIDs"] += 1
             continue
-        seen_price_ids[price_id] = record["id"]
+
+        seen_price_ids[price_id] = (raw_fingerprint, record["id"])
         observations_by_id[record["id"]] = record
+        proof_type = common.safe_text(proof.get("type"), max_len=32) or "UNKNOWN"
+        observation_context[record["id"]] = (retailer_key, proof_type, match_kind)
+
+    retailer_counts: Counter[str] = Counter()
+    proof_types: Counter[str] = Counter()
+    for retailer_key, proof_type, match_kind in observation_context.values():
         retailer_counts[retailer_key] += 1
-        proof_types[common.safe_text(proof.get("type"), max_len=32) or "UNKNOWN"] += 1
+        proof_types[proof_type] += 1
         counters[f"matchedBy:{match_kind}"] += 1
-        counters["included"] += 1
+    counters["included"] = len(observations_by_id)
 
     observations = sorted(observations_by_id.values(), key=lambda item: (item["gtin"], item["retailerKey"], item["observedAt"], item["sourceRecordID"]))
     envelope = common.evidence_envelope(_source(metadata, aliases, policy), observations)
@@ -327,6 +416,7 @@ def normalize_snapshot(
         {"kind": "retailer-alias", "state": "unmatched", "value": value, "count": count}
         for value, count in unmatched_report.items()
     ]
+    observed_times = [item["observedAt"] for item in observations]
     quality = {
         "schemaVersion": 1,
         "sourceKey": common.SOURCE_KEY,
@@ -337,6 +427,8 @@ def normalize_snapshot(
         "counts": dict(sorted(counters.items())),
         "retailerCounts": dict(sorted(retailer_counts.items())),
         "proofTypeCounts": dict(sorted(proof_types.items())),
+        "oldestObservationAt": min(observed_times) if observed_times else None,
+        "newestObservationAt": max(observed_times) if observed_times else None,
         "ambiguousAliasObservationCount": sum(ambiguous_aliases.values()),
         "unmatchedAliasObservationCount": sum(unmatched_aliases.values()),
         "ambiguousAliases": ambiguous_report,

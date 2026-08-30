@@ -85,6 +85,11 @@ class HalalMethodologyCLITests(unittest.TestCase):
             self.assertEqual(result["assessment"]["certificationIDs"], [])
             self.assertEqual(result["review"]["methodologyVersion"], "1.0.0")
             self.assertIn("not certification", result["reviewArtifact"]["limitations"])
+            self.assertEqual(
+                [item["queueID"] for item in result["reviewArtifact"]["checklists"]],
+                ["positive-ingredient-review"],
+            )
+            self.assertTrue(result["reviewArtifact"]["checklists"][0]["items"])
 
             migrated = self.run_tool(
                 "migrate",

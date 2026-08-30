@@ -8,8 +8,9 @@ struct ProductionCatalogArtifactCompatibilityTests {
     @Test("Exact proposed SQLite and manifest load through the runtime repository")
     func loadsExactProposedCatalog() async throws {
         let fixture = try bundledCatalog()
+        let candidateGTIN = try firstGTIN(databaseURL: fixture.database)
         let gtin = try #require(
-            firstGTIN(databaseURL: fixture.database),
+            candidateGTIN,
             "A production catalog proposed for release must contain at least one product."
         )
         let catalogVersion = try manifestCatalogVersion(manifestURL: fixture.manifest)
@@ -18,7 +19,8 @@ struct ProductionCatalogArtifactCompatibilityTests {
             manifestURL: fixture.manifest
         )
         let barcode = try Barcode(validating: gtin)
-        let product = try #require(try await catalog.product(for: barcode))
+        let candidateProduct = try await catalog.product(for: barcode)
+        let product = try #require(candidateProduct)
 
         #expect(product.barcode.rawValue == gtin)
         #expect(product.catalogVersion == catalogVersion)
@@ -36,9 +38,8 @@ struct ProductionCatalogArtifactCompatibilityTests {
             databaseURL: fixture.database,
             predicate: "current_observation_id IS NULL"
         ) {
-            let product = try #require(
-                try await catalog.product(for: Barcode(validating: gtin))
-            )
+            let candidateProduct = try await catalog.product(for: Barcode(validating: gtin))
+            let product = try #require(candidateProduct)
             #expect(product.observation == nil)
         }
 
@@ -46,9 +47,8 @@ struct ProductionCatalogArtifactCompatibilityTests {
             databaseURL: fixture.database,
             predicate: "current_assessment_id IS NULL"
         ) {
-            let product = try #require(
-                try await catalog.product(for: Barcode(validating: gtin))
-            )
+            let candidateProduct = try await catalog.product(for: Barcode(validating: gtin))
+            let product = try #require(candidateProduct)
             #expect(product.assessment.status == .unknown)
             #expect(product.assessment.methodologyVersion == nil)
             #expect(product.assessment.reviewedAt == nil)
@@ -56,7 +56,7 @@ struct ProductionCatalogArtifactCompatibilityTests {
     }
 
     private func bundledCatalog() throws -> (database: URL, manifest: URL) {
-        let bundle = Bundle(for: TestBundleToken.self)
+        let bundle = Bundle(for: ProductionCatalogArtifactCompatibilityBundleToken.self)
         let database = try #require(
             bundle.url(forResource: "catalog", withExtension: "sqlite3"),
             "catalog.sqlite3 must be copied into the unit-test bundle"
@@ -70,9 +70,8 @@ struct ProductionCatalogArtifactCompatibilityTests {
 
     private func manifestCatalogVersion(manifestURL: URL) throws -> String {
         let raw = try Data(contentsOf: manifestURL)
-        let object = try #require(
-            try JSONSerialization.jsonObject(with: raw) as? [String: Any]
-        )
+        let decoded = try JSONSerialization.jsonObject(with: raw)
+        let object = try #require(decoded as? [String: Any])
         return try #require(object["catalogVersion"] as? String)
     }
 
@@ -112,3 +111,5 @@ struct ProductionCatalogArtifactCompatibilityTests {
         return String(cString: text)
     }
 }
+
+private final class ProductionCatalogArtifactCompatibilityBundleToken {}

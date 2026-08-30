@@ -203,15 +203,22 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return _object(value, label)
 
 
-def _validate_basic_exclusions_payload(path: Path, expected_policy_version: str) -> None:
+def _validate_basic_exclusions_payload(
+    path: Path,
+    expected_policy_version: str | None,
+) -> int:
     payload = _load_json(path, "basic-exclusions payload")
     if payload.get("schemaVersion") != 1:
         raise BuildRequestError("basic-exclusions payload schemaVersion is unsupported")
-    if payload.get("selectionPolicyVersion") != expected_policy_version:
+    if (
+        expected_policy_version is not None
+        and payload.get("selectionPolicyVersion") != expected_policy_version
+    ):
         raise BuildRequestError("basic-exclusions payload selection-policy version differs from build request")
     records = payload.get("records")
     if not isinstance(records, list):
         raise BuildRequestError("basic-exclusions payload records must be an array")
+    return len(records)
 
 
 def validate_build_handoffs(
@@ -267,8 +274,14 @@ def validate_build_handoffs(
         exclusions["payload"]["relativePath"],
         must_exist=True,
     )
-    if selection_policy_version is not None:
-        _validate_basic_exclusions_payload(exclusions_payload, selection_policy_version)
+    exclusion_record_count = _validate_basic_exclusions_payload(
+        exclusions_payload,
+        selection_policy_version,
+    )
+    if exclusions["recordCount"] != exclusion_record_count:
+        raise BuildRequestError(
+            "basic-exclusions handoff recordCount does not match payload records"
+        )
     return evidence_payload, quality_payload, exclusions_payload
 
 

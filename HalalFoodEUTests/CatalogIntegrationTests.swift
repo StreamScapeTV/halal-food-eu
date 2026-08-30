@@ -6,19 +6,50 @@ import Testing
 
 @Suite("Bundled SQLite catalog")
 struct CatalogIntegrationTests {
-    @Test("Loads a reviewed product and ordered reasons from the real SQLite resource")
+    @Test("Loads a reviewed production-schema product and exact evidence lineage")
     func loadsKnownProduct() async throws {
         let catalog = try makeCatalog()
         let barcode = try Barcode(validating: "0200000000004")
         let product = try #require(try await catalog.product(for: barcode))
 
         #expect(product.name == "Demonstration Oat Drink")
-        #expect(product.assessment.status == .halalReviewed)
-        #expect(product.assessment.reasons.map(\.code) == [
-            "DEMO-INGREDIENTS-REVIEWED",
-            "NO-CERTIFICATION-CLAIM",
-        ])
-        #expect(product.catalogVersion == "0.1.0-demo.1")
+        #expect(product.assessment.status == .halalCertified)
+        #expect(product.assessment.reasons.map(\.code) == ["SYNTHETIC-CERTIFICATE-MATCH"])
+        #expect(product.assessment.certifications.count == 1)
+        #expect(product.observation?.freshness == .current)
+        #expect(product.observation?.observedAt != nil)
+        #expect(product.catalogVersion == "0.2.0-demo.1")
+    }
+
+    @Test("A known product without reviewed formulation remains unknown instead of disappearing")
+    func loadsKnownUnknownWithoutIngredientEvidence() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite(
+            """
+            UPDATE product_assessments
+            SET observation_id = NULL, status = 'unknown'
+            WHERE id = (
+                SELECT current_assessment_id FROM products WHERE gtin = '00200000000028'
+            );
+            UPDATE products
+            SET current_observation_id = NULL
+            WHERE gtin = '00200000000028';
+            """,
+            databaseURL: fixture.database
+        )
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "00200000000028")
+        let product = try #require(try await catalog.product(for: barcode))
+
+        #expect(product.assessment.status == .unknown)
+        #expect(product.observation == nil)
     }
 
     @Test("A valid absent GTIN returns nil instead of an unknown product")
@@ -73,7 +104,7 @@ struct CatalogIntegrationTests {
             _ = try await catalog.product(for: barcode)
             Issue.record("Unsupported SQLite schema metadata must fail closed")
         } catch ProductCatalogError.incompatibleSchema(let expected, let actual) {
-            #expect(expected == 1)
+            #expect(expected == 2)
             #expect(actual == 999)
         } catch {
             Issue.record("Expected an incompatible schema error, got \(error)")
@@ -161,8 +192,33 @@ struct CatalogIntegrationTests {
         }
     }
 
-    @Test("An unsupported manifest schema fails before SQLite reads")
-    func rejectsUnsupportedManifestSchema() async throws {
+    @Test("An unsupported manifest envelope schema fails before SQLite reads")
+    func rejectsUnsupportedManifestEnvelopeSchema() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try mutateManifest(at: fixture.manifest) { manifest in
+            manifest["manifestSchemaVersion"] = 999
+        }
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Unsupported manifest envelope schemas must fail closed")
+        } catch ProductCatalogError.invalidRecord(let message) {
+            #expect(message.contains("manifest schema"))
+        } catch {
+            Issue.record("Expected an invalid manifest error, got \(error)")
+        }
+    }
+
+    @Test("An unsupported catalog schema in the manifest fails before SQLite reads")
+    func rejectsUnsupportedManifestCatalogSchema() async throws {
         let fixture = try makeTemporaryCatalogFixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
@@ -178,26 +234,26 @@ struct CatalogIntegrationTests {
 
         do {
             _ = try await catalog.product(for: barcode)
-            Issue.record("Unsupported manifest schemas must fail closed")
+            Issue.record("Unsupported manifest catalog schemas must fail closed")
         } catch ProductCatalogError.incompatibleSchema(let expected, let actual) {
-            #expect(expected == 1)
+            #expect(expected == 2)
             #expect(actual == 999)
         } catch {
             Issue.record("Expected an incompatible schema error, got \(error)")
         }
     }
 
-    @Test("Malformed source-policy identity in the manifest fails closed")
-    func rejectsInvalidSourcePolicyIdentity() async throws {
+    @Test("Source-policy lineage must match the exact SQLite source rows")
+    func rejectsSourcePolicyLineageMismatch() async throws {
         let fixture = try makeTemporaryCatalogFixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
         try mutateManifest(at: fixture.manifest) { manifest in
-            guard var policy = manifest["sourcePolicy"] as? [String: Any] else {
+            guard var policies = manifest["sourcePolicies"] as? [[String: Any]], !policies.isEmpty else {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            policy["schemaVersion"] = 999
-            manifest["sourcePolicy"] = policy
+            policies[0]["sha256"] = String(repeating: "0", count: 64)
+            manifest["sourcePolicies"] = policies
         }
 
         let catalog = SQLiteProductCatalog(
@@ -208,11 +264,40 @@ struct CatalogIntegrationTests {
 
         do {
             _ = try await catalog.product(for: barcode)
-            Issue.record("Unsupported source-policy identity must fail closed")
+            Issue.record("Source-policy lineage mismatches must fail closed")
         } catch ProductCatalogError.invalidRecord(let message) {
             #expect(message.contains("source-policy"))
         } catch {
-            Issue.record("Expected an invalid catalog record error, got \(error)")
+            Issue.record("Expected an invalid source-policy binding error, got \(error)")
+        }
+    }
+
+    @Test("Quality policy lineage must match SQLite metadata")
+    func rejectsQualityPolicyLineageMismatch() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try mutateManifest(at: fixture.manifest) { manifest in
+            guard var quality = manifest["qualityGate"] as? [String: Any] else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            quality["policySha256"] = String(repeating: "0", count: 64)
+            manifest["qualityGate"] = quality
+        }
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "0200000000004")
+
+        do {
+            _ = try await catalog.product(for: barcode)
+            Issue.record("Quality-policy lineage mismatches must fail closed")
+        } catch ProductCatalogError.invalidRecord(let message) {
+            #expect(message.contains("qualityPolicySha256"))
+        } catch {
+            Issue.record("Expected an invalid quality-gate binding error, got \(error)")
         }
     }
 

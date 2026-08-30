@@ -1,6 +1,6 @@
 import Foundation
 
-struct ProductSource: Hashable, Codable, Sendable {
+struct ProductSource: Codable, Equatable, Sendable {
     let name: String
     let kind: String
     let reference: String
@@ -8,21 +8,20 @@ struct ProductSource: Hashable, Codable, Sendable {
     let retrievedAt: Date
 }
 
-struct IngredientObservation: Hashable, Codable, Sendable {
+struct IngredientObservation: Codable, Equatable, Sendable {
     let text: String
     let languageCode: String
-    let observedAt: Date
+    let observedAt: Date?
     let contentHash: String
+    let freshness: EvidenceFreshness
     let source: ProductSource
 }
 
-struct ProductRecord: Identifiable, Hashable, Codable, Sendable {
-    var id: Barcode { barcode }
-
+struct ProductRecord: Codable, Equatable, Sendable {
     let barcode: Barcode
     let name: String
     let brand: String?
-    let observation: IngredientObservation
+    let observation: IngredientObservation?
     let assessment: HalalAssessment
     let catalogVersion: String
 }

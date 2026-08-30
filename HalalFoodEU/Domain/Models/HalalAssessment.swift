@@ -1,6 +1,6 @@
 import Foundation
 
-enum HalalStatus: String, Codable, CaseIterable, Sendable {
+enum HalalStatus: String, Codable, Sendable {
     case halalCertified = "halal-certified"
     case halalReviewed = "halal-reviewed"
     case notHalal = "not-halal"
@@ -15,7 +15,7 @@ enum EvidenceSeverity: String, Codable, Sendable {
     case prohibitive
 }
 
-struct AssessmentReason: Identifiable, Hashable, Codable, Sendable {
+struct AssessmentReason: Codable, Equatable, Sendable, Identifiable {
     let id: Int64
     let code: String
     let title: String
@@ -24,7 +24,7 @@ struct AssessmentReason: Identifiable, Hashable, Codable, Sendable {
     let severity: EvidenceSeverity
 }
 
-struct CertificationEvidence: Identifiable, Hashable, Codable, Sendable {
+struct CertificationEvidence: Codable, Equatable, Sendable, Identifiable {
     let id: Int64
     let certifyingBody: String
     let certificateReference: String
@@ -34,38 +34,24 @@ struct CertificationEvidence: Identifiable, Hashable, Codable, Sendable {
     let source: ProductSource
 }
 
-struct HalalAssessment: Hashable, Codable, Sendable {
+struct HalalAssessment: Codable, Equatable, Sendable {
     let status: HalalStatus
     let summary: String
     let methodologyVersion: String
     let reviewedAt: Date
     let reasons: [AssessmentReason]
     let certifications: [CertificationEvidence]
-
-    init(
-        status: HalalStatus,
-        summary: String,
-        methodologyVersion: String,
-        reviewedAt: Date,
-        reasons: [AssessmentReason],
-        certifications: [CertificationEvidence] = []
-    ) {
-        self.status = status
-        self.summary = summary
-        self.methodologyVersion = methodologyVersion
-        self.reviewedAt = reviewedAt
-        self.reasons = reasons
-        self.certifications = certifications
-    }
 }
 
-enum EvidenceFreshness: Equatable, Sendable {
-    case current
-    case refreshRecommended
+enum EvidenceFreshness: String, Codable, Equatable, Sendable {
+    case current = "fresh"
+    case refreshRecommended = "refresh-recommended"
     case stale
+    case dateUnknown = "date-unknown"
+    case changedUnreviewed = "changed-unreviewed"
 }
 
-struct EvidenceFreshnessPolicy: Sendable {
+struct EvidenceFreshnessPolicy: Equatable, Sendable {
     let refreshRecommendedAfterMonths: Int
     let staleAfterMonths: Int
 
@@ -74,13 +60,27 @@ struct EvidenceFreshnessPolicy: Sendable {
         staleAfterMonths: 12
     )
 
-    func status(observedAt: Date, now: Date = .now, calendar: Calendar = .current) -> EvidenceFreshness {
-        let months = calendar.dateComponents([.month], from: observedAt, to: now).month ?? 0
-
-        if months >= staleAfterMonths {
+    func status(
+        observedAt: Date,
+        now: Date = Date(),
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> EvidenceFreshness {
+        guard let staleAt = calendar.date(
+            byAdding: .month,
+            value: staleAfterMonths,
+            to: observedAt
+        ), let refreshAt = calendar.date(
+            byAdding: .month,
+            value: refreshRecommendedAfterMonths,
+            to: observedAt
+        ) else {
             return .stale
         }
-        if months >= refreshRecommendedAfterMonths {
+
+        if now >= staleAt {
+            return .stale
+        }
+        if now >= refreshAt {
             return .refreshRecommended
         }
         return .current

@@ -13,23 +13,15 @@ xcodebuild -version
 swift --version
 xcodegen --version
 
-python3 Tools/catalog_builder.py \
-  --input Data/sample-products.json \
+python3 Tools/build_production_fixture.py \
+  --database HalalFoodEU/Resources/catalog.sqlite3 \
+  --manifest HalalFoodEU/Resources/catalog-manifest.json \
+  --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
+  --workflow-run "${GITHUB_RUN_ID:-local-ios-ci}"
+
+python3 Tools/production_catalog.py validate \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
-
-python3 Tools/catalog_security.py bind-manifest \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source-policy Data/workflows/catalog-workflow-contract-v1.json
-
-python3 Tools/validate_catalog.py \
-  --database HalalFoodEU/Resources/catalog.sqlite3 \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source Data/sample-products.json
-
-python3 Tools/catalog_security.py validate-manifest \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
 xcodegen generate
 

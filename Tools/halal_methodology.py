@@ -60,6 +60,37 @@ def _certifications(envelope: dict[str, Any], ids: list[str]) -> list[dict[str, 
     return [by_id[item] for item in ids if item in by_id]
 
 
+def _validate_analysis_against_current_evidence(
+    *,
+    report: dict[str, Any],
+    envelope: dict[str, Any],
+    methodology: dict[str, Any],
+) -> dict[str, Any] | None:
+    gtin = report.get("gtin")
+    market = report.get("market")
+    freshness = report.get("freshnessState")
+    if not isinstance(gtin, str) or not isinstance(market, str) or not isinstance(freshness, str):
+        raise MethodologyError("analysis report lacks GTIN/market/freshness binding")
+    selection = _selection(envelope, gtin, market)
+    if selection is None:
+        ingredient = None
+        conflicts: list[str] = []
+    else:
+        ingredient = _ingredient(envelope, selection.get("ingredientObservationID"))
+        conflicts = [str(item) for item in selection.get("conflictFlags", []) if isinstance(item, str)]
+    expected = analyze_ingredient(
+        ingredient,
+        methodology,
+        gtin=gtin,
+        market=market,
+        freshness_state=freshness,
+        conflict_flags=conflicts,
+    )
+    if expected != report:
+        raise MethodologyError("analysis report does not match the current exact evidence and methodology")
+    return selection
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
@@ -146,7 +177,11 @@ def main() -> None:
         if args.command == "review":
             report = load_json(args.analysis)
             review_input = load_json(args.review_input)
-            selection = _selection(envelope, str(report.get("gtin")), str(report.get("market")))
+            selection = _validate_analysis_against_current_evidence(
+                report=report,
+                envelope=envelope,
+                methodology=methodology,
+            )
             cert_ids = [] if selection is None else [item for item in selection.get("certificationIDs", []) if isinstance(item, str)]
             result = complete_review(
                 report=report,

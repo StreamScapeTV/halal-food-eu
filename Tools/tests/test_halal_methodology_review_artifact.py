@@ -30,10 +30,13 @@ class ReviewArtifactTests(unittest.TestCase):
         findings = []
         if prohibited:
             findings = [{"outcome": "prohibited-candidate", "reasonCode": "explicit-pork-ingredient"}]
-        return {
+        analysis = {
+            "ingredientContentHash": "a" * 64,
             "candidateFindings": findings,
             "reviewQueues": [{"id": "positive-ingredient-review"}],
         }
+        analysis["analysisSha256"] = MODULE.digest(analysis)
+        return analysis
 
     def test_checklist_snapshot_is_stable_and_rehashes_artifact(self):
         first = MODULE.attach_checklist_snapshot(self.result(), self.analysis(), METHODOLOGY)
@@ -42,7 +45,20 @@ class ReviewArtifactTests(unittest.TestCase):
         artifact = first["reviewArtifact"]
         self.assertEqual([item["queueID"] for item in artifact["checklists"]], ["positive-ingredient-review"])
         self.assertTrue(artifact["checklists"][0]["items"])
+        self.assertEqual(artifact["ingredientContentHash"], "a" * 64)
         self.assertNotEqual(artifact["reviewArtifactSha256"], "0" * 64)
+
+    def test_tampered_analysis_is_rejected_before_artifact_materialization(self):
+        analysis = self.analysis()
+        analysis["candidateFindings"].append({"outcome": "informational", "reasonCode": "tampered"})
+        with self.assertRaises(MODULE.MethodologyError):
+            MODULE.attach_checklist_snapshot(self.result(), analysis, METHODOLOGY)
+
+    def test_missing_analysis_digest_is_rejected(self):
+        analysis = self.analysis()
+        analysis.pop("analysisSha256")
+        with self.assertRaises(MODULE.MethodologyError):
+            MODULE.attach_checklist_snapshot(self.result(), analysis, METHODOLOGY)
 
     def test_positive_review_is_rejected_when_prohibited_candidate_survives(self):
         with self.assertRaises(MODULE.MethodologyError):

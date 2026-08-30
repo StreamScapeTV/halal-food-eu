@@ -13,11 +13,26 @@ xcodebuild -version
 swift --version
 xcodegen --version
 
-python3 Tools/build_production_fixture.py \
-  --database HalalFoodEU/Resources/catalog.sqlite3 \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
-  --workflow-run "${GITHUB_RUN_ID:-local-ios-ci}"
+PREBUILT_DATABASE="${HFEU_PREBUILT_CATALOG_DATABASE:-}"
+PREBUILT_MANIFEST="${HFEU_PREBUILT_CATALOG_MANIFEST:-}"
+PREBUILT_MODE=false
+if [[ -n "$PREBUILT_DATABASE" || -n "$PREBUILT_MANIFEST" ]]; then
+  if [[ -z "$PREBUILT_DATABASE" || -z "$PREBUILT_MANIFEST" ]]; then
+    echo "Both HFEU_PREBUILT_CATALOG_DATABASE and HFEU_PREBUILT_CATALOG_MANIFEST are required." >&2
+    exit 1
+  fi
+  test -f "$PREBUILT_DATABASE"
+  test -f "$PREBUILT_MANIFEST"
+  cp "$PREBUILT_DATABASE" HalalFoodEU/Resources/catalog.sqlite3
+  cp "$PREBUILT_MANIFEST" HalalFoodEU/Resources/catalog-manifest.json
+  PREBUILT_MODE=true
+else
+  python3 Tools/build_production_fixture.py \
+    --database HalalFoodEU/Resources/catalog.sqlite3 \
+    --manifest HalalFoodEU/Resources/catalog-manifest.json \
+    --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
+    --workflow-run "${GITHUB_RUN_ID:-local-ios-ci}"
+fi
 
 python3 Tools/production_catalog.py validate \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
@@ -56,6 +71,11 @@ raise SystemExit("No available iPhone simulator was found")
 xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
+TEST_FILTER=()
+if [[ "$PREBUILT_MODE" == "true" ]]; then
+  TEST_FILTER=(-only-testing:HalalFoodEUTests/ProductionCatalogArtifactCompatibilityTests)
+fi
+
 xcodebuild \
   -project HalalFoodEU.xcodeproj \
   -scheme HalalFoodEU \
@@ -64,4 +84,5 @@ xcodebuild \
   -derivedDataPath .build/DerivedData \
   -enableCodeCoverage YES \
   CODE_SIGNING_ALLOWED=NO \
+  "${TEST_FILTER[@]}" \
   test

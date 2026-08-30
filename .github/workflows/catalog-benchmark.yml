@@ -7,6 +7,8 @@ on:
     paths:
       - Tools/catalog_benchmark.py
       - Tools/tests/test_catalog_benchmark.py
+      - Tools/tests/test_open_food_facts_redirect.py
+      - Data/sources/open-food-facts/source-policy-v1.json
       - .github/workflows/catalog-benchmark.yml
   workflow_dispatch:
 
@@ -32,8 +34,12 @@ jobs:
       - name: Validate benchmark tooling on deterministic fixtures
         run: |
           set -euo pipefail
-          python3 -m py_compile Tools/catalog_benchmark.py Tools/tests/test_catalog_benchmark.py
+          python3 -m py_compile \
+            Tools/catalog_benchmark.py \
+            Tools/tests/test_catalog_benchmark.py \
+            Tools/tests/test_open_food_facts_redirect.py
           PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_catalog_benchmark.py' -v
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_open_food_facts_redirect.py' -v
 
       - name: Acquire and normalize current Germany Open Food Facts snapshot
         env:

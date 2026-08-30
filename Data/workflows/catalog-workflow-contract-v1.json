@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.3.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -28,6 +28,13 @@
       "key": "quality",
       "accepts": ["normalized-evidence", "change-report"],
       "produces": ["quality-report"],
+      "requiresCompleteInput": true,
+      "mayWriteRepository": false
+    },
+    {
+      "key": "methodology",
+      "accepts": ["normalized-evidence", "quality-report"],
+      "produces": ["methodology-report"],
       "requiresCompleteInput": true,
       "mayWriteRepository": false
     },
@@ -92,6 +99,11 @@
       "maxBytes": 67108864,
       "maxRecords": 1000000,
       "allowedRedistributionClasses": ["metadata-only", "redistributable"]
+    },
+    "methodology-report": {
+      "maxBytes": 536870912,
+      "maxRecords": 10000000,
+      "allowedRedistributionClasses": ["restricted", "redistributable"]
     },
     "catalog-database": {
       "maxBytes": 1073741824,

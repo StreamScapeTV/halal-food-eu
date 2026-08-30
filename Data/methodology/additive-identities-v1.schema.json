@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscapetv.github.io/halal-food-eu/schema/additive-identities-v1.json",
+  "title": "Halal Food EU additive identities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "datasetVersion", "reviewedAt", "identityOnly", "entries"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "datasetVersion": {"type": "string", "minLength": 1},
+    "reviewedAt": {"type": "string", "format": "date-time"},
+    "identityOnly": {"const": true},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "names", "originConclusion", "halalConclusion", "references"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^E[0-9]{3,4}[a-z]?$"},
+          "names": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "originConclusion": {"const": "unknown-without-evidence"},
+          "halalConclusion": {"type": "null"},
+          "references": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
+  }
+}

@@ -124,10 +124,64 @@ def _receipt_bytes(receipt: dict[str, Any]) -> bytes:
     return (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
+def _nonnegative_int(value: Any, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ProposalMutationError(f"proposal release summary {label} is invalid")
+    return value
+
+
+def _release_review_summary(proposal: dict[str, Any]) -> dict[str, Any]:
+    summary = proposal.get("releaseSummary")
+    if not isinstance(summary, dict):
+        raise ProposalMutationError("proposal release summary is missing")
+    record_count = _nonnegative_int(summary.get("recordCount"), "recordCount")
+    schema_version = _nonnegative_int(summary.get("schemaVersion"), "schemaVersion")
+    if schema_version < 1:
+        raise ProposalMutationError("proposal release summary schemaVersion is invalid")
+    methodology = summary.get("methodologyVersion")
+    if not isinstance(methodology, str) or not methodology.strip():
+        raise ProposalMutationError("proposal release summary methodologyVersion is invalid")
+
+    changes = summary.get("changeComparison")
+    if not isinstance(changes, dict) or not isinstance(changes.get("available"), bool):
+        raise ProposalMutationError("proposal release change comparison is invalid")
+    for field in ("additions", "formulationChanges", "removals", "statusChangeCount", "reviewQueueCount"):
+        _nonnegative_int(changes.get(field), field)
+
+    _nonnegative_int(summary.get("staleRecords"), "staleRecords")
+    source_license = summary.get("sourceLicenseChanges")
+    if not isinstance(source_license, dict) or not isinstance(source_license.get("comparisonAvailable"), bool):
+        raise ProposalMutationError("proposal source/license comparison is invalid")
+    licenses = source_license.get("currentLicenses")
+    attributions = source_license.get("currentAttributions")
+    if (
+        not isinstance(licenses, list)
+        or any(not isinstance(value, str) or not value.strip() for value in licenses)
+        or not isinstance(attributions, list)
+        or any(not isinstance(value, str) or not value.strip() for value in attributions)
+    ):
+        raise ProposalMutationError("proposal current source rights are invalid")
+    if source_license["comparisonAvailable"] is False:
+        reason = source_license.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ProposalMutationError("proposal unavailable source/license comparison requires a reason")
+    if record_count != proposal.get("recordCount"):
+        raise ProposalMutationError("proposal release summary recordCount differs from proposal report")
+    return summary
+
+
 def proposal_copy(receipt: dict[str, Any], proposal: dict[str, Any]) -> tuple[str, str]:
     record_count = proposal.get("recordCount")
     if not isinstance(record_count, int) or isinstance(record_count, bool) or record_count < 0:
         raise ProposalMutationError("proposal report recordCount is invalid")
+    summary = _release_review_summary(proposal)
+    changes = summary["changeComparison"]
+    source_license = summary["sourceLicenseChanges"]
+    license_change_text = (
+        "available"
+        if source_license["comparisonAvailable"]
+        else f"unavailable ({source_license['reason']})"
+    )
     title = f"Catalog update {receipt['catalogVersion']} ({receipt['snapshotId']})"
     body = "\n".join(
         (
@@ -141,6 +195,18 @@ def proposal_copy(receipt: dict[str, Any], proposal: dict[str, Any]) -> tuple[st
             f"- Proposed manifest SHA-256: `{receipt['proposedManifestSha256']}`",
             f"- Selection policy: `{receipt['selectionPolicyVersion']}`",
             f"- Immutable source run: `{receipt['sourceRunId']}`",
+            "",
+            "## Release review summary",
+            "",
+            f"- SQLite schema: `{summary['schemaVersion']}`",
+            f"- Methodology: `{summary['methodologyVersion']}`",
+            f"- Change comparison available: `{str(changes['available']).lower()}`; baseline: `{changes.get('baseline')}`",
+            f"- Additions: `{changes['additions']}`; formulation changes: `{changes['formulationChanges']}`; removals: `{changes['removals']}`",
+            f"- Status changes: `{changes['statusChangeCount']}`; review queue: `{changes['reviewQueueCount']}`",
+            f"- Stale formulation records: `{summary['staleRecords']}`",
+            f"- Source/license change comparison: {license_change_text}",
+            f"- Current licenses: `{json.dumps(source_license['currentLicenses'], ensure_ascii=False, sort_keys=True)}`",
+            f"- Current attributions: `{json.dumps(source_license['currentAttributions'], ensure_ascii=False, sort_keys=True)}`",
             "",
             "This generated branch contains only the bounded post-merge release-input receipt. "
             "The SQLite database and product image binaries are intentionally not committed.",
@@ -193,6 +259,9 @@ def materialize(
     if proposal.get("requiresHumanReview") is not True or proposal.get("materialChangeAutoMergeAllowed") is not False:
         raise ProposalMutationError("proposal report does not require fail-closed human review")
 
+    # Validate and render the review copy before mutating any deterministic branch.
+    title, body = proposal_copy(validated, proposal)
+
     owner = _repository_owner(repository)
     branch = validated["proposalKey"]
     desired = _receipt_bytes(validated)
@@ -236,7 +305,6 @@ def materialize(
     if paths != [RECEIPT_PATH]:
         raise ProposalMutationError("deterministic proposal branch contains changes outside the release receipt")
 
-    title, body = proposal_copy(validated, proposal)
     query = urllib.parse.urlencode({"state": "open", "head": f"{owner}:{branch}", "base": base_ref})
     pulls = client.get(f"/pulls?{query}")
     if not isinstance(pulls, list):

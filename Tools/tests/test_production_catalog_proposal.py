@@ -57,6 +57,32 @@ class ProductionProposalTests(unittest.TestCase):
             "snapshotID": SNAPSHOT,
             "status": "pass",
             "reportSha256": "b" * 64,
+            "changes": {
+                "available": True,
+                "baseline": "none",
+                "additions": 42,
+                "formulationChanges": 2,
+                "removals": 1,
+                "statusChanges": [
+                    {"gtin": "0000000000001", "from": "unknown", "to": "questionable"}
+                ],
+                "reviewQueueCount": 3,
+            },
+            "metrics": {
+                "formulationFreshness": {
+                    "fresh": 39,
+                    "refresh-recommended": 1,
+                    "stale": 2,
+                    "date-unknown": 0,
+                    "changed-unreviewed": 0,
+                }
+            },
+            "sourceRights": {
+                "approved": True,
+                "fixtureOnly": False,
+                "licenseIdentifier": "ODbL-1.0",
+                "attributionPresent": True,
+            },
         }
         quality_bytes = (json.dumps(quality, indent=2, sort_keys=True) + "\n").encode()
         _, quality_sha = write_payload(self.quality_root, "quality-report.json", quality_bytes)
@@ -64,6 +90,7 @@ class ProductionProposalTests(unittest.TestCase):
             "manifestSchemaVersion": 3,
             "schemaVersion": 2,
             "catalogVersion": "1.4.0",
+            "methodologyVersion": "1.0.0",
             "selectionPolicyVersion": "1.0.0",
             "sourceCommit": COMMIT,
             "recordCount": 42,
@@ -120,6 +147,17 @@ class ProductionProposalTests(unittest.TestCase):
         self.assertFalse(report["materialChangeAutoMergeAllowed"])
         self.assertTrue(report["proposalKey"].startswith("catalog-update/open-food-facts-"))
         self.assertEqual(report["proposalKey"], self.build()["proposalKey"])
+        summary = report["releaseSummary"]
+        self.assertEqual(summary["recordCount"], 42)
+        self.assertEqual(summary["schemaVersion"], 2)
+        self.assertEqual(summary["methodologyVersion"], "1.0.0")
+        self.assertEqual(summary["changeComparison"]["additions"], 42)
+        self.assertEqual(summary["changeComparison"]["formulationChanges"], 2)
+        self.assertEqual(summary["changeComparison"]["removals"], 1)
+        self.assertEqual(summary["changeComparison"]["statusChangeCount"], 1)
+        self.assertEqual(summary["changeComparison"]["reviewQueueCount"], 3)
+        self.assertEqual(summary["staleRecords"], 2)
+        self.assertFalse(summary["sourceLicenseChanges"]["comparisonAvailable"])
 
     def test_quality_source_mismatch_fails_closed(self) -> None:
         bad = copy.deepcopy(self.quality_handoff)

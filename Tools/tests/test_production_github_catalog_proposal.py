@@ -106,6 +106,29 @@ class GitHubCatalogProposalTests(unittest.TestCase):
             "catalogSha256": "1" * 64,
             "manifestSha256": "2" * 64,
             "recordCount": 53774,
+            "releaseSummary": {
+                "recordCount": 53774,
+                "schemaVersion": 2,
+                "methodologyVersion": "1.0.0",
+                "changeComparison": {
+                    "available": True,
+                    "baseline": "none",
+                    "additions": 53774,
+                    "formulationChanges": 12,
+                    "removals": 3,
+                    "statusChangeCount": 8,
+                    "reviewQueueCount": 5,
+                },
+                "staleRecords": 21,
+                "sourceLicenseChanges": {
+                    "comparisonAvailable": False,
+                    "reason": "previous accepted production source-rights baseline was not supplied to this proposal",
+                    "currentLicenses": ["ODbL-1.0"],
+                    "currentAttributions": ["Open Food Facts"],
+                    "qualitySourceLicense": "ODbL-1.0",
+                    "attributionPresent": True,
+                },
+            },
             "requiresHumanReview": True,
             "materialChangeAutoMergeAllowed": False,
         }
@@ -191,6 +214,28 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertIn("never auto-merged", body)
         self.assertIn("not committed", body)
         self.assertIn("53774", body)
+        self.assertIn("## Release review summary", body)
+        self.assertIn("Additions: `53774`", body)
+        self.assertIn("formulation changes: `12`", body)
+        self.assertIn("Status changes: `8`", body)
+        self.assertIn("Stale formulation records: `21`", body)
+        self.assertIn("Source/license change comparison: unavailable", body)
+
+    def test_invalid_release_summary_fails_before_branch_write(self) -> None:
+        proposal = self._proposal()
+        proposal["releaseSummary"] = {"recordCount": 53774}
+        client = FakeClient()
+        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "schemaVersion"):
+            proposal_module.materialize(
+                client=client,
+                repository="StreamScapeTV/halal-food-eu",
+                base_ref="main",
+                base_sha="a" * 40,
+                receipt=self._receipt(),
+                proposal=proposal,
+            )
+        self.assertEqual(client.posts, [])
+        self.assertEqual(client.puts, [])
 
 
 if __name__ == "__main__":

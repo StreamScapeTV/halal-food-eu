@@ -88,6 +88,101 @@ def _producer(handoff: dict[str, Any], label: str) -> tuple[str, str, str]:
     return commit, workflow, run_id
 
 
+def _nonnegative_int(value: Any, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ProposalError(f"{label} must be a non-negative integer")
+    return value
+
+
+def _release_summary(
+    *,
+    manifest: dict[str, Any],
+    quality: dict[str, Any],
+    record_count: int,
+) -> dict[str, Any]:
+    """Project immutable build/quality evidence into the human-review release summary.
+
+    Source/license *change* comparison deliberately remains unavailable until a
+    previous accepted production rights baseline is supplied. Current rights are
+    still surfaced so an initial production proposal never fabricates a comparison.
+    """
+
+    schema_version = manifest.get("schemaVersion")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version < 1:
+        raise ProposalError("production manifest schemaVersion is invalid for release summary")
+    methodology_version = manifest.get("methodologyVersion")
+    if not isinstance(methodology_version, str) or not methodology_version.strip():
+        raise ProposalError("production manifest methodologyVersion is missing for release summary")
+
+    changes = quality.get("changes")
+    metrics = quality.get("metrics")
+    source_rights = quality.get("sourceRights")
+    rights = manifest.get("rights")
+    if not isinstance(changes, dict) or not isinstance(metrics, dict) or not isinstance(source_rights, dict):
+        raise ProposalError("quality report release-review metrics are incomplete")
+    if not isinstance(rights, dict):
+        raise ProposalError("production manifest rights are missing for release summary")
+
+    comparison_available = changes.get("available")
+    if not isinstance(comparison_available, bool):
+        raise ProposalError("quality change comparison availability is invalid")
+    status_changes = changes.get("statusChanges", [])
+    if not isinstance(status_changes, list):
+        raise ProposalError("quality statusChanges must be an array")
+    formulation_freshness = metrics.get("formulationFreshness")
+    if not isinstance(formulation_freshness, dict):
+        raise ProposalError("quality formulation freshness metrics are missing")
+
+    licenses = rights.get("licenses")
+    attributions = rights.get("attributions")
+    if (
+        not isinstance(licenses, list)
+        or any(not isinstance(value, str) or not value.strip() for value in licenses)
+        or not isinstance(attributions, list)
+        or any(not isinstance(value, str) or not value.strip() for value in attributions)
+    ):
+        raise ProposalError("production manifest rights are invalid for release summary")
+    current_license = source_rights.get("licenseIdentifier")
+    attribution_present = source_rights.get("attributionPresent")
+    if current_license is not None and (not isinstance(current_license, str) or not current_license.strip()):
+        raise ProposalError("quality source license identifier is invalid")
+    if not isinstance(attribution_present, bool):
+        raise ProposalError("quality attribution-present state is invalid")
+
+    return {
+        "recordCount": record_count,
+        "schemaVersion": schema_version,
+        "methodologyVersion": methodology_version,
+        "changeComparison": {
+            "available": comparison_available,
+            "baseline": changes.get("baseline"),
+            "additions": _nonnegative_int(changes.get("additions", 0), "quality additions"),
+            "formulationChanges": _nonnegative_int(
+                changes.get("formulationChanges", 0),
+                "quality formulationChanges",
+            ),
+            "removals": _nonnegative_int(changes.get("removals", 0), "quality removals"),
+            "statusChangeCount": len(status_changes),
+            "reviewQueueCount": _nonnegative_int(
+                changes.get("reviewQueueCount", 0),
+                "quality reviewQueueCount",
+            ),
+        },
+        "staleRecords": _nonnegative_int(
+            formulation_freshness.get("stale", 0),
+            "quality stale formulation count",
+        ),
+        "sourceLicenseChanges": {
+            "comparisonAvailable": False,
+            "reason": "previous accepted production source-rights baseline was not supplied to this proposal",
+            "currentLicenses": sorted(set(licenses)),
+            "currentAttributions": sorted(set(attributions)),
+            "qualitySourceLicense": current_license,
+            "attributionPresent": attribution_present,
+        },
+    }
+
+
 def proposal_key(source_key: str, snapshot_id: str, catalog_digest: str) -> str:
     canonical = json.dumps(
         {"catalogDigest": catalog_digest, "snapshotId": snapshot_id, "sourceKey": source_key},
@@ -203,6 +298,11 @@ def prepare_report(
         "counts": counts,
         "statusDistribution": statuses,
         "rights": rights,
+        "releaseSummary": _release_summary(
+            manifest=manifest,
+            quality=quality,
+            record_count=record_count,
+        ),
         "materialChangeAutoMergeAllowed": False,
         "requiresHumanReview": True,
         "fixtureOnly": False,

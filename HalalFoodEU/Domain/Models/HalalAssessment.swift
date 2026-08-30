@@ -8,7 +8,7 @@ enum HalalStatus: String, Codable, Sendable {
     case unknown
 }
 
-enum EvidenceSeverity: String, Codable, Sendable {
+enum EvidenceSeverity: String, Codable, Equatable, Sendable {
     case positive
     case informational
     case caution
@@ -35,12 +35,34 @@ struct CertificationEvidence: Codable, Equatable, Sendable, Identifiable {
 }
 
 struct HalalAssessment: Codable, Equatable, Sendable {
+    static let missingReviewReasonCode = "MISSING-REVIEW-EVIDENCE"
+
     let status: HalalStatus
     let summary: String
-    let methodologyVersion: String
-    let reviewedAt: Date
+    let methodologyVersion: String?
+    let reviewedAt: Date?
     let reasons: [AssessmentReason]
     let certifications: [CertificationEvidence]
+
+    static var unreviewedUnknown: HalalAssessment {
+        HalalAssessment(
+            status: .unknown,
+            summary: "No reviewed halal assessment is available for this product.",
+            methodologyVersion: nil,
+            reviewedAt: nil,
+            reasons: [
+                AssessmentReason(
+                    id: -1,
+                    code: missingReviewReasonCode,
+                    title: "No reviewed halal assessment",
+                    detail: "This product is present in the offline catalog, but no approved halal assessment is available for the current evidence.",
+                    ingredient: nil,
+                    severity: .informational
+                )
+            ],
+            certifications: []
+        )
+    }
 }
 
 enum EvidenceFreshness: String, Codable, Equatable, Sendable {

@@ -69,9 +69,10 @@ jobs:
             --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
             --quality-report "$RUNNER_TEMP/quality/payload/quality-report.json" \
             --output "$RUNNER_TEMP/methodology/methodology-report.json"
+          MIGRATION_OCCURRED_AT="$(git show -s --format=%cI "$GITHUB_SHA")"
           python3 Tools/halal_methodology.py migrate \
             --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
-            --occurred-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --occurred-at "$MIGRATION_OCCURRED_AT" \
             --output "$RUNNER_TEMP/methodology/methodology-migration.json"
 
       - name: Define artifact name

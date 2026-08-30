@@ -32,14 +32,23 @@ jobs:
           set -euo pipefail
           python3 -m json.tool Data/methodology/halal-methodology-v1.json >/dev/null
           python3 -m json.tool Data/methodology/halal-methodology-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/additive-identities-v1.json >/dev/null
+          python3 -m json.tool Data/methodology/additive-identities-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-review-input-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-review-artifact-v1.schema.json >/dev/null
           python3 -m py_compile \
             Tools/halal_methodology.py \
             Tools/halal_methodology_core.py \
+            Tools/halal_methodology_batch.py \
+            Tools/halal_methodology_reference.py \
             Tools/tests/test_halal_methodology.py \
-            Tools/tests/test_halal_methodology_cli.py
+            Tools/tests/test_halal_methodology_batch.py \
+            Tools/tests/test_halal_methodology_cli.py \
+            Tools/tests/test_halal_methodology_evidence_integration.py \
+            Tools/tests/test_halal_methodology_reference.py
           python3 Tools/halal_methodology.py validate
 
-      - name: Run methodology safety, context, review, and migration tests
+      - name: Run methodology safety, context, review, evidence-integration, and migration tests
         run: |
           set -euo pipefail
           PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_halal_methodology*.py'

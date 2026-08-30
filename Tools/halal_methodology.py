@@ -18,6 +18,7 @@ from halal_methodology_core import (
     validity_events_from_migration,
 )
 from halal_methodology_reference import AdditiveReferenceError, validate_additive_identities
+from halal_methodology_review_artifact import attach_checklist_snapshot
 
 DEFAULT_METHODOLOGY = Path("Data/methodology/halal-methodology-v1.json")
 DEFAULT_ADDITIVES = Path("Data/methodology/additive-identities-v1.json")
@@ -153,6 +154,7 @@ def main() -> None:
                 review_input=review_input,
                 certifications=_certifications(envelope, cert_ids),
             )
+            result = attach_checklist_snapshot(result, report, methodology)
             write_json(args.output, result)
             print(f"Materialized reviewed assessment {result['assessment']['id']} with status {result['assessment']['status']}")
             return

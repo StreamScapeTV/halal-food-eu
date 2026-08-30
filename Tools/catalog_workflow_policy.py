@@ -10,6 +10,8 @@ from catalog_workflow_common import ContractError
 ALLOWED_WRITE_PERMISSIONS = {
     "catalog-release.yml": {"attestations", "id-token"},
     "label-sync.yml": {"issues"},
+    "propose-catalog-update.yml": {"contents", "pull-requests"},
+    "scheduled-catalog-refresh.yml": {"contents", "pull-requests"},
 }
 TRUSTED_ONLY_WORKFLOWS = {
     "acquire-catalog.yml",
@@ -20,6 +22,7 @@ TRUSTED_ONLY_WORKFLOWS = {
 }
 DEFAULT_BRANCH_ONLY_WORKFLOWS = {
     "scheduled-catalog-refresh.yml",
+    "propose-catalog-update.yml",
     "catalog-release.yml",
     "catalog-health.yml",
 }

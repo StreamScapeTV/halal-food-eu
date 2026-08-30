@@ -100,6 +100,18 @@ class CandidateAnalysisTests(unittest.TestCase):
         self.assertIn("emulsifier-origin-required", codes)
         self.assertFalse(any(item["outcome"] == "prohibited-candidate" for item in report["candidateFindings"]))
 
+    def test_rennet_enzymes_flavourings_and_other_additives_require_origin_review(self):
+        report = analyze(ingredient("Rennet, enzymes, emulsifier E471, flavouring, glycerol E422"))
+        codes = {item["reasonCode"] for item in report["candidateFindings"]}
+        self.assertTrue({
+            "rennet-origin-required",
+            "enzyme-origin-required",
+            "emulsifier-origin-required",
+            "flavouring-origin-carrier-required",
+            "glycerol-origin-required",
+        }.issubset(codes))
+        self.assertTrue(all(item["outcome"] == "ambiguous-review-required" for item in report["candidateFindings"]))
+
     def test_alcohol_false_positive_context_is_excluded(self):
         report = analyze(ingredient("Sweetener: sugar alcohols (sorbitol), cocoa"))
         self.assertFalse(any(item["reasonCode"] == "alcohol-context-review-required" for item in report["candidateFindings"]))
@@ -169,6 +181,15 @@ class ExplicitReviewTests(unittest.TestCase):
                 report=report,
                 methodology=METHODOLOGY,
                 review_input=review_input("halal-reviewed", report, resolve=False),
+            )
+
+    def test_positive_review_rejects_prohibited_candidate_even_when_queue_resolved(self):
+        report = analyze(ingredient("Water, porcine gelatine"))
+        with self.assertRaises(MODULE.MethodologyError):
+            MODULE.complete_review(
+                report=report,
+                methodology=METHODOLOGY,
+                review_input=review_input("halal-reviewed", report),
             )
 
     def test_explicit_human_review_can_create_halal_reviewed_not_certified(self):

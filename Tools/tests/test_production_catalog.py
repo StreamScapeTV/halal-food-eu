@@ -13,6 +13,7 @@ ROOT = TOOLS.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
+import evidence_model
 import production_catalog
 
 
@@ -186,6 +187,7 @@ class ProductionCatalogTests(unittest.TestCase):
             if item["gtin"] == "00200000000028"
         )
         selection["assessmentID"] = None
+        selection["id"] = evidence_model.derive_id("currentSelections", selection)
         self.evidence.write_text(json.dumps(envelope, sort_keys=True) + "\n", encoding="utf-8")
         self._evaluate_quality()
 

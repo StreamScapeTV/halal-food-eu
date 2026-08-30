@@ -26,6 +26,7 @@ APPLICATION_ID = 1_212_564_821  # ASCII "HFEU"
 SCHEMA_VERSION = 2
 MANIFEST_SCHEMA_VERSION = 3
 BUILDER_VERSION = "production-catalog-v1"
+UNREVIEWED_METHODOLOGY_VERSION = "unreviewed"
 STATUS_VALUES = {"halal-certified", "halal-reviewed", "not-halal", "questionable", "unknown"}
 FRESHNESS_VALUES = {"fresh", "refresh-recommended", "stale", "date-unknown", "changed-unreviewed"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -369,13 +370,28 @@ def build_catalog(
     if overlap:
         raise ValueError(f"basic exclusions overlap detailed products: {sorted(overlap)[:5]}")
 
-    methodology_versions = {item["assessment"]["methodologyVersion"] for item in products if item.get("assessment")}
-    if len(methodology_versions) != 1:
+    methodology_versions = {
+        item["assessment"]["methodologyVersion"]
+        for item in products
+        if item.get("assessment") is not None
+    }
+    if len(methodology_versions) > 1:
         raise ValueError(f"runtime catalog must have one methodology version, got {sorted(methodology_versions)}")
-    methodology_version = next(iter(methodology_versions))
-    missing_assessment = [item["gtin"] for item in products if item.get("assessment") is None]
-    if missing_assessment:
-        raise ValueError(f"runtime products require an explicit reviewed assessment: {missing_assessment[:5]}")
+    methodology_version = (
+        next(iter(methodology_versions))
+        if methodology_versions
+        else UNREVIEWED_METHODOLOGY_VERSION
+    )
+    unsupported_unreviewed_certification = [
+        item["gtin"]
+        for item in products
+        if item.get("assessment") is None and item.get("certifications")
+    ]
+    if unsupported_unreviewed_certification:
+        raise ValueError(
+            "unreviewed runtime products cannot project certification evidence without an assessment: "
+            f"{unsupported_unreviewed_certification[:5]}"
+        )
 
     quality_manifest = _quality_manifest(
         gate=gate,
@@ -415,7 +431,7 @@ def build_catalog(
 
         for product in sorted(products, key=lambda item: (item["gtin"], item["market"])):
             identity = product["identity"]
-            assessment = product["assessment"]
+            assessment = product.get("assessment")
             connection.execute(
                 """INSERT INTO products(gtin,market,selection_id,identity_evidence_id,name,brand,brand_owner,quantity,identity_source_id,identity_source_record_id,current_assessment_id,conflict_flags_json)
                    VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?)""",
@@ -434,31 +450,34 @@ def build_catalog(
                 )
                 observation_id = int(cursor.lastrowid)
 
-            if observation_id is None and assessment["status"] != "unknown":
-                raise ValueError(f"{product['gtin']} lacks ingredient evidence but assessment is {assessment['status']}")
-            review = gate["assessmentReviews"].get(assessment["id"])
-            if review is None:
-                raise ValueError(f"{product['gtin']} assessment lacks validated review evidence")
-            cursor = connection.execute(
-                """INSERT INTO product_assessments(evidence_id,gtin,observation_id,status,summary,methodology_version,assessed_at,reviewed_at,approved_reviewer_count,recheck_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (assessment["id"], product["gtin"], observation_id, assessment["status"], _summary(assessment), assessment["methodologyVersion"], assessment["assessedAt"], review["reviewedAt"], review["approvedReviewerCount"], assessment.get("recheckAt")),
-            )
-            assessment_id = int(cursor.lastrowid)
-            for position, reason in enumerate(assessment["reasons"]):
-                connection.execute(
-                    """INSERT INTO assessment_reasons(assessment_id,position,code,title,detail,ingredient,severity,evidence_ids_json)
-                       VALUES (?,?,?,?,?,?,?,?)""",
-                    (assessment_id, position, reason["code"], reason["title"], reason["detail"], reason.get("ingredient"), reason["severity"], canonical_json(sorted(reason.get("evidenceIDs", [])))),
+            assessment_id: int | None = None
+            if assessment is not None:
+                if observation_id is None and assessment["status"] != "unknown":
+                    raise ValueError(f"{product['gtin']} lacks ingredient evidence but assessment is {assessment['status']}")
+                review = gate["assessmentReviews"].get(assessment["id"])
+                if review is None:
+                    raise ValueError(f"{product['gtin']} assessment lacks validated review evidence")
+                cursor = connection.execute(
+                    """INSERT INTO product_assessments(evidence_id,gtin,observation_id,status,summary,methodology_version,assessed_at,reviewed_at,approved_reviewer_count,recheck_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (assessment["id"], product["gtin"], observation_id, assessment["status"], _summary(assessment), assessment["methodologyVersion"], assessment["assessedAt"], review["reviewedAt"], review["approvedReviewerCount"], assessment.get("recheckAt")),
                 )
-            for position, certification in enumerate(product["certifications"]):
-                connection.execute(
-                    """INSERT INTO certification_evidence(evidence_id,assessment_id,position,source_id,certifying_body,scheme,certificate_reference,scope,valid_from,valid_until,last_checked_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (certification["id"], assessment_id, position, source_ids[certification["sourceKey"]], certification["certifier"], certification["scheme"], certification["certificateReference"], certification["scope"], certification.get("effectiveAt"), certification.get("expiryAt"), certification["lastCheckedAt"]),
-                )
-            if assessment["status"] == "halal-certified" and not product["certifications"]:
-                raise ValueError(f"halal-certified product {product['gtin']} has no certification evidence")
+                assessment_id = int(cursor.lastrowid)
+                for position, reason in enumerate(assessment["reasons"]):
+                    connection.execute(
+                        """INSERT INTO assessment_reasons(assessment_id,position,code,title,detail,ingredient,severity,evidence_ids_json)
+                           VALUES (?,?,?,?,?,?,?,?)""",
+                        (assessment_id, position, reason["code"], reason["title"], reason["detail"], reason.get("ingredient"), reason["severity"], canonical_json(sorted(reason.get("evidenceIDs", [])))),
+                    )
+                for position, certification in enumerate(product["certifications"]):
+                    connection.execute(
+                        """INSERT INTO certification_evidence(evidence_id,assessment_id,position,source_id,certifying_body,scheme,certificate_reference,scope,valid_from,valid_until,last_checked_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        (certification["id"], assessment_id, position, source_ids[certification["sourceKey"]], certification["certifier"], certification["scheme"], certification["certificateReference"], certification["scope"], certification.get("effectiveAt"), certification.get("expiryAt"), certification["lastCheckedAt"]),
+                    )
+                if assessment["status"] == "halal-certified" and not product["certifications"]:
+                    raise ValueError(f"halal-certified product {product['gtin']} has no certification evidence")
+
             for position, retailer in enumerate(product["retailerEvidence"]):
                 connection.execute(
                     """INSERT INTO retailer_evidence(evidence_id,gtin,position,source_id,kind,retailer_key,observed_at,snapshot_at,scope,location_id,limitations)
@@ -471,7 +490,10 @@ def build_catalog(
                        VALUES (?,?,?,?,?,?,?,?)""",
                     (image["id"], product["gtin"], position, source_ids[image["sourceKey"]], image["purpose"], image["url"], image["imageID"], image.get("revision")),
                 )
-            connection.execute("UPDATE products SET current_observation_id=?, current_assessment_id=? WHERE gtin=?", (observation_id, assessment_id, product["gtin"]))
+            connection.execute(
+                "UPDATE products SET current_observation_id=?, current_assessment_id=? WHERE gtin=?",
+                (observation_id, assessment_id, product["gtin"]),
+            )
 
         connection.executemany(
             "INSERT INTO basic_exclusions(gtin,market,selection_policy_version,reason) VALUES (?,?,?,?)",
@@ -490,16 +512,25 @@ def build_catalog(
         database_path.unlink(missing_ok=True)
         raise ValueError(f"catalog database size {size} exceeds reviewed budget {max_database_bytes}")
     digest = file_sha256(database_path)
-    status_counts = Counter(item["assessment"]["status"] for item in products)
+    status_counts = Counter(
+        item["assessment"]["status"] if item.get("assessment") is not None else "unknown"
+        for item in products
+    )
+    unreviewed_products = sum(1 for item in products if item.get("assessment") is None)
     counts = {
         "products": len(products),
         "ingredientObservations": sum(1 for item in products if item.get("ingredients") is not None),
-        "assessments": len(products),
-        "assessmentReasons": sum(len(item["assessment"]["reasons"]) for item in products),
+        "assessments": sum(1 for item in products if item.get("assessment") is not None),
+        "assessmentReasons": sum(
+            len(item["assessment"]["reasons"])
+            for item in products
+            if item.get("assessment") is not None
+        ),
         "certifications": sum(len(item["certifications"]) for item in products),
         "retailerEvidence": sum(len(item["retailerEvidence"]) for item in products),
         "remoteImageReferences": sum(len(item["remoteImages"]) for item in products),
         "basicExclusions": len(exclusions),
+        "unreviewedProducts": unreviewed_products,
     }
     used_keys = {source["sourceKey"] for source in projection["sources"]}
     manifest = {
@@ -538,6 +569,7 @@ def build_catalog(
         lines = [
             f"# Catalog {catalog_version}", "", f"- Products: {len(products):,} ({delta:+,} vs previous accepted manifest)",
             f"- Ingredient observations: {counts['ingredientObservations']:,}", f"- Missing-ingredient unknown products: {len(products)-counts['ingredientObservations']:,}",
+            f"- Unreviewed products represented as unknown: {unreviewed_products:,}",
             f"- Basic exclusions: {len(exclusions):,}", f"- SQLite size: {size:,} bytes", f"- SQLite SHA-256: `{digest}`",
             f"- Methodology: `{methodology_version}`", f"- Selection policy: `{selection_policy_version}`",
             f"- Quality policy: `{gate['policyVersion']}`", f"- Quality report: `{gate['reportSha256']}`",
@@ -585,6 +617,26 @@ def validate_catalog(database_path: Path, manifest_path: Path) -> None:
             actual = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             if actual != counts[key]:
                 raise ValueError(f"manifest count mismatch for {key}: {actual} != {counts[key]}")
+        unreviewed = connection.execute(
+            "SELECT COUNT(*) FROM products WHERE current_assessment_id IS NULL"
+        ).fetchone()[0]
+        if counts.get("unreviewedProducts") != unreviewed:
+            raise ValueError(
+                f"manifest count mismatch for unreviewedProducts: {unreviewed} != {counts.get('unreviewedProducts')}"
+            )
+        status_distribution = dict(
+            connection.execute(
+                """
+                SELECT COALESCE(a.status, 'unknown') AS status, COUNT(*)
+                FROM products AS p
+                LEFT JOIN product_assessments AS a ON a.id = p.current_assessment_id
+                GROUP BY COALESCE(a.status, 'unknown')
+                ORDER BY status
+                """
+            ).fetchall()
+        )
+        if status_distribution != manifest.get("statusDistribution"):
+            raise ValueError("manifest status distribution differs from SQLite current outcomes")
         metadata = dict(connection.execute("SELECT key,value FROM catalog_metadata").fetchall())
         for key, expected in (
             ("catalogVersion", manifest["catalogVersion"]),
@@ -598,8 +650,8 @@ def validate_catalog(database_path: Path, manifest_path: Path) -> None:
         ):
             if metadata.get(key) != expected:
                 raise ValueError(f"catalog metadata mismatch for {key}")
-        if connection.execute("SELECT COUNT(*) FROM products WHERE current_assessment_id IS NULL").fetchone()[0]:
-            raise ValueError("product without current assessment")
+        if connection.execute("SELECT COUNT(*) FROM products p JOIN product_assessments a ON a.id=p.current_assessment_id WHERE NOT (a.observation_id IS p.current_observation_id)").fetchone()[0]:
+            raise ValueError("current assessment is not bound to the current formulation")
         if connection.execute("SELECT COUNT(*) FROM products p JOIN product_assessments a ON a.id=p.current_assessment_id WHERE p.current_observation_id IS NULL AND a.status <> 'unknown'").fetchone()[0]:
             raise ValueError("missing ingredient evidence has a non-unknown assessment")
         if connection.execute("SELECT COUNT(*) FROM product_assessments WHERE approved_reviewer_count < 1").fetchone()[0]:

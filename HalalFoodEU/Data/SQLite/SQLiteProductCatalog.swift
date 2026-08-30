@@ -105,7 +105,7 @@ actor SQLiteProductCatalog: ProductCatalog {
                 a.methodology_version,
                 a.reviewed_at
             FROM products AS p
-            JOIN product_assessments AS a ON a.id = p.current_assessment_id
+            LEFT JOIN product_assessments AS a ON a.id = p.current_assessment_id
             LEFT JOIN product_observations AS o ON o.id = p.current_observation_id
             LEFT JOIN sources AS s ON s.id = o.source_id
             WHERE p.gtin = ?1
@@ -133,27 +133,9 @@ actor SQLiteProductCatalog: ProductCatalog {
         let name = requiredText(statement, column: 2)
         let brand = optionalText(statement, column: 3)
         let observationID = optionalInt64(statement, column: 4)
-        let assessmentID = sqlite3_column_int64(statement, 15)
-        let assessmentObservationID = optionalInt64(statement, column: 16)
-        let rawStatus = requiredText(statement, column: 17)
-        let summary = requiredText(statement, column: 18)
-        let methodologyVersion = requiredText(statement, column: 19)
-        let reviewedAt = try parseDate(requiredText(statement, column: 20), field: "reviewed_at")
-
-        guard let status = HalalStatus(rawValue: rawStatus) else {
-            throw ProductCatalogError.invalidRecord("unsupported halal status \(rawStatus)")
-        }
-        guard assessmentObservationID == observationID else {
-            throw ProductCatalogError.invalidRecord("current assessment is not bound to the current formulation")
-        }
 
         let observation: IngredientObservation?
         if observationID == nil {
-            guard status == .unknown else {
-                throw ProductCatalogError.invalidRecord(
-                    "product without ingredient evidence has non-unknown status \(rawStatus)"
-                )
-            }
             observation = nil
         } else {
             let ingredientsText = requiredText(statement, column: 5)
@@ -199,21 +181,62 @@ actor SQLiteProductCatalog: ProductCatalog {
             )
         }
 
-        let reasons = try reasons(for: assessmentID, connection: connection)
-        guard !reasons.isEmpty else {
-            throw ProductCatalogError.invalidRecord("assessment \(assessmentID) has no reasons")
-        }
+        let assessment: HalalAssessment
+        if let assessmentID = optionalInt64(statement, column: 15) {
+            let assessmentObservationID = optionalInt64(statement, column: 16)
+            let rawStatus = requiredText(statement, column: 17)
+            let summary = requiredText(statement, column: 18)
+            let methodologyVersion = requiredText(statement, column: 19)
+            let reviewedAt = try parseDate(requiredText(statement, column: 20), field: "reviewed_at")
 
-        let certifications = try certifications(for: assessmentID, connection: connection)
-        if status == .halalCertified, certifications.isEmpty {
-            throw ProductCatalogError.invalidRecord(
-                "certified assessment \(assessmentID) has no certification evidence"
+            guard let status = HalalStatus(rawValue: rawStatus) else {
+                throw ProductCatalogError.invalidRecord("unsupported halal status \(rawStatus)")
+            }
+            guard assessmentObservationID == observationID else {
+                throw ProductCatalogError.invalidRecord("current assessment is not bound to the current formulation")
+            }
+            if observationID == nil, status != .unknown {
+                throw ProductCatalogError.invalidRecord(
+                    "product without ingredient evidence has non-unknown status \(rawStatus)"
+                )
+            }
+
+            let reasons = try reasons(for: assessmentID, connection: connection)
+            guard !reasons.isEmpty else {
+                throw ProductCatalogError.invalidRecord("assessment \(assessmentID) has no reasons")
+            }
+
+            let certifications = try certifications(for: assessmentID, connection: connection)
+            if status == .halalCertified, certifications.isEmpty {
+                throw ProductCatalogError.invalidRecord(
+                    "certified assessment \(assessmentID) has no certification evidence"
+                )
+            }
+            if status == .notHalal, !reasons.contains(where: { $0.severity == .prohibitive }) {
+                throw ProductCatalogError.invalidRecord(
+                    "not-halal assessment \(assessmentID) has no prohibitive reason"
+                )
+            }
+
+            assessment = HalalAssessment(
+                status: status,
+                summary: summary,
+                methodologyVersion: methodologyVersion,
+                reviewedAt: reviewedAt,
+                reasons: reasons,
+                certifications: certifications
             )
-        }
-        if status == .notHalal, !reasons.contains(where: { $0.severity == .prohibitive }) {
-            throw ProductCatalogError.invalidRecord(
-                "not-halal assessment \(assessmentID) has no prohibitive reason"
-            )
+        } else {
+            guard sqlite3_column_type(statement, 16) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 17) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 18) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 19) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 20) == SQLITE_NULL else {
+                throw ProductCatalogError.invalidRecord(
+                    "unreviewed product unexpectedly exposes assessment columns"
+                )
+            }
+            assessment = .unreviewedUnknown
         }
 
         return ProductRecord(
@@ -221,14 +244,7 @@ actor SQLiteProductCatalog: ProductCatalog {
             name: name,
             brand: brand,
             observation: observation,
-            assessment: HalalAssessment(
-                status: status,
-                summary: summary,
-                methodologyVersion: methodologyVersion,
-                reviewedAt: reviewedAt,
-                reasons: reasons,
-                certifications: certifications
-            ),
+            assessment: assessment,
             catalogVersion: catalogVersion
         )
     }
@@ -296,10 +312,17 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.invalidRecord("catalog manifest record count differs from SQLite")
         }
         guard try Self.readCount(
-            "SELECT COUNT(*) FROM products WHERE current_assessment_id IS NULL;",
+            """
+            SELECT COUNT(*)
+            FROM products AS p
+            JOIN product_assessments AS a ON a.id = p.current_assessment_id
+            WHERE NOT (a.observation_id IS p.current_observation_id);
+            """,
             database: openedDatabase
         ) == 0 else {
-            throw ProductCatalogError.invalidRecord("catalog contains a product without a current assessment")
+            throw ProductCatalogError.invalidRecord(
+                "catalog contains a current assessment not bound to the current formulation"
+            )
         }
         guard try Self.readCount(
             """

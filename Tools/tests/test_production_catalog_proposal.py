@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "production_catalog_proposal.py"
 SPEC = importlib.util.spec_from_file_location("production_catalog_proposal", MODULE_PATH)
@@ -19,6 +20,7 @@ SPEC.loader.exec_module(proposal)
 COMMIT = "a" * 40
 SNAPSHOT = "off-2026-08-30"
 SOURCE = "open-food-facts"
+LOGICAL = {"schemaVersion": 1, "sha256": "5" * 64}
 
 
 def write_payload(root: Path, name: str, data: bytes) -> tuple[Path, str]:
@@ -95,6 +97,7 @@ class ProductionProposalTests(unittest.TestCase):
             "sourceCommit": COMMIT,
             "recordCount": 42,
             "sha256": database_sha,
+            "logicalCatalog": LOGICAL,
             "qualityGate": {
                 "sourceKey": SOURCE,
                 "snapshotID": SNAPSHOT,
@@ -121,17 +124,19 @@ class ProductionProposalTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def build(self) -> dict:
-        return proposal.prepare_report(
-            source_key=SOURCE,
-            snapshot_id=SNAPSHOT,
-            database_handoff_path=self.database_root / "database-handoff.json",
-            database_root=self.database_root,
-            manifest_handoff_path=self.manifest_root / "manifest-handoff.json",
-            manifest_root=self.manifest_root,
-            quality_handoff_path=self.quality_root / "quality-handoff.json",
-            quality_root=self.quality_root,
-        )
+    def build(self, *, logical: dict[str, object] | None = None) -> dict:
+        identity = LOGICAL if logical is None else logical
+        with patch.object(proposal.production_catalog_logical, "compute_identity", return_value=identity):
+            return proposal.prepare_report(
+                source_key=SOURCE,
+                snapshot_id=SNAPSHOT,
+                database_handoff_path=self.database_root / "database-handoff.json",
+                database_root=self.database_root,
+                manifest_handoff_path=self.manifest_root / "manifest-handoff.json",
+                manifest_root=self.manifest_root,
+                quality_handoff_path=self.quality_root / "quality-handoff.json",
+                quality_root=self.quality_root,
+            )
 
     def rewrite(self, root: Path, name: str, value: dict) -> None:
         (root / name).write_text(json.dumps(value) + "\n", encoding="utf-8")
@@ -141,6 +146,7 @@ class ProductionProposalTests(unittest.TestCase):
         self.assertEqual(report["sourceKey"], SOURCE)
         self.assertEqual(report["snapshotId"], SNAPSHOT)
         self.assertEqual(report["catalogVersion"], "1.4.0")
+        self.assertEqual(report["logicalCatalogSha256"], "5" * 64)
         self.assertEqual(report["recordCount"], 42)
         self.assertFalse(report["fixtureOnly"])
         self.assertTrue(report["requiresHumanReview"])
@@ -158,6 +164,10 @@ class ProductionProposalTests(unittest.TestCase):
         self.assertEqual(summary["changeComparison"]["reviewQueueCount"], 3)
         self.assertEqual(summary["staleRecords"], 2)
         self.assertFalse(summary["sourceLicenseChanges"]["comparisonAvailable"])
+
+    def test_logical_identity_mismatch_fails_closed(self) -> None:
+        with self.assertRaisesRegex(proposal.ProposalError, "logical-catalog identity differs"):
+            self.build(logical={"schemaVersion": 1, "sha256": "6" * 64})
 
     def test_quality_source_mismatch_fails_closed(self) -> None:
         bad = copy.deepcopy(self.quality_handoff)

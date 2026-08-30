@@ -61,5 +61,32 @@ class OpenFoodFactsRedirectPolicyTests(unittest.TestCase):
                     self.handler.redirect_request(self.request, None, 302, "Found", {}, target)
 
 
+class OpenFoodFactsCandidateNormalizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.policy = COMMON.load_source_policy(SOURCE_POLICY)
+
+    def test_punctuation_only_packaging_tags_do_not_emit_blank_package_signals(self) -> None:
+        candidate = COMMON.record_to_candidate(
+            {
+                "code": "00200000000004",
+                "countries_tags": ["en:germany"],
+                "packaging_tags": ["---", "en:carton"],
+            },
+            self.policy,
+        )
+        self.assertEqual(candidate["packageSignals"], ["en-carton"])
+
+    def test_only_punctuation_packaging_tags_omit_package_signals(self) -> None:
+        candidate = COMMON.record_to_candidate(
+            {
+                "code": "00200000000004",
+                "countries_tags": ["en:germany"],
+                "packaging_tags": ["---", ":::", "..."],
+            },
+            self.policy,
+        )
+        self.assertNotIn("packageSignals", candidate)
+
+
 if __name__ == "__main__":
     unittest.main()

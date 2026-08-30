@@ -424,7 +424,13 @@ def record_to_candidate(record: dict[str, Any], policy: SourcePolicy) -> dict[st
         candidate["ingredientsText"] = ingredients_text
     packaging = canonical_tags(record, "packaging")
     if packaging:
-        candidate["packageSignals"] = sorted({SAFE_KEY.sub("-", x.casefold()).strip("-") for x in packaging if x})
+        package_signals = {
+            SAFE_KEY.sub("-", item.casefold()).strip("-")
+            for item in packaging
+        }
+        package_signals.discard("")
+        if package_signals:
+            candidate["packageSignals"] = sorted(package_signals)
     return candidate
 
 

@@ -38,6 +38,7 @@
     "logicalDumpOutputPath": { "$ref": "#/$defs/relativePath" },
     "releaseNotesOutputPath": { "$ref": "#/$defs/relativePath" },
     "previousManifestPath": { "$ref": "#/$defs/relativePath" },
+    "expectedLogicalCatalogSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "catalogVersion": { "$ref": "#/$defs/version" },
     "selectionPolicyVersion": { "$ref": "#/$defs/version" },
     "generatedAt": { "type": "string", "format": "date-time", "pattern": "Z$" },

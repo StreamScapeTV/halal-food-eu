@@ -114,6 +114,7 @@ class ProductionCatalogReleaseInputTests(unittest.TestCase):
                     "catalogVersion": "1.2.0",
                     "catalogSha256": "1" * 64,
                     "manifestSha256": "2" * 64,
+                    "logicalCatalogSha256": "5" * 64,
                     "recordCount": 1,
                     "selectionPolicyVersion": "1.0.0",
                     "qualityReportSha256": "3" * 64,
@@ -168,6 +169,7 @@ class ProductionCatalogReleaseInputTests(unittest.TestCase):
             self.assertEqual(first["sourceRunId"], "33300000123")
             self.assertEqual(first["reviewedSourceCommit"], "a" * 40)
             self.assertEqual(first["catalogVersion"], "1.2.0")
+            self.assertEqual(first["logicalCatalogSha256"], "5" * 64)
             serialized = json.dumps(first, sort_keys=True)
             self.assertNotIn("http", serialized.lower())
             self.assertNotIn("token", serialized.lower())
@@ -199,7 +201,7 @@ class ProductionCatalogReleaseInputTests(unittest.TestCase):
                     basic_exclusions_root=fixture["exclusions_root"],
                 )
 
-    def test_post_merge_build_request_uses_integrated_main_sha(self) -> None:
+    def test_post_merge_build_request_uses_integrated_main_sha_and_reviewed_logical_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             receipt = self._prepare(self._fixture(temporary))
             request = release_input.build_request_from_release_input(
@@ -211,6 +213,7 @@ class ProductionCatalogReleaseInputTests(unittest.TestCase):
             self.assertNotEqual(request["sourceCommit"], receipt["reviewedSourceCommit"])
             self.assertEqual(request["catalogVersion"], "1.2.0")
             self.assertEqual(request["selectionPolicyVersion"], "1.0.0")
+            self.assertEqual(request["expectedLogicalCatalogSha256"], "5" * 64)
             self.assertEqual(request["maxDatabaseBytes"], 250 * 1024 * 1024)
 
     def test_receipt_rejects_future_or_demo_semver(self) -> None:

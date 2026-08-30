@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "aliasVersion": "1.0.0",
+  "retailers": [
+    {
+      "key": "rewe",
+      "displayName": "REWE",
+      "osmBrands": ["rewe"],
+      "osmTagValues": ["rewe"],
+      "names": ["rewe"]
+    },
+    {
+      "key": "lidl",
+      "displayName": "Lidl",
+      "osmBrands": ["lidl"],
+      "osmTagValues": ["lidl"],
+      "names": ["lidl"]
+    },
+    {
+      "key": "edeka",
+      "displayName": "EDEKA",
+      "osmBrands": ["edeka"],
+      "osmTagValues": ["edeka"],
+      "names": ["edeka"]
+    },
+    {
+      "key": "aldi-nord",
+      "displayName": "ALDI Nord",
+      "osmBrands": ["aldi nord"],
+      "osmTagValues": ["aldi_nord", "aldi nord"],
+      "names": ["aldi nord"]
+    },
+    {
+      "key": "aldi-sued",
+      "displayName": "ALDI Süd",
+      "osmBrands": ["aldi süd", "aldi sued"],
+      "osmTagValues": ["aldi_sued", "aldi süd", "aldi sued"],
+      "names": ["aldi süd", "aldi sued"]
+    },
+    {
+      "key": "kaufland",
+      "displayName": "Kaufland",
+      "osmBrands": ["kaufland"],
+      "osmTagValues": ["kaufland"],
+      "names": ["kaufland"]
+    },
+    {
+      "key": "dm",
+      "displayName": "dm-drogerie markt",
+      "osmBrands": ["dm", "dm-drogerie markt"],
+      "osmTagValues": ["dm", "dm-drogerie_markt", "dm-drogerie markt"],
+      "names": ["dm", "dm-drogerie markt"]
+    },
+    {
+      "key": "rossmann",
+      "displayName": "Rossmann",
+      "osmBrands": ["rossmann", "dirk rossmann"],
+      "osmTagValues": ["rossmann"],
+      "names": ["rossmann", "dirk rossmann"]
+    }
+  ]
+}

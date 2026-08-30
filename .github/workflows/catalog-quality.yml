@@ -82,6 +82,10 @@ jobs:
               findings.append("review-queue-missing")
           if os.environ["SOURCE_KEY"] == "open-food-facts" and not isinstance(change.get("selectionDecisionReasons"), dict):
               findings.append("selection-reason-metrics-missing")
+          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("observationalOnly") is not True:
+              findings.append("retailer-observational-boundary-missing")
+          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("formulationChanges") != 0:
+              findings.append("retailer-source-must-not-change-formulation")
           report = {
               "schemaVersion": 1,
               "sourceKey": os.environ["SOURCE_KEY"],

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "sourceKey": "open-prices",
+  "operator": "Open Food Facts",
+  "sourceClass": "open-database",
+  "accessMethod": "public-bulk",
+  "exportURLs": {
+    "prices": "https://prices.openfoodfacts.org/data/prices.jsonl.gz",
+    "proofs": "https://prices.openfoodfacts.org/data/proofs.jsonl.gz",
+    "locations": "https://prices.openfoodfacts.org/data/locations.jsonl.gz"
+  },
+  "allowedAcquisitionHosts": [
+    "prices.openfoodfacts.org"
+  ],
+  "databaseLicense": {
+    "name": "Open Database License",
+    "identifier": "ODbL",
+    "attributionRequired": true,
+    "shareAlikeRequired": true
+  },
+  "attribution": "Contains information from Open Prices by Open Food Facts, made available under the Open Database License (ODbL).",
+  "evidenceKind": "retailer-observation",
+  "proofBinaryPolicy": {
+    "mode": "metadata-only",
+    "downloadBinaries": false,
+    "redistributeBinaries": false
+  },
+  "completenessClaimAllowed": false,
+  "documentation": {
+    "data": "https://openfoodfacts.github.io/open-prices/guides/data/",
+    "core": "https://openfoodfacts.github.io/open-prices/topics/core/",
+    "apiSchema": "https://prices.openfoodfacts.org/api/schema"
+  }
+}

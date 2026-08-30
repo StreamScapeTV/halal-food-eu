@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.3.0",
+  "contractVersion": "1.4.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -34,7 +34,7 @@
     {
       "key": "build",
       "accepts": ["normalized-evidence", "quality-report", "basic-exclusions"],
-      "produces": ["catalog-database", "catalog-manifest"],
+      "produces": ["catalog-database", "catalog-manifest", "catalog-release-notes"],
       "requiresCompleteInput": true,
       "mayWriteRepository": false
     },
@@ -106,6 +106,11 @@
     "catalog-manifest": {
       "maxBytes": 16777216,
       "maxRecords": 100000,
+      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
+    },
+    "catalog-release-notes": {
+      "maxBytes": 1048576,
+      "maxRecords": 1,
       "allowedRedistributionClasses": ["metadata-only", "redistributable"]
     },
     "proposal-report": {

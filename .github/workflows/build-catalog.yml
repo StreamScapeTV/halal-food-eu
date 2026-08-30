@@ -26,6 +26,8 @@ on:
         value: ${{ jobs.build.outputs.database_artifact_name }}
       manifest_artifact_name:
         value: ${{ jobs.build.outputs.manifest_artifact_name }}
+      release_notes_artifact_name:
+        value: ${{ jobs.build.outputs.release_notes_artifact_name }}
 
 permissions:
   contents: read
@@ -37,6 +39,7 @@ jobs:
     outputs:
       database_artifact_name: ${{ steps.names.outputs.database_artifact_name }}
       manifest_artifact_name: ${{ steps.names.outputs.manifest_artifact_name }}
+      release_notes_artifact_name: ${{ steps.names.outputs.release_notes_artifact_name }}
     steps:
       - name: Check out trusted workflow code without persisted credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -100,7 +103,8 @@ jobs:
             "$RUNNER_TEMP/build-root/repository/Data/selection" \
             "$RUNNER_TEMP/build-root/repository/Data/sources/open-food-facts" \
             "$RUNNER_TEMP/build-root/database/payload" \
-            "$RUNNER_TEMP/build-root/manifest/payload"
+            "$RUNNER_TEMP/build-root/manifest/payload" \
+            "$RUNNER_TEMP/build-root/release-notes/payload"
           cp Data/quality/catalog-quality-policy-v1.json \
             "$RUNNER_TEMP/build-root/repository/Data/quality/catalog-quality-policy-v1.json"
           cp Data/selection/catalog-selection-policy-v1.json \
@@ -133,6 +137,11 @@ jobs:
             python3 Tools/catalog_security.py validate-manifest \
               --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
               --source-policy Data/workflows/catalog-workflow-contract-v1.json
+            cat > "$RUNNER_TEMP/build-root/release-notes/payload/catalog-release-notes.md" <<'EOF'
+          # Synthetic catalog workflow fixture
+
+          Fixture-only proof artifact. HF-PIPELINE-010 production release-note semantics are not claimed.
+          EOF
           elif [[ "$SOURCE_KEY" == "open-food-facts" ]]; then
             BUILD_ROOT="$RUNNER_TEMP/build-root" CATALOG_VERSION="$CATALOG_VERSION" python3 - <<'PY'
           import json, os
@@ -154,6 +163,7 @@ jobs:
               "sourcePolicyPaths": ["repository/Data/sources/open-food-facts/source-policy-v1.json"],
               "databaseOutputPath": "database/payload/catalog.sqlite3",
               "manifestOutputPath": "manifest/payload/catalog-manifest.json",
+              "releaseNotesOutputPath": "release-notes/payload/catalog-release-notes.md",
               "catalogVersion": os.environ["CATALOG_VERSION"],
               "selectionPolicyVersion": selection_policy["policyVersion"],
               "generatedAt": quality["evaluatedAt"],
@@ -176,12 +186,16 @@ jobs:
             python3 Tools/production_catalog.py validate \
               --database "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
               --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json"
+            python3 Tools/production_catalog_release_notes.py \
+              --release-notes "$RUNNER_TEMP/build-root/release-notes/payload/catalog-release-notes.md" \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
+              --quality-report "$RUNNER_TEMP/build-root/quality/payload/quality-report.json"
           else
             echo "No production SQLite build is admitted for source $SOURCE_KEY" >&2
             exit 2
           fi
 
-      - name: Emit immutable database and manifest handoffs
+      - name: Emit immutable database, manifest, and release-note handoffs
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
@@ -234,6 +248,21 @@ jobs:
             --content-schema-version "$MANIFEST_SCHEMA" \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --output "$RUNNER_TEMP/build-root/manifest/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind catalog-release-notes \
+            --source-key aggregate \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow build-catalog.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/build-root/release-notes/payload/catalog-release-notes.md" \
+            --payload-relative-path payload/catalog-release-notes.md \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version catalog-release-notes-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/build-root/release-notes/handoff.json"
 
       - name: Define artifact names
         id: names
@@ -242,6 +271,7 @@ jobs:
         run: |
           echo "database_artifact_name=catalog-db-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
           echo "manifest_artifact_name=catalog-manifest-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "release_notes_artifact_name=catalog-release-notes-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Upload catalog database
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -256,5 +286,13 @@ jobs:
         with:
           name: ${{ steps.names.outputs.manifest_artifact_name }}
           path: ${{ runner.temp }}/build-root/manifest
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload catalog release notes
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.release_notes_artifact_name }}
+          path: ${{ runner.temp }}/build-root/release-notes
           if-no-files-found: error
           retention-days: 14

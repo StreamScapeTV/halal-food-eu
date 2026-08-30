@@ -32,14 +32,27 @@ jobs:
           python3 -m py_compile \
             Tools/evidence_model.py \
             Tools/evidence_model_core.py \
+            Tools/catalog_quality.py \
+            Tools/catalog_quality_core.py \
+            Tools/catalog_quality_reporting.py \
+            Tools/catalog_quality_source_review.py \
             Tools/tests/test_evidence_model.py \
-            Tools/tests/test_evidence_source_market.py
+            Tools/tests/test_evidence_source_market.py \
+            Tools/tests/test_evidence_catalog_quality.py \
+            Tools/tests/test_evidence_catalog_quality_cli.py \
+            Tools/tests/test_evidence_catalog_quality_incident.py \
+            Tools/tests/test_evidence_catalog_quality_reporting.py \
+            Tools/tests/test_evidence_catalog_quality_source_review.py
           python3 -m json.tool Data/evidence/evidence-envelope-v1.schema.json >/dev/null
+          python3 -m json.tool Data/quality/catalog-quality-policy-v1.json >/dev/null
+          python3 -m json.tool Data/quality/catalog-quality-policy-v1.schema.json >/dev/null
+          python3 -m json.tool Data/quality/source-review-policy-v1.json >/dev/null
           python3 Tools/evidence_model.py validate \
             --input Data/evidence/sample-evidence-v1.json
           python3 Tools/evidence_model.py project \
             --input Data/evidence/sample-evidence-v1.json \
             --output "$RUNNER_TEMP/runtime-projection.json"
+          python3 Tools/catalog_quality.py validate-policy
           python3 -m unittest discover -s Tools/tests -p 'test_evidence*.py'
 
       - name: Validate Germany catalog selection policy

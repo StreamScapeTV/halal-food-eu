@@ -14,6 +14,7 @@
     "sourceRunId",
     "proposedCatalogSha256",
     "proposedManifestSha256",
+    "logicalCatalogSha256",
     "selectionPolicyVersion",
     "qualityEvaluatedAt",
     "inputs"
@@ -28,6 +29,7 @@
     "sourceRunId": { "type": "string", "pattern": "^[0-9]+$" },
     "proposedCatalogSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "proposedManifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "logicalCatalogSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "selectionPolicyVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
     "qualityEvaluatedAt": { "type": "string", "pattern": "Z$" },
     "inputs": {

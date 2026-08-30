@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from catalog_quality_core import CatalogQualityError, canonical_json, evaluate_quality, human_summary, parse_timestamp, validate_policy
+from catalog_quality_reporting import augment_quality_report
 from catalog_quality_source_review import SourceReviewError, enforce_source_review, validate_source_reviews
 from catalog_workflow_handoff import health_key
 from evidence_model_core import EvidenceValidationError, validate_envelope
@@ -62,6 +63,39 @@ def decorate_incident(report: dict[str, Any], source_key: str) -> dict[str, Any]
     report.pop("reportSha256", None)
     report["reportSha256"] = hashlib.sha256(canonical_json(report).encode("utf-8")).hexdigest()
     return report
+
+
+def _human_coverage(report: dict[str, Any]) -> str:
+    metrics = report["metrics"]
+    audit = report["auditSample"]
+    source_rights = report.get("sourceRights", {})
+    terms = source_rights.get("termsReview", {}) if isinstance(source_rights, dict) else {}
+    parser_rate = report.get("changes", {}).get("parserMalformedRate")
+    lines = [
+        "",
+        "## Evidence coverage",
+        f"- Current ingredients: {metrics.get('productsWithCurrentIngredients', 0)} / {metrics.get('products', 0)} ({metrics.get('currentIngredientCoverageFraction', 0):.2%})",
+        f"- Current ingredient observations with explicit `observedAt`: {metrics.get('currentIngredientsWithObservedAt', 0)}",
+        f"- Current ingredient observations with source revision: {metrics.get('currentIngredientsWithSourceRevision', 0)}",
+        f"- Identity confidence: {json.dumps(metrics.get('identityConfidence', {}), sort_keys=True)}",
+        f"- Ingredient languages: {json.dumps(metrics.get('ingredientLanguages', {}), sort_keys=True)}",
+        f"- Ingredient verification: {json.dumps(metrics.get('ingredientVerificationState', {}), sort_keys=True)}",
+        f"- Ingredient capture methods: {json.dumps(metrics.get('ingredientCaptureMethod', {}), sort_keys=True)}",
+        f"- Retailer evidence by kind: {json.dumps(metrics.get('retailerEvidenceByKind', {}), sort_keys=True)}",
+        f"- Retailer freshness by retailer/type: {json.dumps(metrics.get('retailerFreshnessByRetailerAndKind', {}), sort_keys=True)}",
+        f"- Source terms review: `{terms.get('state', 'unknown')}`",
+    ]
+    if parser_rate is not None:
+        lines.append(f"- Parser malformed rate: {parser_rate:.6%}")
+    lines += [
+        "",
+        "## Review sampling",
+        f"- Deterministic strata: {len(audit.get('stratified', {}))}",
+        f"- Per-stratum sample size: {audit.get('perStratumSize', 0)}",
+        f"- Mandatory high-risk review candidates: {audit.get('mandatoryReviewCount', 0)}",
+        f"- Mandatory-review list truncated: {str(bool(audit.get('mandatoryReviewTruncated'))).lower()}",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,11 +154,13 @@ def main() -> None:
             source_policy=source_policy,
             as_of=as_of,
         )
+        report = augment_quality_report(report, evidence, change, policy)
         report = enforce_source_review(report, source_reviews, args.source_key)
         report = decorate_incident(report, args.source_key)
         write_json(args.output, report)
         args.summary_output.parent.mkdir(parents=True, exist_ok=True)
         summary = human_summary(report)
+        summary += _human_coverage(report)
         summary += "\n## Incident identity\n"
         summary += f"- Action: `{report['incident']['action']}`\n"
         summary += "- Deduplication keys: " + (", ".join(f"`{key}`" for key in report["deduplicationKeys"]) or "none") + "\n"

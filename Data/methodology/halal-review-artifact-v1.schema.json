@@ -8,6 +8,7 @@
     "schemaVersion",
     "methodologyVersion",
     "analysisSha256",
+    "ingredientContentHash",
     "assessmentID",
     "reviewID",
     "decision",
@@ -25,7 +26,8 @@
   "properties": {
     "schemaVersion": {"const": 1},
     "methodologyVersion": {"type": "string", "minLength": 1},
-    "analysisSha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "analysisSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "ingredientContentHash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
     "assessmentID": {"type": "string", "pattern": "^hfeu:"},
     "reviewID": {"type": "string", "pattern": "^hfeu:"},
     "decision": {"enum": ["halal-certified", "halal-reviewed", "not-halal", "questionable", "unknown"]},

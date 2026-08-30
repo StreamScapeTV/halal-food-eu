@@ -226,7 +226,7 @@ class WorkflowYamlPolicyTests(unittest.TestCase):
         normalize = (ROOT / ".github/workflows/normalize-and-diff.yml").read_text(encoding="utf-8")
         scheduled = (ROOT / ".github/workflows/scheduled-catalog-refresh.yml").read_text(encoding="utf-8")
         self.assertIn('INPUT_COMPLETENESS: ${{ steps.source_handoff.outputs.completeness }}', normalize)
-        self.assertEqual(normalize.count('--completeness "$INPUT_COMPLETENESS"'), 2)
+        self.assertEqual(normalize.count('--completeness "$INPUT_COMPLETENESS"'), 3)
         self.assertIn("if: needs.trusted-default-branch.outputs.mode != 'sample'", scheduled)
 
     def test_unpinned_action_is_rejected(self) -> None:

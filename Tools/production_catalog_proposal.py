@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import production_catalog_logical
+
 SAFE_KEY = re.compile(r"^[a-z0-9][a-z0-9.-]{0,63}$")
 SAFE_SNAPSHOT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
@@ -94,19 +96,7 @@ def _nonnegative_int(value: Any, label: str) -> int:
     return value
 
 
-def _release_summary(
-    *,
-    manifest: dict[str, Any],
-    quality: dict[str, Any],
-    record_count: int,
-) -> dict[str, Any]:
-    """Project immutable build/quality evidence into the human-review release summary.
-
-    Source/license *change* comparison deliberately remains unavailable until a
-    previous accepted production rights baseline is supplied. Current rights are
-    still surfaced so an initial production proposal never fabricates a comparison.
-    """
-
+def _release_summary(*, manifest: dict[str, Any], quality: dict[str, Any], record_count: int) -> dict[str, Any]:
     schema_version = manifest.get("schemaVersion")
     if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version < 1:
         raise ProposalError("production manifest schemaVersion is invalid for release summary")
@@ -122,7 +112,6 @@ def _release_summary(
         raise ProposalError("quality report release-review metrics are incomplete")
     if not isinstance(rights, dict):
         raise ProposalError("production manifest rights are missing for release summary")
-
     comparison_available = changes.get("available")
     if not isinstance(comparison_available, bool):
         raise ProposalError("quality change comparison availability is invalid")
@@ -157,21 +146,12 @@ def _release_summary(
             "available": comparison_available,
             "baseline": changes.get("baseline"),
             "additions": _nonnegative_int(changes.get("additions", 0), "quality additions"),
-            "formulationChanges": _nonnegative_int(
-                changes.get("formulationChanges", 0),
-                "quality formulationChanges",
-            ),
+            "formulationChanges": _nonnegative_int(changes.get("formulationChanges", 0), "quality formulationChanges"),
             "removals": _nonnegative_int(changes.get("removals", 0), "quality removals"),
             "statusChangeCount": len(status_changes),
-            "reviewQueueCount": _nonnegative_int(
-                changes.get("reviewQueueCount", 0),
-                "quality reviewQueueCount",
-            ),
+            "reviewQueueCount": _nonnegative_int(changes.get("reviewQueueCount", 0), "quality reviewQueueCount"),
         },
-        "staleRecords": _nonnegative_int(
-            formulation_freshness.get("stale", 0),
-            "quality stale formulation count",
-        ),
+        "staleRecords": _nonnegative_int(formulation_freshness.get("stale", 0), "quality stale formulation count"),
         "sourceLicenseChanges": {
             "comparisonAvailable": False,
             "reason": "previous accepted production source-rights baseline was not supplied to this proposal",
@@ -212,8 +192,7 @@ def prepare_report(
     database_handoff = load_object(database_handoff_path, "database handoff")
     manifest_handoff = load_object(manifest_handoff_path, "manifest handoff")
     quality_handoff = load_object(quality_handoff_path, "quality handoff")
-
-    _, database_sha, _ = _safe_payload(database_root, database_handoff, "catalog-database")
+    database_path, database_sha, _ = _safe_payload(database_root, database_handoff, "catalog-database")
     manifest_path, manifest_sha, _ = _safe_payload(manifest_root, manifest_handoff, "catalog-manifest")
     quality_path, quality_sha, _ = _safe_payload(quality_root, quality_handoff, "quality-report")
 
@@ -272,6 +251,22 @@ def prepare_report(
     if quality_gate.get("reportSha256") != quality.get("reportSha256"):
         raise ProposalError("production manifest does not bind the exact reviewed quality decision")
 
+    bound_logical = manifest.get("logicalCatalog")
+    if (
+        not isinstance(bound_logical, dict)
+        or set(bound_logical) != {"schemaVersion", "sha256"}
+        or bound_logical.get("schemaVersion") != production_catalog_logical.LOGICAL_SCHEMA_VERSION
+        or not isinstance(bound_logical.get("sha256"), str)
+        or not SHA64.fullmatch(bound_logical["sha256"])
+    ):
+        raise ProposalError("production manifest logical-catalog identity is missing or invalid")
+    try:
+        actual_logical = production_catalog_logical.compute_identity(database_path)
+    except production_catalog_logical.LogicalCatalogError as exc:
+        raise ProposalError(f"failed to verify logical catalog identity: {exc}") from exc
+    if actual_logical != bound_logical:
+        raise ProposalError("production manifest logical-catalog identity differs from SQLite semantics")
+
     selection_policy = manifest.get("selectionPolicyVersion")
     if not isinstance(selection_policy, str) or not selection_policy:
         raise ProposalError("production manifest selection policy version is missing")
@@ -290,6 +285,7 @@ def prepare_report(
         "catalogVersion": catalog_version,
         "catalogSha256": database_sha,
         "manifestSha256": manifest_sha,
+        "logicalCatalogSha256": bound_logical["sha256"],
         "recordCount": record_count,
         "selectionPolicyVersion": selection_policy,
         "qualityReportSha256": quality_sha,
@@ -298,11 +294,7 @@ def prepare_report(
         "counts": counts,
         "statusDistribution": statuses,
         "rights": rights,
-        "releaseSummary": _release_summary(
-            manifest=manifest,
-            quality=quality,
-            record_count=record_count,
-        ),
+        "releaseSummary": _release_summary(manifest=manifest, quality=quality, record_count=record_count),
         "materialChangeAutoMergeAllowed": False,
         "requiresHumanReview": True,
         "fixtureOnly": False,

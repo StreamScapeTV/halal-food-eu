@@ -33,16 +33,20 @@ jobs:
           python3 -m py_compile \
             Tools/basic_exclusions.py \
             Tools/build_production_fixture.py \
+            Tools/github_catalog_proposal.py \
             Tools/production_catalog_gate.py \
             Tools/production_catalog.py \
             Tools/production_catalog_request.py \
             Tools/production_catalog_proposal.py \
+            Tools/production_catalog_release_input.py \
             Tools/tests/test_basic_exclusions.py \
             Tools/tests/test_production_build_workflow.py \
             Tools/tests/test_production_catalog_gate.py \
             Tools/tests/test_production_catalog.py \
             Tools/tests/test_production_catalog_request.py \
-            Tools/tests/test_production_catalog_proposal.py
+            Tools/tests/test_production_catalog_proposal.py \
+            Tools/tests/test_production_catalog_release_input.py \
+            Tools/tests/test_production_github_catalog_proposal.py
           PYTHONPATH=Tools python3 -m unittest discover \
             -s Tools/tests \
             -p 'test_production_*.py' \

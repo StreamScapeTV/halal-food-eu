@@ -48,7 +48,8 @@ jobs:
             Tools/tests/test_halal_methodology_certification.py \
             Tools/tests/test_halal_methodology_cli.py \
             Tools/tests/test_halal_methodology_evidence_integration.py \
-            Tools/tests/test_halal_methodology_reference.py
+            Tools/tests/test_halal_methodology_reference.py \
+            Tools/tests/test_halal_methodology_review_artifact.py
           python3 Tools/halal_methodology.py validate
 
       - name: Run methodology safety, context, review, evidence-integration, certification, and migration tests

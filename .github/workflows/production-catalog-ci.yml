@@ -36,6 +36,7 @@ jobs:
             Tools/github_catalog_proposal.py \
             Tools/production_catalog_gate.py \
             Tools/production_catalog.py \
+            Tools/production_catalog_manifest_review.py \
             Tools/production_catalog_request.py \
             Tools/production_catalog_proposal.py \
             Tools/production_catalog_release_input.py \
@@ -43,6 +44,7 @@ jobs:
             Tools/tests/test_production_build_workflow.py \
             Tools/tests/test_production_catalog_gate.py \
             Tools/tests/test_production_catalog.py \
+            Tools/tests/test_production_catalog_manifest_review.py \
             Tools/tests/test_production_catalog_request.py \
             Tools/tests/test_production_catalog_proposal.py \
             Tools/tests/test_production_catalog_release_input.py \

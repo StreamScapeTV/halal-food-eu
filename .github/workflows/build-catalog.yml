@@ -190,6 +190,12 @@ jobs:
               --release-notes "$RUNNER_TEMP/build-root/release-notes/payload/catalog-release-notes.md" \
               --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
               --quality-report "$RUNNER_TEMP/build-root/quality/payload/quality-report.json"
+            python3 Tools/production_catalog_manifest_review.py \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
+              --quality-report "$RUNNER_TEMP/build-root/quality/payload/quality-report.json"
+            python3 Tools/production_catalog.py validate \
+              --database "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json"
           else
             echo "No production SQLite build is admitted for source $SOURCE_KEY" >&2
             exit 2

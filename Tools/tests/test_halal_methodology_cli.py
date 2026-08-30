@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -8,6 +9,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TOOL = ROOT / "Tools" / "halal_methodology.py"
 EVIDENCE = ROOT / "Data" / "evidence" / "sample-evidence-v1.json"
+
+
+def digest(value):
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 class HalalMethodologyCLITests(unittest.TestCase):
@@ -85,11 +92,30 @@ class HalalMethodologyCLITests(unittest.TestCase):
             self.assertEqual(result["assessment"]["certificationIDs"], [])
             self.assertEqual(result["review"]["methodologyVersion"], "1.0.0")
             self.assertIn("not certification", result["reviewArtifact"]["limitations"])
+            self.assertEqual(result["reviewArtifact"]["ingredientContentHash"], clean_report["ingredientContentHash"])
             self.assertEqual(
                 [item["queueID"] for item in result["reviewArtifact"]["checklists"]],
                 ["positive-ingredient-review"],
             )
             self.assertTrue(result["reviewArtifact"]["checklists"][0]["items"])
+
+            forged_analysis = temp / "forged-analysis.json"
+            forged_report = dict(clean_report)
+            forged_report["sourceText"] = "Water only"
+            forged_report.pop("analysisSha256")
+            forged_report["analysisSha256"] = digest(forged_report)
+            forged_analysis.write_text(json.dumps(forged_report, sort_keys=True) + "\n", encoding="utf-8")
+            forged_output = temp / "forged-reviewed.json"
+            forged_review = self.run_tool(
+                "review",
+                "--evidence", EVIDENCE,
+                "--analysis", forged_analysis,
+                "--review-input", review_input,
+                "--output", forged_output,
+            )
+            self.assertNotEqual(forged_review.returncode, 0)
+            self.assertIn("current exact evidence", forged_review.stderr + forged_review.stdout)
+            self.assertFalse(forged_output.exists())
 
             migrated = self.run_tool(
                 "migrate",

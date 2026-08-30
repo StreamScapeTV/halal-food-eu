@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/StreamScapeTV/halal-food-eu/Data/catalog/production-catalog-release-input-v1.schema.json",
+  "title": "Production catalog post-merge release input receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceKey",
+    "snapshotId",
+    "catalogVersion",
+    "proposalKey",
+    "reviewedSourceCommit",
+    "sourceRunId",
+    "proposedCatalogSha256",
+    "proposedManifestSha256",
+    "selectionPolicyVersion",
+    "qualityEvaluatedAt",
+    "inputs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceKey": { "const": "open-food-facts" },
+    "snapshotId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "catalogVersion": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "proposalKey": { "type": "string", "pattern": "^catalog-update/open-food-facts-[0-9a-f]{16}$" },
+    "reviewedSourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceRunId": { "type": "string", "pattern": "^[0-9]+$" },
+    "proposedCatalogSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "proposedManifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "selectionPolicyVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "qualityEvaluatedAt": { "type": "string", "pattern": "Z$" },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["normalizedEvidence", "qualityReport", "basicExclusions"],
+      "properties": {
+        "normalizedEvidence": { "$ref": "#/$defs/normalizedEvidence" },
+        "qualityReport": { "$ref": "#/$defs/qualityReport" },
+        "basicExclusions": { "$ref": "#/$defs/basicExclusions" }
+      }
+    }
+  },
+  "$defs": {
+    "baseInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactName",
+        "artifactKind",
+        "producerWorkflow",
+        "payloadSha256",
+        "payloadByteCount",
+        "recordCount",
+        "contentSchemaVersion"
+      ],
+      "properties": {
+        "artifactName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$" },
+        "artifactKind": { "type": "string" },
+        "producerWorkflow": { "type": "string" },
+        "payloadSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "payloadByteCount": { "type": "integer", "minimum": 0 },
+        "recordCount": { "type": "integer", "minimum": 0 },
+        "contentSchemaVersion": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "normalizedEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/baseInput" },
+        { "properties": { "artifactKind": { "const": "normalized-evidence" }, "producerWorkflow": { "const": "normalize-and-diff.yml" } } }
+      ]
+    },
+    "qualityReport": {
+      "allOf": [
+        { "$ref": "#/$defs/baseInput" },
+        { "properties": { "artifactKind": { "const": "quality-report" }, "producerWorkflow": { "const": "catalog-quality.yml" } } }
+      ]
+    },
+    "basicExclusions": {
+      "allOf": [
+        { "$ref": "#/$defs/baseInput" },
+        { "properties": { "artifactKind": { "const": "basic-exclusions" }, "producerWorkflow": { "const": "normalize-and-diff.yml" } } }
+      ]
+    }
+  }
+}

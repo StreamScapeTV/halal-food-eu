@@ -9,10 +9,16 @@ on:
       snapshot_id:
         required: true
         type: string
+      catalog_version:
+        required: true
+        type: string
       normalized_artifact_name:
         required: true
         type: string
       quality_artifact_name:
+        required: true
+        type: string
+      basic_exclusions_artifact_name:
         required: true
         type: string
     outputs:
@@ -27,7 +33,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     outputs:
       database_artifact_name: ${{ steps.names.outputs.database_artifact_name }}
       manifest_artifact_name: ${{ steps.names.outputs.manifest_artifact_name }}
@@ -41,55 +47,163 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.normalized_artifact_name }}
-          path: ${{ runner.temp }}/normalized
+          path: ${{ runner.temp }}/build-root/normalized
 
       - name: Download quality report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.quality_artifact_name }}
-          path: ${{ runner.temp }}/quality
+          path: ${{ runner.temp }}/build-root/quality
 
-      - name: Validate complete build inputs
-        run: |
-          set -euo pipefail
-          python3 Tools/catalog_workflow.py validate-handoff \
-            --input "$RUNNER_TEMP/normalized/handoff.json" \
-            --consumer-stage build \
-            --payload-root "$RUNNER_TEMP/normalized"
-          python3 Tools/catalog_workflow.py validate-handoff \
-            --input "$RUNNER_TEMP/quality/handoff.json" \
-            --consumer-stage build \
-            --payload-root "$RUNNER_TEMP/quality"
-          python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+      - name: Download digest-bound basic exclusions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.basic_exclusions_artifact_name }}
+          path: ${{ runner.temp }}/build-root/basic-exclusions
 
-      - name: Build and validate no-network synthetic catalog fixture from admitted evidence
+      - name: Validate complete immutable build inputs
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
         run: |
           set -euo pipefail
-          if [[ "$SOURCE_KEY" != "synthetic-fixture" ]]; then
-            echo "Production evidence-to-SQLite compilation remains owned by issue #12." >&2
+          for artifact in normalized quality basic-exclusions; do
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/build-root/${artifact}/handoff.json" \
+              --consumer-stage build \
+              --payload-root "$RUNNER_TEMP/build-root/${artifact}"
+          done
+          SOURCE_KEY="$SOURCE_KEY" SNAPSHOT_ID="$SNAPSHOT_ID" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "build-root"
+          handoffs = [
+              json.loads((root / name / "handoff.json").read_text(encoding="utf-8"))
+              for name in ("normalized", "quality", "basic-exclusions")
+          ]
+          source_key = os.environ["SOURCE_KEY"]
+          snapshot_id = os.environ["SNAPSHOT_ID"]
+          if any(item["sourceKey"] != source_key for item in handoffs):
+              raise SystemExit("build handoff sourceKey differs from caller input")
+          if any(item["snapshotId"] != snapshot_id for item in handoffs):
+              raise SystemExit("build handoff snapshotId differs from caller input")
+          PY
+          python3 Tools/evidence_model.py validate \
+            --input "$RUNNER_TEMP/build-root/normalized/payload/evidence.json"
+
+      - name: Prepare reviewed local build policy
+        run: |
+          set -euo pipefail
+          mkdir -p \
+            "$RUNNER_TEMP/build-root/repository/Data/quality" \
+            "$RUNNER_TEMP/build-root/repository/Data/selection" \
+            "$RUNNER_TEMP/build-root/repository/Data/sources/open-food-facts" \
+            "$RUNNER_TEMP/build-root/database/payload" \
+            "$RUNNER_TEMP/build-root/manifest/payload"
+          cp Data/quality/catalog-quality-policy-v1.json \
+            "$RUNNER_TEMP/build-root/repository/Data/quality/catalog-quality-policy-v1.json"
+          cp Data/selection/catalog-selection-policy-v1.json \
+            "$RUNNER_TEMP/build-root/repository/Data/selection/catalog-selection-policy-v1.json"
+          cp Data/sources/open-food-facts/source-policy-v1.json \
+            "$RUNNER_TEMP/build-root/repository/Data/sources/open-food-facts/source-policy-v1.json"
+
+      - name: Build and validate admitted no-network catalog
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          CATALOG_VERSION: ${{ inputs.catalog_version }}
+        run: |
+          set -euo pipefail
+          if [[ "$SOURCE_KEY" == "synthetic-fixture" ]]; then
+            python3 Tools/catalog_workflow.py materialize-fixture-builder-input \
+              --evidence "$RUNNER_TEMP/build-root/normalized/payload/evidence.json" \
+              --output "$RUNNER_TEMP/build-root/builder-input.json"
+            python3 Tools/catalog_builder.py \
+              --input "$RUNNER_TEMP/build-root/builder-input.json" \
+              --database "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json"
+            python3 Tools/catalog_security.py bind-manifest \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
+              --source-policy Data/workflows/catalog-workflow-contract-v1.json
+            python3 Tools/validate_catalog.py \
+              --database "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
+              --source "$RUNNER_TEMP/build-root/builder-input.json"
+            python3 Tools/catalog_security.py validate-manifest \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
+              --source-policy Data/workflows/catalog-workflow-contract-v1.json
+          elif [[ "$SOURCE_KEY" == "open-food-facts" ]]; then
+            BUILD_ROOT="$RUNNER_TEMP/build-root" CATALOG_VERSION="$CATALOG_VERSION" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["BUILD_ROOT"])
+          quality_handoff = json.loads((root / "quality/handoff.json").read_text(encoding="utf-8"))
+          quality_payload = root / "quality" / quality_handoff["payload"]["relativePath"]
+          quality = json.loads(quality_payload.read_text(encoding="utf-8"))
+          selection_policy = json.loads(
+              (root / "repository/Data/selection/catalog-selection-policy-v1.json").read_text(encoding="utf-8")
+          )
+          request = {
+              "schemaVersion": 1,
+              "evidenceHandoffPath": "normalized/handoff.json",
+              "qualityHandoffPath": "quality/handoff.json",
+              "basicExclusionsHandoffPath": "basic-exclusions/handoff.json",
+              "qualityPolicyPath": "repository/Data/quality/catalog-quality-policy-v1.json",
+              "sourcePolicyPaths": ["repository/Data/sources/open-food-facts/source-policy-v1.json"],
+              "databaseOutputPath": "database/payload/catalog.sqlite3",
+              "manifestOutputPath": "manifest/payload/catalog-manifest.json",
+              "catalogVersion": os.environ["CATALOG_VERSION"],
+              "selectionPolicyVersion": selection_policy["policyVersion"],
+              "generatedAt": quality["evaluatedAt"],
+              "sourceCommit": os.environ["GITHUB_SHA"],
+              "workflowRun": f"github:{os.environ['GITHUB_RUN_ID']}:attempt:{os.environ['GITHUB_RUN_ATTEMPT']}",
+              "maxDatabaseBytes": 262144000,
+          }
+          (root / "production-build-request.json").write_text(
+              json.dumps(request, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+            python3 Tools/production_catalog_request.py validate \
+              --request "$RUNNER_TEMP/build-root/production-build-request.json" \
+              --root "$RUNNER_TEMP/build-root"
+            python3 Tools/production_catalog_request.py build \
+              --request "$RUNNER_TEMP/build-root/production-build-request.json" \
+              --root "$RUNNER_TEMP/build-root" \
+              --workflow-contract Data/workflows/catalog-workflow-contract-v1.json
+            python3 Tools/production_catalog.py validate \
+              --database "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
+              --manifest "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json"
+          else
+            echo "No production SQLite build is admitted for source $SOURCE_KEY" >&2
             exit 2
           fi
-          mkdir -p "$RUNNER_TEMP/database/payload" "$RUNNER_TEMP/manifest/payload"
-          python3 Tools/catalog_workflow.py materialize-fixture-builder-input \
-            --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
-            --output "$RUNNER_TEMP/builder-input.json"
-          python3 Tools/catalog_builder.py \
-            --input "$RUNNER_TEMP/builder-input.json" \
-            --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
-            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json"
-          python3 Tools/catalog_security.py bind-manifest \
-            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
-            --source-policy Data/workflows/catalog-workflow-contract-v1.json
-          python3 Tools/validate_catalog.py \
-            --database "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
-            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
-            --source "$RUNNER_TEMP/builder-input.json"
-          python3 Tools/catalog_security.py validate-manifest \
-            --manifest "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
-            --source-policy Data/workflows/catalog-workflow-contract-v1.json
+
+      - name: Emit immutable database and manifest handoffs
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$SOURCE_KEY" == "synthetic-fixture" ]]; then
+            RECORD_COUNT=2
+            DATABASE_SCHEMA=demo-sqlite-v1
+            MANIFEST_SCHEMA=catalog-manifest-demo-v1
+          else
+            RECORD_COUNT="$(python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "build-root/manifest/payload/catalog-manifest.json").read_text(encoding="utf-8")
+          )
+          print(manifest["recordCount"])
+          PY
+            )"
+            DATABASE_SCHEMA=production-sqlite-v2
+            MANIFEST_SCHEMA=catalog-manifest-v3
+          fi
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind catalog-database \
             --source-key aggregate \
@@ -97,14 +211,14 @@ jobs:
             --producer-commit "$GITHUB_SHA" \
             --producer-workflow build-catalog.yml \
             --run-id "$GITHUB_RUN_ID" \
-            --payload "$RUNNER_TEMP/database/payload/catalog.sqlite3" \
+            --payload "$RUNNER_TEMP/build-root/database/payload/catalog.sqlite3" \
             --payload-relative-path payload/catalog.sqlite3 \
-            --record-count 2 \
+            --record-count "$RECORD_COUNT" \
             --completeness complete \
             --redistribution-class redistributable \
-            --content-schema-version demo-sqlite-v1 \
+            --content-schema-version "$DATABASE_SCHEMA" \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --output "$RUNNER_TEMP/database/handoff.json"
+            --output "$RUNNER_TEMP/build-root/database/handoff.json"
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind catalog-manifest \
             --source-key aggregate \
@@ -112,14 +226,14 @@ jobs:
             --producer-commit "$GITHUB_SHA" \
             --producer-workflow build-catalog.yml \
             --run-id "$GITHUB_RUN_ID" \
-            --payload "$RUNNER_TEMP/manifest/payload/catalog-manifest.json" \
+            --payload "$RUNNER_TEMP/build-root/manifest/payload/catalog-manifest.json" \
             --payload-relative-path payload/catalog-manifest.json \
             --record-count 1 \
             --completeness complete \
             --redistribution-class redistributable \
-            --content-schema-version catalog-manifest-demo-v1 \
+            --content-schema-version "$MANIFEST_SCHEMA" \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --output "$RUNNER_TEMP/manifest/handoff.json"
+            --output "$RUNNER_TEMP/build-root/manifest/handoff.json"
 
       - name: Define artifact names
         id: names
@@ -133,7 +247,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.names.outputs.database_artifact_name }}
-          path: ${{ runner.temp }}/database
+          path: ${{ runner.temp }}/build-root/database
           if-no-files-found: error
           retention-days: 7
 
@@ -141,6 +255,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.names.outputs.manifest_artifact_name }}
-          path: ${{ runner.temp }}/manifest
+          path: ${{ runner.temp }}/build-root/manifest
           if-no-files-found: error
           retention-days: 14

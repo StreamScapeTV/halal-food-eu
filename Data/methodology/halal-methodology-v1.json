@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "methodologyVersion": "1.0.0",
+  "marketScope": ["DE"],
+  "languages": ["de", "en"],
+  "reviewedAt": "2026-08-30T00:00:00Z",
+  "principles": {
+    "noMatchStatus": "unknown",
+    "parserMayCreatePositiveStatus": false,
+    "parserMayCreateFinalNegativeStatus": false,
+    "translatedOnlyStatus": "questionable",
+    "ocrOnlyStatus": "questionable",
+    "staleOrDateUnknownStatus": "unknown",
+    "conflictStatus": "questionable"
+  },
+  "certificationPolicy": {
+    "policyVersion": "1.0.0",
+    "defaultDecision": "review-required",
+    "acceptedCertifiers": []
+  },
+  "rules": [
+    {
+      "id": "explicit-pork-en",
+      "category": "explicit-pork-porcine",
+      "outcome": "prohibited-candidate",
+      "aliases": [
+        {"language": "en", "text": "pork", "match": "token"},
+        {"language": "en", "text": "porcine", "match": "token"},
+        {"language": "en", "text": "pork fat", "match": "phrase"},
+        {"language": "en", "text": "pork lard", "match": "phrase"}
+      ],
+      "reasonCode": "explicit-pork-ingredient",
+      "title": "Explicit pork/porcine ingredient candidate",
+      "reviewQueue": "clear-prohibited-confirmation",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-006"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "explicit-pork-de",
+      "category": "explicit-pork-porcine",
+      "outcome": "prohibited-candidate",
+      "aliases": [
+        {"language": "de", "text": "schweinefleisch", "match": "token"},
+        {"language": "de", "text": "schweinefett", "match": "token"},
+        {"language": "de", "text": "schweineschmalz", "match": "token"}
+      ],
+      "reasonCode": "explicit-pork-ingredient",
+      "title": "Explizite Schweine-Zutat als Prüfkandidat",
+      "reviewQueue": "clear-prohibited-confirmation",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-006"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "explicit-pork-gelatine-en",
+      "category": "explicit-pork-porcine",
+      "outcome": "prohibited-candidate",
+      "aliases": [
+        {"language": "en", "text": "pork gelatin", "match": "phrase"},
+        {"language": "en", "text": "pork gelatine", "match": "phrase"},
+        {"language": "en", "text": "porcine gelatin", "match": "phrase"},
+        {"language": "en", "text": "porcine gelatine", "match": "phrase"}
+      ],
+      "reasonCode": "explicit-pork-gelatine",
+      "title": "Explicit porcine gelatine candidate",
+      "reviewQueue": "clear-prohibited-confirmation",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-006"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "explicit-pork-gelatine-de",
+      "category": "explicit-pork-porcine",
+      "outcome": "prohibited-candidate",
+      "aliases": [
+        {"language": "de", "text": "schweinegelatine", "match": "token"},
+        {"language": "de", "text": "gelatine vom schwein", "match": "phrase"}
+      ],
+      "reasonCode": "explicit-pork-gelatine",
+      "title": "Explizite Schweinegelatine als Prüfkandidat",
+      "reviewQueue": "clear-prohibited-confirmation",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-006"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "gelatine-origin",
+      "category": "gelatine",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "gelatine", "match": "token"},
+        {"language": "en", "text": "gelatin", "match": "token"},
+        {"language": "en", "text": "gelatine", "match": "token"},
+        {"language": "und", "text": "E441", "match": "e-number"}
+      ],
+      "reasonCode": "gelatine-origin-required",
+      "title": "Gelatine origin/process requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "rennet-origin",
+      "category": "rennet",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "lab", "match": "token"},
+        {"language": "de", "text": "labenzym", "match": "token"},
+        {"language": "en", "text": "rennet", "match": "token"}
+      ],
+      "reasonCode": "rennet-origin-required",
+      "title": "Rennet origin/process requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "enzymes-origin",
+      "category": "enzymes",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "enzym", "match": "token-prefix"},
+        {"language": "en", "text": "enzyme", "match": "token-prefix"}
+      ],
+      "reasonCode": "enzyme-origin-required",
+      "title": "Enzyme origin/process requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "emulsifier-origin",
+      "category": "emulsifiers",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "emulgator", "match": "token-prefix"},
+        {"language": "en", "text": "emulsifier", "match": "token-prefix"},
+        {"language": "und", "text": "E471", "match": "e-number"},
+        {"language": "en", "text": "mono- and diglycerides", "match": "phrase"},
+        {"language": "en", "text": "mono and diglycerides", "match": "phrase"},
+        {"language": "de", "text": "mono- und diglyceride", "match": "phrase"}
+      ],
+      "reasonCode": "emulsifier-origin-required",
+      "title": "Emulsifier origin requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": [
+        "docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005",
+        "https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"
+      ],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "glycerol-origin",
+      "category": "carriers-solvents",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "glycerin", "match": "token"},
+        {"language": "de", "text": "glycerol", "match": "token"},
+        {"language": "en", "text": "glycerin", "match": "token"},
+        {"language": "en", "text": "glycerol", "match": "token"},
+        {"language": "und", "text": "E422", "match": "e-number"}
+      ],
+      "reasonCode": "glycerol-origin-required",
+      "title": "Glycerol origin requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": [
+        "docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005",
+        "https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"
+      ],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "flavouring-origin",
+      "category": "flavourings",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "aroma", "match": "token-prefix"},
+        {"language": "en", "text": "flavouring", "match": "token-prefix"},
+        {"language": "en", "text": "flavoring", "match": "token-prefix"}
+      ],
+      "reasonCode": "flavouring-origin-carrier-required",
+      "title": "Flavouring origin/carrier requires evidence",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "alcohol-context",
+      "category": "alcohol-ethanol-context",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "alkohol", "match": "token"},
+        {"language": "de", "text": "ethanol", "match": "token"},
+        {"language": "en", "text": "alcohol", "match": "token"},
+        {"language": "en", "text": "ethanol", "match": "token"}
+      ],
+      "excludeContexts": [
+        "sugar alcohol",
+        "sugar alcohols",
+        "zuckeralkohol",
+        "zuckeralkohole",
+        "benzyl alcohol",
+        "cetyl alcohol",
+        "stearyl alcohol"
+      ],
+      "reasonCode": "alcohol-context-review-required",
+      "title": "Alcohol/ethanol context requires review",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    },
+    {
+      "id": "animal-source-unspecified",
+      "category": "explicit-animal-source",
+      "outcome": "ambiguous-review-required",
+      "aliases": [
+        {"language": "de", "text": "tierisches fett", "match": "phrase"},
+        {"language": "de", "text": "tierisches eiweiß", "match": "phrase"},
+        {"language": "en", "text": "animal fat", "match": "phrase"},
+        {"language": "en", "text": "animal protein", "match": "phrase"}
+      ],
+      "reasonCode": "animal-origin-review-required",
+      "title": "Animal source requires origin/process review",
+      "reviewQueue": "ambiguous-origin-process",
+      "references": ["docs/feature-specs/004-halal-assessment-and-explanations.md#hf-assess-005"],
+      "reviewedAt": "2026-08-30T00:00:00Z"
+    }
+  ],
+  "reviewQueues": [
+    {
+      "id": "clear-prohibited-confirmation",
+      "checklist": [
+        "Confirm the matched span is part of the ingredient statement and not allergen/traces text.",
+        "Confirm the source observation is exact for the GTIN and market.",
+        "Confirm the formulation evidence is current enough under the catalog quality policy.",
+        "Record the exact evidence span and any relevant context before a not-halal decision."
+      ]
+    },
+    {
+      "id": "ambiguous-origin-process",
+      "checklist": [
+        "Identify whether the source states ingredient origin or process.",
+        "Do not infer animal, plant, microbial, or synthetic origin when absent.",
+        "Record manufacturer/certifier/package evidence if available.",
+        "Keep the result questionable when material ambiguity remains."
+      ]
+    },
+    {
+      "id": "new-changed-formulation",
+      "checklist": [
+        "Compare exact source text and content hash with the previously reviewed formulation.",
+        "Re-run methodology candidates against the new source text.",
+        "Do not carry a positive assessment across a changed formulation without compatible explicit review."
+      ]
+    },
+    {
+      "id": "positive-ingredient-review",
+      "checklist": [
+        "Confirm current exact-market ingredient evidence and verification state.",
+        "Resolve every candidate and conflict relevant to the methodology.",
+        "Record reviewer, methodology version, evidence hash, reasons, limitations, and next review date.",
+        "Confirm that halal-reviewed is presented as a review and not a certification."
+      ]
+    },
+    {
+      "id": "certification-validity",
+      "checklist": [
+        "Confirm accepted certifier/scheme policy.",
+        "Confirm exact GTIN/product, market, scope, and formulation applicability.",
+        "Check effective, expiry, revocation, suspension, and last-checked dates.",
+        "Keep conflicts and scope limitations visible."
+      ]
+    },
+    {
+      "id": "conflicting-formulation",
+      "checklist": [
+        "Inspect all current exact-market formulation observations.",
+        "Do not resolve the conflict merely by source rank.",
+        "Record why one observation becomes current or leave the status questionable."
+      ]
+    },
+    {
+      "id": "package-text-verification",
+      "checklist": [
+        "Compare OCR/translated text against the package or verified source text.",
+        "Correct transcription before relying on exact ingredient spans.",
+        "Record verification evidence and reviewer identity."
+      ]
+    },
+    {
+      "id": "methodology-migration",
+      "checklist": [
+        "Compare old and new methodology rule sets and compatibility declaration.",
+        "Reassess only products affected by changed rules when compatibility allows.",
+        "Invalidate prior current assessment when a changed rule can alter its decision."
+      ]
+    }
+  ],
+  "changeLog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-08-30",
+      "summary": "Initial German/English evidence-candidate methodology. Parser output is non-authoritative and cannot create positive or final negative statuses."
+    }
+  ]
+}

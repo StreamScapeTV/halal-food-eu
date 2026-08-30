@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from evidence_model_core import EvidenceValidationError, validate_envelope
+from halal_methodology_batch import analyze_envelope
 from halal_methodology_core import (
     MethodologyError,
     analyze_ingredient,
@@ -71,6 +72,12 @@ def parser() -> argparse.ArgumentParser:
     analyze.add_argument("--freshness-state", choices=["fresh", "refresh-recommended", "stale", "date-unknown", "changed-unreviewed"], default="fresh")
     analyze.add_argument("--output", type=Path, required=True)
 
+    batch = sub.add_parser("analyze-envelope", help="analyze every current selection and emit one deterministic methodology report")
+    batch.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
+    batch.add_argument("--evidence", type=Path, required=True)
+    batch.add_argument("--quality-report", type=Path)
+    batch.add_argument("--output", type=Path, required=True)
+
     review = sub.add_parser("review", help="materialize immutable assessment/review records from explicit human review input")
     review.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
     review.add_argument("--evidence", type=Path, required=True)
@@ -115,6 +122,16 @@ def main() -> None:
             )
             write_json(args.output, report)
             print(f"Methodology parser status: {report['parserStatus']} ({len(report['candidateFindings'])} candidates, {len(report['reviewQueues'])} queues)")
+            return
+
+        if args.command == "analyze-envelope":
+            quality_report = load_json(args.quality_report) if args.quality_report else None
+            report = analyze_envelope(envelope=envelope, methodology=methodology, quality_report=quality_report)
+            write_json(args.output, report)
+            print(
+                f"Methodology envelope: {report['counts']['products']} products, "
+                f"{sum(report['counts']['reviewQueues'].values())} queued review routes"
+            )
             return
 
         if args.command == "review":

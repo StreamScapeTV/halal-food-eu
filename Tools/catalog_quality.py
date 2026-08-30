@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from catalog_quality_core import CatalogQualityError, evaluate_quality, human_summary, validate_policy
+from catalog_quality_core import CatalogQualityError, canonical_json, evaluate_quality, human_summary, validate_policy
+from catalog_workflow_handoff import health_key
 from evidence_model_core import EvidenceValidationError, validate_envelope
 
 DEFAULT_POLICY = Path("Data/quality/catalog-quality-policy-v1.json")
@@ -37,6 +39,29 @@ def _source_policy_path(source_key: str) -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def decorate_incident(report: dict[str, Any], source_key: str) -> dict[str, Any]:
+    """Attach stable health identities and deterministic incident action to a report."""
+    blocker_codes = sorted({
+        item["code"]
+        for item in report.get("releaseBlockingFindings", [])
+        if isinstance(item, dict) and isinstance(item.get("code"), str)
+    })
+    keys = [health_key(code, source_key) for code in blocker_codes]
+    rollback = bool(report.get("rollbackRequired"))
+    quarantine = bool(report.get("quarantineRequired"))
+    action = (
+        "rollback-and-quarantine" if rollback
+        else "quarantine" if quarantine
+        else "block-release" if blocker_codes
+        else "none"
+    )
+    report["deduplicationKeys"] = keys
+    report["incident"] = {"action": action, "deduplicationKeys": keys}
+    report.pop("reportSha256", None)
+    report["reportSha256"] = hashlib.sha256(canonical_json(report).encode("utf-8")).hexdigest()
+    return report
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -54,11 +79,7 @@ def parse_args() -> argparse.Namespace:
     evaluate.add_argument("--source-policy", type=Path)
     evaluate.add_argument("--output", type=Path, required=True)
     evaluate.add_argument("--summary-output", type=Path, required=True)
-    evaluate.add_argument(
-        "--defer-blocker-exit",
-        action="store_true",
-        help="write blocked reports successfully so a later workflow step can publish diagnostics before enforcing the gate",
-    )
+    evaluate.add_argument("--defer-blocker-exit", action="store_true", help="write blocked reports successfully so a later workflow step can publish diagnostics before enforcing the gate")
     return parser.parse_args()
 
 
@@ -77,18 +98,25 @@ def main() -> None:
         workflow_contract = load_json(args.workflow_contract) if args.workflow_contract else None
         source_policy_path = args.source_policy or _source_policy_path(args.source_key)
         source_policy = load_json(source_policy_path) if source_policy_path else None
-        report = evaluate_quality(
-            policy=policy,
-            envelope=evidence,
-            source_key=args.source_key,
-            snapshot_id=args.snapshot_id,
-            change_report=change,
-            workflow_contract=workflow_contract,
-            source_policy=source_policy,
+        report = decorate_incident(
+            evaluate_quality(
+                policy=policy,
+                envelope=evidence,
+                source_key=args.source_key,
+                snapshot_id=args.snapshot_id,
+                change_report=change,
+                workflow_contract=workflow_contract,
+                source_policy=source_policy,
+            ),
+            args.source_key,
         )
         write_json(args.output, report)
         args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-        args.summary_output.write_text(human_summary(report), encoding="utf-8")
+        summary = human_summary(report)
+        summary += "\n## Incident identity\n"
+        summary += f"- Action: `{report['incident']['action']}`\n"
+        summary += "- Deduplication keys: " + (", ".join(f"`{key}`" for key in report["deduplicationKeys"]) or "none") + "\n"
+        args.summary_output.write_text(summary, encoding="utf-8")
         print(f"Catalog quality status: {report['status']} ({len(report['releaseBlockingFindings'])} blockers)")
         if report["status"] != "pass" and not args.defer_blocker_exit:
             raise SystemExit(2)

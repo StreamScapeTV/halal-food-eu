@@ -1,7 +1,7 @@
 # 016 — Trusted catalog workflow orchestration
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-08-30
 
 ## Purpose
 
@@ -12,7 +12,9 @@ The canonical v1 workflow artifacts are:
 - `Data/workflows/catalog-workflow-contract-v1.json` — stage, artifact, source, retry, retention, and generated-update policy;
 - `Data/workflows/workflow-handoff-v1.schema.json` — machine-readable handoff envelope;
 - `Data/workflows/sample-workflow-handoff-v1.json` and `synthetic-source-records.jsonl` — no-secret fixture contract;
-- `Tools/catalog_workflow.py` plus focused `catalog_workflow_*` modules — standard-library semantic validation and deterministic key generation; and
+- `Data/catalog/production-catalog-release-input-v1.schema.json` — metadata-only receipt for exact post-merge production rematerialization;
+- `Tools/catalog_workflow.py` plus focused `catalog_workflow_*` modules — standard-library semantic validation and deterministic key generation;
+- `Tools/production_catalog_release_input.py` and `Tools/github_catalog_proposal.py` — fail-closed release-input binding and deterministic metadata-only proposal mutation; and
 - `.github/workflows/source-policy.yml`, `acquire-catalog.yml`, `scheduled-catalog-refresh.yml`, `normalize-and-diff.yml`, `catalog-quality.yml`, `build-catalog.yml`, `propose-catalog-update.yml`, `catalog-release.yml`, and `catalog-health.yml` — the bounded workflow surface.
 
 Source-specific adapters extend the admitted source registry and repository tooling in their own issues. This specification does not approve a production source by naming a future adapter.
@@ -51,14 +53,14 @@ Every cross-stage payload has a v1 handoff envelope with artifact kind, register
 
 ## Scheduling, proposal, health, and recovery
 
-- **HF-WORKFLOW-019:** Scheduled refresh uses an off-hour minute, also exposes `workflow_dispatch`, declares concurrency, and is safe to rerun for the same source/snapshot. Public-repository schedule delay/automatic inactivity disablement is documented as an operational condition, not treated as evidence of a successful refresh.
-- **HF-WORKFLOW-020:** Catalog proposal branch identity is derived deterministically from source/snapshot/catalog digest. Re-running an identical proposal targets the same bounded logical update and material changes are never auto-merged.
+- **HF-WORKFLOW-019:** Scheduled refresh uses an off-hour minute, also exposes `workflow_dispatch`, declares concurrency, and is safe to rerun for the same source/snapshot. Public-repository schedule delay/automatic inactivity disablement is documented as an operational condition, not treated as evidence of a successful refresh. A scheduled production acquisition may reach quality reporting but must not invent a semantic catalog version or silently create a production catalog proposal. The v1 production proposal lane is entered only by a trusted `main` manual full-source dispatch carrying an explicit non-prerelease semantic catalog version; the synthetic fixture remains the no-secret scheduled-workflow proof path.
+- **HF-WORKFLOW-020:** Catalog proposal branch identity is derived deterministically from source/snapshot/catalog digest. Re-running an identical proposal targets the same bounded logical update and material changes are never auto-merged. A production generated branch may change only `Data/catalog/production-catalog-release-input-v1.json`, a metadata-only receipt binding the reviewed source commit/run plus exact normalized-evidence, quality-report, and basic-exclusions artifact names/digests. The proposal writer fails closed if that deterministic branch contains another path or a different receipt, and creates no pull request when the identical receipt is already integrated. Generated SQLite/manifest files, raw source material, and product image binaries are not committed by this proposal path.
 - **HF-WORKFLOW-021:** Health conditions use deterministic source/condition keys so repeated failures update one logical incident instead of creating unbounded duplicate issues. Health reporting must not expose source secrets or raw restricted payloads.
-- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The generated bundle files are intentionally not committed, so the v1 release job must materialize the SQLite/manifest pair from the exact integrated `main` revision and the same reviewed local catalog input before validating or hashing those subjects; it must never assume ignored generated files already exist after checkout. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it. An optional manual main-only provenance hook may attest subjects materialized and revalidated from that exact integrated revision with GitHub artifact attestations; ordinary fixture validation and normal release evidence do not require attestation permissions or a successful attestation.
+- **HF-WORKFLOW-022:** Release reports/checksums are post-merge evidence. The generated bundle files are intentionally not committed, so the v1 release job must materialize the SQLite/manifest pair from the exact integrated `main` revision and the same reviewed local catalog input before validating or hashing those subjects; it must never assume ignored generated files already exist after checkout. For a production proposal, the integrated metadata-only release-input receipt identifies the exact immutable source run/artifacts reviewed before merge; post-merge release must re-download those named artifacts, verify their handoffs and payload digests against the receipt, and then rebuild with the exact integrated `main` SHA as `sourceCommit`. The v1 release workflow does not perform App Store signing and does not authorize separately downloaded runtime catalogs; the app continues to use the accepted bundled SQLite model unless a future specification changes it. An optional manual main-only provenance hook may attest subjects materialized and revalidated from that exact integrated revision with GitHub artifact attestations; ordinary fixture validation and normal release evidence do not require attestation permissions or a successful attestation.
 
 ## Security and data boundaries
 
-Workflow framework code treats all external source fields as hostile data. Issue #23 owns the broader parser/network/file/OCR hardening gate, but this issue establishes the outer execution boundary: bounded identifiers, relative paths, explicit hosts, digest/count/completeness checks, no source-controlled secrets, no PR write authority, and no dynamic shell command selection.
+Workflow framework code treats all external source fields as hostile data. Issue #23 owns the broader parser/network/file/OCR hardening gate, but this issue establishes the outer execution boundary: bounded identifiers, relative paths, explicit hosts, digest/count/completeness checks, no source-controlled secrets, no untrusted pull-request write authority, and no dynamic shell command selection.
 
 Product images remain HTTPS references only under specifications 014/015. None of these workflow interfaces acquires or bundles product image bytes merely to classify, select, build, or validate a product.
 
@@ -72,6 +74,8 @@ The committed tests cover:
 - source registration and fixture-only mode enforcement;
 - payload path traversal, digest, byte/record limits, completeness, and redistribution class;
 - deterministic proposal and health keys;
+- production release-input determinism, source-run consistency, payload tamper rejection, and exact integrated-main build-request identity;
+- generated proposal branch confinement to the metadata-only release receipt, idempotent existing-branch reuse, extra-path rejection, and no-op behavior when the receipt is already integrated;
 - pinned action references and absence of self-hosted/`pull_request_target` execution;
 - trusted workflow isolation from `pull_request` and manual non-`main` execution;
 - scheduled workflow + manual dispatch policy;

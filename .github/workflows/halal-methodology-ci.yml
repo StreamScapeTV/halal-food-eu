@@ -36,6 +36,7 @@ jobs:
           python3 -m json.tool Data/methodology/additive-identities-v1.schema.json >/dev/null
           python3 -m json.tool Data/methodology/halal-review-input-v1.schema.json >/dev/null
           python3 -m json.tool Data/methodology/halal-review-artifact-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/methodology-report-v1.schema.json >/dev/null
           python3 -m py_compile \
             Tools/halal_methodology.py \
             Tools/halal_methodology_core.py \

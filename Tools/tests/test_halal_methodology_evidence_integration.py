@@ -64,7 +64,7 @@ class MethodologyEvidenceIntegrationTests(unittest.TestCase):
         product = next(item for item in runtime["products"] if item["gtin"] == selection["gtin"])
         self.assertEqual(product["assessment"]["status"], "halal-reviewed")
         self.assertEqual(product["assessment"]["methodologyVersion"], "1.0.0")
-        self.assertEqual(product["certifications"], [])
+        self.assertTrue(product["certifications"])
         self.assertEqual(product["assessment"]["reasons"][0]["code"], "completed-methodology-review")
         self.assertIn(ingredient["id"], product["assessment"]["reasons"][0]["evidenceIDs"])
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compile reviewed evidence into the immutable production SQLite catalog.
 
-The compiler is deliberately offline. It consumes only local, validated evidence
-and reviewed source-policy metadata; acquisition is a separate workflow stage.
+The compiler is deliberately offline. It consumes only local, validated evidence,
+reviewed source-policy metadata, and a passing catalog-quality decision. Acquisition
+and quality evaluation are separate workflow stages.
 """
 
 from __future__ import annotations
@@ -19,11 +20,14 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import evidence_model
+import production_catalog_gate
 
 APPLICATION_ID = 1_212_564_821  # ASCII "HFEU"
 SCHEMA_VERSION = 2
+MANIFEST_SCHEMA_VERSION = 3
 BUILDER_VERSION = "production-catalog-v1"
 STATUS_VALUES = {"halal-certified", "halal-reviewed", "not-halal", "questionable", "unknown"}
+FRESHNESS_VALUES = {"fresh", "refresh-recommended", "stale", "date-unknown", "changed-unreviewed"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
 
@@ -80,6 +84,9 @@ CREATE TABLE product_observations (
     retrieved_at TEXT NOT NULL,
     ingredients_hash TEXT NOT NULL CHECK(length(ingredients_hash) = 64),
     verification_state TEXT NOT NULL,
+    freshness_state TEXT NOT NULL CHECK(freshness_state IN (
+        'fresh', 'refresh-recommended', 'stale', 'date-unknown', 'changed-unreviewed'
+    )),
     FOREIGN KEY(gtin) REFERENCES products(gtin) ON DELETE RESTRICT,
     FOREIGN KEY(source_id) REFERENCES sources(id) ON DELETE RESTRICT
 );
@@ -94,7 +101,9 @@ CREATE TABLE product_assessments (
     )),
     summary TEXT NOT NULL CHECK(length(trim(summary)) > 0),
     methodology_version TEXT NOT NULL CHECK(length(trim(methodology_version)) > 0),
+    assessed_at TEXT NOT NULL,
     reviewed_at TEXT NOT NULL,
+    approved_reviewer_count INTEGER NOT NULL CHECK(approved_reviewer_count >= 1),
     recheck_at TEXT,
     FOREIGN KEY(gtin) REFERENCES products(gtin) ON DELETE RESTRICT,
     FOREIGN KEY(observation_id) REFERENCES product_observations(id) ON DELETE RESTRICT,
@@ -310,9 +319,29 @@ def _summary(assessment: dict[str, Any]) -> str:
     return title.strip()
 
 
+def _quality_manifest(
+    *,
+    gate: dict[str, Any],
+    quality_report_path: Path,
+    quality_policy_path: Path,
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "policyVersion": gate["policyVersion"],
+        "policySha256": file_sha256(quality_policy_path),
+        "reportSha256": gate["reportSha256"],
+        "reportFileSha256": file_sha256(quality_report_path),
+        "sourceKey": gate["sourceKey"],
+        "snapshotID": gate["snapshotID"],
+        "evaluatedAt": gate["evaluatedAt"],
+        "warningCount": gate["warningCount"],
+    }
+
+
 def build_catalog(
     *, evidence_path: Path, database_path: Path, manifest_path: Path,
     policy_paths: list[Path], basic_exclusions_path: Path | None,
+    quality_report_path: Path, quality_policy_path: Path,
     catalog_version: str, selection_policy_version: str, generated_at: str,
     source_commit: str, workflow_run: str, logical_dump_path: Path | None = None,
     release_notes_path: Path | None = None, previous_manifest_path: Path | None = None,
@@ -321,6 +350,13 @@ def build_catalog(
     _assert_build_metadata(catalog_version, selection_policy_version, generated_at, source_commit)
     evidence = load_json(evidence_path, "evidence")
     evidence_model.validate_envelope(evidence)
+    quality_report = load_json(quality_report_path, "quality report")
+    quality_policy = load_json(quality_policy_path, "quality policy")
+    gate = production_catalog_gate.validate_release_gate(
+        envelope=evidence,
+        quality_report=quality_report,
+        quality_policy=quality_policy,
+    )
     projection = evidence_model.runtime_projection(evidence)
     policies = load_policies(policy_paths)
     exclusions = load_basic_exclusions(basic_exclusions_path, selection_policy_version)
@@ -341,6 +377,11 @@ def build_catalog(
     if missing_assessment:
         raise ValueError(f"runtime products require an explicit reviewed assessment: {missing_assessment[:5]}")
 
+    quality_manifest = _quality_manifest(
+        gate=gate,
+        quality_report_path=quality_report_path,
+        quality_policy_path=quality_policy_path,
+    )
     database_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix="production-catalog-", suffix=".sqlite3", dir=database_path.parent)
@@ -364,6 +405,10 @@ def build_catalog(
             "sourceCommit": source_commit,
             "builderVersion": BUILDER_VERSION,
             "evidenceSchemaVersion": str(projection["evidenceSchemaVersion"]),
+            "qualityPolicyVersion": gate["policyVersion"],
+            "qualityPolicySha256": quality_manifest["policySha256"],
+            "qualityReportSha256": gate["reportSha256"],
+            "qualityEvaluatedAt": gate["evaluatedAt"],
         }
         connection.executemany("INSERT INTO catalog_metadata(key,value) VALUES (?,?)", sorted(metadata.items()))
         source_ids = _source_ids(connection, projection, evidence, policies)
@@ -379,19 +424,25 @@ def build_catalog(
             observation_id: int | None = None
             ingredient = product.get("ingredients")
             if ingredient is not None:
+                freshness_state = gate["ingredientFreshness"].get(ingredient["id"])
+                if freshness_state not in FRESHNESS_VALUES:
+                    raise ValueError(f"{product['gtin']} lacks validated formulation freshness")
                 cursor = connection.execute(
-                    """INSERT INTO product_observations(evidence_id,gtin,source_id,source_record_id,ingredients_text,language_code,allergens_text,traces_text,observed_at,retrieved_at,ingredients_hash,verification_state)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (ingredient["id"], product["gtin"], source_ids[ingredient["sourceKey"]], ingredient["sourceRecordID"], ingredient["text"], ingredient["languageCode"], ingredient.get("allergensText"), ingredient.get("tracesText"), ingredient.get("observedAt"), ingredient["retrievedAt"], ingredient["contentHash"], ingredient["verificationState"]),
+                    """INSERT INTO product_observations(evidence_id,gtin,source_id,source_record_id,ingredients_text,language_code,allergens_text,traces_text,observed_at,retrieved_at,ingredients_hash,verification_state,freshness_state)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (ingredient["id"], product["gtin"], source_ids[ingredient["sourceKey"]], ingredient["sourceRecordID"], ingredient["text"], ingredient["languageCode"], ingredient.get("allergensText"), ingredient.get("tracesText"), ingredient.get("observedAt"), ingredient["retrievedAt"], ingredient["contentHash"], ingredient["verificationState"], freshness_state),
                 )
                 observation_id = int(cursor.lastrowid)
 
             if observation_id is None and assessment["status"] != "unknown":
                 raise ValueError(f"{product['gtin']} lacks ingredient evidence but assessment is {assessment['status']}")
+            review = gate["assessmentReviews"].get(assessment["id"])
+            if review is None:
+                raise ValueError(f"{product['gtin']} assessment lacks validated review evidence")
             cursor = connection.execute(
-                """INSERT INTO product_assessments(evidence_id,gtin,observation_id,status,summary,methodology_version,reviewed_at,recheck_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
-                (assessment["id"], product["gtin"], observation_id, assessment["status"], _summary(assessment), assessment["methodologyVersion"], assessment["assessedAt"], assessment.get("recheckAt")),
+                """INSERT INTO product_assessments(evidence_id,gtin,observation_id,status,summary,methodology_version,assessed_at,reviewed_at,approved_reviewer_count,recheck_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (assessment["id"], product["gtin"], observation_id, assessment["status"], _summary(assessment), assessment["methodologyVersion"], assessment["assessedAt"], review["reviewedAt"], review["approvedReviewerCount"], assessment.get("recheckAt")),
             )
             assessment_id = int(cursor.lastrowid)
             for position, reason in enumerate(assessment["reasons"]):
@@ -452,7 +503,7 @@ def build_catalog(
     }
     used_keys = {source["sourceKey"] for source in projection["sources"]}
     manifest = {
-        "manifestSchemaVersion": 2,
+        "manifestSchemaVersion": MANIFEST_SCHEMA_VERSION,
         "catalogVersion": catalog_version,
         "schemaVersion": SCHEMA_VERSION,
         "methodologyVersion": methodology_version,
@@ -465,6 +516,7 @@ def build_catalog(
         "databaseBytes": size,
         "sha256": digest,
         "evidence": {"schemaVersion": projection["evidenceSchemaVersion"], "sha256": file_sha256(evidence_path)},
+        "qualityGate": quality_manifest,
         "sourcePolicies": [{"sourceKey": key, **policies[key]} for key in sorted(used_keys)],
         "counts": counts,
         "statusDistribution": dict(sorted(status_counts.items())),
@@ -479,7 +531,7 @@ def build_catalog(
 
     if logical_dump_path is not None:
         logical_dump_path.parent.mkdir(parents=True, exist_ok=True)
-        logical_dump_path.write_text(canonical_json({"projection": projection, "basicExclusions": exclusions}) + "\n", encoding="utf-8")
+        logical_dump_path.write_text(canonical_json({"projection": projection, "basicExclusions": exclusions, "qualityGate": quality_manifest}) + "\n", encoding="utf-8")
     if release_notes_path is not None:
         previous = load_json(previous_manifest_path, "previous manifest") if previous_manifest_path else None
         delta = len(products) - int(previous.get("recordCount", 0)) if previous else len(products)
@@ -487,7 +539,10 @@ def build_catalog(
             f"# Catalog {catalog_version}", "", f"- Products: {len(products):,} ({delta:+,} vs previous accepted manifest)",
             f"- Ingredient observations: {counts['ingredientObservations']:,}", f"- Missing-ingredient unknown products: {len(products)-counts['ingredientObservations']:,}",
             f"- Basic exclusions: {len(exclusions):,}", f"- SQLite size: {size:,} bytes", f"- SQLite SHA-256: `{digest}`",
-            f"- Methodology: `{methodology_version}`", f"- Selection policy: `{selection_policy_version}`", "", "## Status distribution",
+            f"- Methodology: `{methodology_version}`", f"- Selection policy: `{selection_policy_version}`",
+            f"- Quality policy: `{gate['policyVersion']}`", f"- Quality report: `{gate['reportSha256']}`",
+            f"- Quality evaluated at: `{gate['evaluatedAt']}`", f"- Quality warnings: {gate['warningCount']}",
+            "", "## Status distribution",
         ]
         lines.extend(f"- {status}: {count:,}" for status, count in sorted(status_counts.items()))
         release_notes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -497,10 +552,18 @@ def build_catalog(
 
 def validate_catalog(database_path: Path, manifest_path: Path) -> None:
     manifest = load_json(manifest_path, "manifest")
+    if manifest.get("manifestSchemaVersion") != MANIFEST_SCHEMA_VERSION:
+        raise ValueError("manifest schema version is unsupported")
     if manifest.get("schemaVersion") != SCHEMA_VERSION:
         raise ValueError("manifest schemaVersion is unsupported")
     if manifest.get("sha256") != file_sha256(database_path):
         raise ValueError("manifest/database SHA-256 mismatch")
+    quality = manifest.get("qualityGate")
+    if not isinstance(quality, dict) or quality.get("schemaVersion") != 1:
+        raise ValueError("manifest quality-gate binding is missing")
+    for field in ("policySha256", "reportSha256", "reportFileSha256"):
+        if not isinstance(quality.get(field), str) or not SHA256_RE.fullmatch(quality[field]):
+            raise ValueError(f"manifest quality-gate {field} is invalid")
     uri = f"file:{database_path.resolve()}?mode=ro&immutable=1"
     connection = sqlite3.connect(uri, uri=True)
     try:
@@ -522,12 +585,37 @@ def validate_catalog(database_path: Path, manifest_path: Path) -> None:
             actual = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             if actual != counts[key]:
                 raise ValueError(f"manifest count mismatch for {key}: {actual} != {counts[key]}")
+        metadata = dict(connection.execute("SELECT key,value FROM catalog_metadata").fetchall())
+        for key, expected in (
+            ("catalogVersion", manifest["catalogVersion"]),
+            ("schemaVersion", str(manifest["schemaVersion"])),
+            ("methodologyVersion", manifest["methodologyVersion"]),
+            ("selectionPolicyVersion", manifest["selectionPolicyVersion"]),
+            ("qualityPolicyVersion", quality["policyVersion"]),
+            ("qualityPolicySha256", quality["policySha256"]),
+            ("qualityReportSha256", quality["reportSha256"]),
+            ("qualityEvaluatedAt", quality["evaluatedAt"]),
+        ):
+            if metadata.get(key) != expected:
+                raise ValueError(f"catalog metadata mismatch for {key}")
         if connection.execute("SELECT COUNT(*) FROM products WHERE current_assessment_id IS NULL").fetchone()[0]:
             raise ValueError("product without current assessment")
         if connection.execute("SELECT COUNT(*) FROM products p JOIN product_assessments a ON a.id=p.current_assessment_id WHERE p.current_observation_id IS NULL AND a.status <> 'unknown'").fetchone()[0]:
             raise ValueError("missing ingredient evidence has a non-unknown assessment")
+        if connection.execute("SELECT COUNT(*) FROM product_assessments WHERE approved_reviewer_count < 1").fetchone()[0]:
+            raise ValueError("assessment lacks approved review evidence")
+        if connection.execute("SELECT COUNT(*) FROM product_assessments WHERE reviewed_at < assessed_at").fetchone()[0]:
+            raise ValueError("assessment review predates assessment")
+        if connection.execute("SELECT COUNT(*) FROM product_observations WHERE freshness_state NOT IN ('fresh','refresh-recommended','stale','date-unknown','changed-unreviewed')").fetchone()[0]:
+            raise ValueError("unsupported formulation freshness state")
         if connection.execute("SELECT COUNT(*) FROM product_assessments a LEFT JOIN certification_evidence c ON c.assessment_id=a.id WHERE a.status='halal-certified' GROUP BY a.id HAVING COUNT(c.id)=0").fetchall():
             raise ValueError("halal-certified assessment lacks certification")
+        if connection.execute("SELECT COUNT(*) FROM product_assessments a WHERE a.status='not-halal' AND NOT EXISTS (SELECT 1 FROM assessment_reasons r WHERE r.assessment_id=a.id AND r.severity='prohibitive')").fetchone()[0]:
+            raise ValueError("not-halal assessment lacks prohibitive reason")
+        if connection.execute("SELECT COUNT(*) FROM sources WHERE length(trim(license))=0 OR length(trim(attribution))=0 OR length(policy_sha256)<>64").fetchone()[0]:
+            raise ValueError("source rights/policy binding is incomplete")
+        if connection.execute("SELECT COUNT(*) FROM remote_image_references WHERE url NOT LIKE 'https://%'").fetchone()[0]:
+            raise ValueError("remote image reference is not HTTPS")
         sample = connection.execute("SELECT gtin FROM products ORDER BY gtin LIMIT 1").fetchone()[0]
         for sql, params, label in (
             ("SELECT * FROM products WHERE gtin=?", (sample,), "GTIN"),
@@ -552,6 +640,8 @@ def parse_args() -> argparse.Namespace:
     build.add_argument("--manifest", type=Path, required=True)
     build.add_argument("--source-policy", type=Path, action="append", default=[], required=True)
     build.add_argument("--basic-exclusions", type=Path)
+    build.add_argument("--quality-report", type=Path, required=True)
+    build.add_argument("--quality-policy", type=Path, required=True)
     build.add_argument("--catalog-version", required=True)
     build.add_argument("--selection-policy-version", required=True)
     build.add_argument("--generated-at", required=True)
@@ -576,6 +666,7 @@ def main() -> None:
     manifest = build_catalog(
         evidence_path=args.evidence, database_path=args.database, manifest_path=args.manifest,
         policy_paths=args.source_policy, basic_exclusions_path=args.basic_exclusions,
+        quality_report_path=args.quality_report, quality_policy_path=args.quality_policy,
         catalog_version=args.catalog_version, selection_policy_version=args.selection_policy_version,
         generated_at=args.generated_at, source_commit=args.source_commit, workflow_run=args.workflow_run,
         logical_dump_path=args.logical_dump, release_notes_path=args.release_notes,

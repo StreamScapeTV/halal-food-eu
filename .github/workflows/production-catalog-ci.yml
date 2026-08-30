@@ -1,0 +1,41 @@
+name: Production catalog compiler
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-catalog:
+    name: Production catalog integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate production compiler and release gate
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/production_catalog_gate.py \
+            Tools/production_catalog.py \
+            Tools/tests/test_production_catalog_gate.py \
+            Tools/tests/test_production_catalog.py
+          PYTHONPATH=Tools python3 -m unittest discover \
+            -s Tools/tests \
+            -p 'test_production_catalog*.py' \
+            -v

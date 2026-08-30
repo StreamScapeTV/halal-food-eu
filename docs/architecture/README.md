@@ -49,3 +49,4 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0005 — Trusted catalog workflow boundaries](ADR-0005-trusted-catalog-workflow-boundaries.md)
 - [ADR-0006 — Secure catalog ingestion and runtime integrity](ADR-0006-secure-catalog-ingestion-and-integrity.md)
 - [ADR-0007 — Germany catalog footprint and runtime storage](ADR-0007-germany-catalog-footprint-and-runtime-storage.md)
+- [ADR-0008 — Catalog quality and release gates](ADR-0008-catalog-quality-release-gates.md)

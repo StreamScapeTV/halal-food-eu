@@ -22,6 +22,21 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
+def _selection_keys(envelope: dict[str, object] | None) -> set[tuple[str, str]]:
+    if not isinstance(envelope, dict):
+        return set()
+    selections = envelope.get("currentSelections", [])
+    if not isinstance(selections, list):
+        return set()
+    return {
+        (item["gtin"], item["market"])
+        for item in selections
+        if isinstance(item, dict)
+        and isinstance(item.get("gtin"), str)
+        and isinstance(item.get("market"), str)
+    }
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -104,6 +119,12 @@ def main() -> None:
         "malformedRate": acquisition.get("malformedRate", 0.0),
         "schemaErrors": 0,
     }
+    current_keys = _selection_keys(evidence)
+    previous_keys = _selection_keys(previous)
+    changes["addedSelections"] = [
+        {"gtin": gtin, "market": market}
+        for gtin, market in sorted(current_keys - previous_keys)
+    ]
     _write_json(args.evidence_output, evidence)
     _write_json(args.selection_output, reports["selection"])
     _write_json(args.quality_output, reports["quality"])

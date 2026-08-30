@@ -18,6 +18,7 @@
     "reason",
     "resolvedQueues",
     "openQueuesAtReview",
+    "checklists",
     "evidenceIDs",
     "reviewArtifactSha256"
   ],
@@ -47,6 +48,22 @@
       "type": "array",
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"}
+    },
+    "checklists": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["queueID", "items"],
+        "properties": {
+          "queueID": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
     },
     "evidenceIDs": {
       "type": "array",

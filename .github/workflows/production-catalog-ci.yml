@@ -37,12 +37,13 @@ jobs:
             Tools/production_catalog.py \
             Tools/production_catalog_request.py \
             Tools/tests/test_basic_exclusions.py \
+            Tools/tests/test_production_build_workflow.py \
             Tools/tests/test_production_catalog_gate.py \
             Tools/tests/test_production_catalog.py \
             Tools/tests/test_production_catalog_request.py
           PYTHONPATH=Tools python3 -m unittest discover \
             -s Tools/tests \
-            -p 'test_production_catalog*.py' \
+            -p 'test_production_*.py' \
             -v
           PYTHONPATH=Tools python3 -m unittest \
             Tools.tests.test_basic_exclusions \

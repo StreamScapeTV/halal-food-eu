@@ -46,6 +46,7 @@ _RECEIPT_KEYS = {
     "sourceRunId",
     "proposedCatalogSha256",
     "proposedManifestSha256",
+    "logicalCatalogSha256",
     "selectionPolicyVersion",
     "qualityEvaluatedAt",
     "inputs",
@@ -212,7 +213,7 @@ def validate_release_input(raw: Any) -> dict[str, Any]:
         raise ReleaseInputError("release input reviewedSourceCommit is invalid")
     if not isinstance(raw["sourceRunId"], str) or not raw["sourceRunId"].isdigit():
         raise ReleaseInputError("release input sourceRunId is invalid")
-    for key in ("proposedCatalogSha256", "proposedManifestSha256"):
+    for key in ("proposedCatalogSha256", "proposedManifestSha256", "logicalCatalogSha256"):
         if not isinstance(raw[key], str) or not SHA64.fullmatch(raw[key]):
             raise ReleaseInputError(f"release input {key} is invalid")
     if not isinstance(raw["selectionPolicyVersion"], str) or not raw["selectionPolicyVersion"]:
@@ -277,71 +278,29 @@ def prepare_release_input(
     catalog_version = proposal.get("catalogVersion")
     catalog_sha = proposal.get("catalogSha256")
     manifest_sha = proposal.get("manifestSha256")
+    logical_sha = proposal.get("logicalCatalogSha256")
     selection_policy = proposal.get("selectionPolicyVersion")
     quality_evaluated_at = proposal.get("qualityEvaluatedAt")
-    provisional = {
-        "schemaVersion": RECEIPT_SCHEMA_VERSION,
-        "sourceKey": source_key,
-        "snapshotId": snapshot_id,
-        "catalogVersion": catalog_version,
-        "proposalKey": proposal_key,
-        "reviewedSourceCommit": "0" * 40,
-        "sourceRunId": "0",
-        "proposedCatalogSha256": catalog_sha,
-        "proposedManifestSha256": manifest_sha,
-        "selectionPolicyVersion": selection_policy,
-        "qualityEvaluatedAt": quality_evaluated_at,
-        "inputs": {},
-    }
-    # Validate all proposal-facing fields before deriving immutable source lineage.
-    provisional["reviewedSourceCommit"] = "1" * 40
-    provisional["sourceRunId"] = "1"
-    validate_release_input(provisional | {"inputs": {
-        key: {
-            "artifactName": "placeholder",
-            "artifactKind": kind,
-            "producerWorkflow": workflow,
-            "payloadSha256": "0" * 64,
-            "payloadByteCount": 0,
-            "recordCount": 0,
-            "contentSchemaVersion": "placeholder",
-        }
-        for key, (kind, workflow) in _EXPECTED_INPUTS.items()
-    }})
+    if not isinstance(logical_sha, str) or not SHA64.fullmatch(logical_sha):
+        raise ReleaseInputError("production proposal logical catalog SHA-256 is missing or invalid")
 
     normalized = _load_object(normalized_handoff_path, "normalized-evidence handoff")
     quality = _load_object(quality_handoff_path, "quality-report handoff")
     exclusions = _load_object(basic_exclusions_handoff_path, "basic-exclusions handoff")
-
     normalized_entry, normalized_producer = _handoff_receipt(
-        label="normalizedEvidence",
-        handoff=normalized,
-        root=normalized_root,
-        artifact_name=normalized_artifact_name,
-        expected_kind="normalized-evidence",
-        expected_workflow="normalize-and-diff.yml",
-        source_key=source_key,
-        snapshot_id=snapshot_id,
+        label="normalizedEvidence", handoff=normalized, root=normalized_root,
+        artifact_name=normalized_artifact_name, expected_kind="normalized-evidence",
+        expected_workflow="normalize-and-diff.yml", source_key=source_key, snapshot_id=snapshot_id,
     )
     quality_entry, quality_producer = _handoff_receipt(
-        label="qualityReport",
-        handoff=quality,
-        root=quality_root,
-        artifact_name=quality_artifact_name,
-        expected_kind="quality-report",
-        expected_workflow="catalog-quality.yml",
-        source_key=source_key,
-        snapshot_id=snapshot_id,
+        label="qualityReport", handoff=quality, root=quality_root,
+        artifact_name=quality_artifact_name, expected_kind="quality-report",
+        expected_workflow="catalog-quality.yml", source_key=source_key, snapshot_id=snapshot_id,
     )
     exclusions_entry, exclusions_producer = _handoff_receipt(
-        label="basicExclusions",
-        handoff=exclusions,
-        root=basic_exclusions_root,
-        artifact_name=basic_exclusions_artifact_name,
-        expected_kind="basic-exclusions",
-        expected_workflow="normalize-and-diff.yml",
-        source_key=source_key,
-        snapshot_id=snapshot_id,
+        label="basicExclusions", handoff=exclusions, root=basic_exclusions_root,
+        artifact_name=basic_exclusions_artifact_name, expected_kind="basic-exclusions",
+        expected_workflow="normalize-and-diff.yml", source_key=source_key, snapshot_id=snapshot_id,
     )
     producers = (normalized_producer, quality_producer, exclusions_producer)
     if len({producer[0] for producer in producers}) != 1:
@@ -359,6 +318,7 @@ def prepare_release_input(
         "sourceRunId": producers[0][2],
         "proposedCatalogSha256": catalog_sha,
         "proposedManifestSha256": manifest_sha,
+        "logicalCatalogSha256": logical_sha,
         "selectionPolicyVersion": selection_policy,
         "qualityEvaluatedAt": quality_evaluated_at,
         "inputs": {
@@ -446,7 +406,6 @@ def _write_json(path: Path, value: dict[str, Any]) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-
     create = subparsers.add_parser("create")
     create.add_argument("--source-key", required=True)
     create.add_argument("--snapshot-id", required=True)
@@ -461,10 +420,8 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--basic-exclusions-root", type=Path, required=True)
     create.add_argument("--basic-exclusions-artifact-name", required=True)
     create.add_argument("--output", type=Path, required=True)
-
     validate = subparsers.add_parser("validate")
     validate.add_argument("--input", type=Path, required=True)
-
     request = subparsers.add_parser("materialize-request")
     request.add_argument("--input", type=Path, required=True)
     request.add_argument("--normalized-handoff", type=Path, required=True)

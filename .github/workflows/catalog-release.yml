@@ -14,7 +14,9 @@ on:
       - "Tools/catalog_security.py"
       - "Tools/catalog_workflow.py"
       - "Tools/production_catalog.py"
+      - "Tools/production_catalog_manifest_review.py"
       - "Tools/production_catalog_release_input.py"
+      - "Tools/production_catalog_release_notes.py"
       - "Tools/production_catalog_request.py"
       - "Tools/validate_catalog.py"
       - ".github/workflows/catalog-release.yml"
@@ -118,7 +120,8 @@ jobs:
             "$ROOT/repository/Data/quality" \
             "$ROOT/repository/Data/sources/open-food-facts" \
             "$ROOT/database/payload" \
-            "$ROOT/manifest/payload"
+            "$ROOT/manifest/payload" \
+            "$ROOT/release-notes/payload"
           cp Data/quality/catalog-quality-policy-v1.json \
             "$ROOT/repository/Data/quality/catalog-quality-policy-v1.json"
           cp Data/sources/open-food-facts/source-policy-v1.json \
@@ -134,6 +137,15 @@ jobs:
             --integrated-source-commit "$GITHUB_SHA" \
             --workflow-run "github:${GITHUB_RUN_ID}:attempt:${GITHUB_RUN_ATTEMPT}" \
             --output "$ROOT/production-build-request.json"
+          ROOT="$ROOT" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          request_path = Path(os.environ['ROOT']) / 'production-build-request.json'
+          request = json.loads(request_path.read_text(encoding='utf-8'))
+          request['releaseNotesOutputPath'] = 'release-notes/payload/catalog-release-notes.md'
+          request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
           python3 Tools/production_catalog_request.py validate \
             --request "$ROOT/production-build-request.json" \
             --root "$ROOT"
@@ -141,6 +153,16 @@ jobs:
             --request "$ROOT/production-build-request.json" \
             --root "$ROOT" \
             --workflow-contract Data/workflows/catalog-workflow-contract-v1.json
+          python3 Tools/production_catalog.py validate \
+            --database "$ROOT/database/payload/catalog.sqlite3" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          python3 Tools/production_catalog_release_notes.py \
+            --release-notes "$ROOT/release-notes/payload/catalog-release-notes.md" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
+            --quality-report "$ROOT/quality/payload/quality-report.json"
+          python3 Tools/production_catalog_manifest_review.py \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
+            --quality-report "$ROOT/quality/payload/quality-report.json"
           python3 Tools/production_catalog.py validate \
             --database "$ROOT/database/payload/catalog.sqlite3" \
             --manifest "$ROOT/manifest/payload/catalog-manifest.json"
@@ -159,6 +181,11 @@ jobs:
           for key, value in expected.items():
               if manifest.get(key) != value:
                   raise SystemExit(f'post-merge manifest {key} differs from reviewed release lineage')
+          if not isinstance(manifest.get('releaseReview'), dict):
+              raise SystemExit('post-merge manifest is missing releaseReview metadata')
+          release_notes = (root / 'release-notes/payload/catalog-release-notes.md').read_text(encoding='utf-8')
+          if '## HF-PIPELINE-010 release summary' not in release_notes:
+              raise SystemExit('post-merge production release notes are missing the formal release summary')
           PY
 
       - name: Materialize deterministic synthetic fallback
@@ -218,10 +245,12 @@ jobs:
           receipt_path = Path('Data/catalog/production-catalog-release-input-v1.json')
           if os.environ['PRODUCTION'] == 'true':
               receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+              release_notes = root / 'release-notes/payload/catalog-release-notes.md'
               report['reviewedSourceCommit'] = receipt['reviewedSourceCommit']
               report['reviewedSourceRunId'] = receipt['sourceRunId']
               report['proposedCatalogSha256'] = receipt['proposedCatalogSha256']
               report['proposedManifestSha256'] = receipt['proposedManifestSha256']
+              report['releaseNotesSha256'] = hashlib.sha256(release_notes.read_bytes()).hexdigest()
           else:
               report['sourcePolicy'] = json.loads(manifest.read_text(encoding='utf-8'))['sourcePolicy']
           (root / 'release/payload/release-report.json').write_text(
@@ -251,6 +280,7 @@ jobs:
           path: |
             ${{ runner.temp }}/release-root/database
             ${{ runner.temp }}/release-root/manifest
+            ${{ runner.temp }}/release-root/release-notes
             ${{ runner.temp }}/release-root/release
           if-no-files-found: error
           retention-days: 14

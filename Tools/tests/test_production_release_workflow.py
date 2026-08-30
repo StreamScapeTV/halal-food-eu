@@ -32,6 +32,33 @@ class ProductionReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("reviewedSourceRunId", self.text)
         self.assertIn("post-merge manifest {key} differs from reviewed release lineage", self.text)
 
+    def test_production_release_finalizes_review_metadata_and_release_notes(self) -> None:
+        production = self.text.index("- name: Materialize production catalog from reviewed immutable inputs")
+        fallback = self.text.index("- name: Materialize deterministic synthetic fallback")
+        block = self.text[production:fallback]
+        self.assertIn("request['releaseNotesOutputPath'] = 'release-notes/payload/catalog-release-notes.md'", block)
+        self.assertIn("Tools/production_catalog_release_notes.py", block)
+        self.assertIn("Tools/production_catalog_manifest_review.py", block)
+        self.assertIn("post-merge manifest is missing releaseReview metadata", block)
+        self.assertIn("## HF-PIPELINE-010 release summary", block)
+        build = block.index("Tools/production_catalog_request.py build")
+        first_validate = block.index("Tools/production_catalog.py validate", build)
+        notes = block.index("Tools/production_catalog_release_notes.py", first_validate)
+        review = block.index("Tools/production_catalog_manifest_review.py", notes)
+        second_validate = block.index("Tools/production_catalog.py validate", review)
+        lineage = block.index("post-merge manifest {key} differs from reviewed release lineage", second_validate)
+        self.assertLess(build, first_validate)
+        self.assertLess(first_validate, notes)
+        self.assertLess(notes, review)
+        self.assertLess(review, second_validate)
+        self.assertLess(second_validate, lineage)
+
+    def test_release_workflow_tracks_finalizers_and_packages_notes_in_evidence(self) -> None:
+        self.assertIn('- "Tools/production_catalog_release_notes.py"', self.text)
+        self.assertIn('- "Tools/production_catalog_manifest_review.py"', self.text)
+        self.assertIn("releaseNotesSha256", self.text)
+        self.assertIn("${{ runner.temp }}/release-root/release-notes", self.text)
+
     def test_legacy_fixture_builder_is_confined_to_explicit_nonproduction_fallback(self) -> None:
         fallback = self.text.index("- name: Materialize deterministic synthetic fallback")
         builder = self.text.index("python3 Tools/catalog_builder.py", fallback)

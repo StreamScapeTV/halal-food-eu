@@ -143,7 +143,7 @@ private struct FreshnessWarning: View {
     private var detail: String {
         switch freshness {
         case .current:
-            "The reviewed formulation is current under the catalog policy."
+            return "The reviewed formulation is current under the catalog policy."
         case .refreshRecommended, .stale:
             if let observedAt {
                 return "This formulation was recorded on \(observedAt.formatted(date: .long, time: .omitted)). Check the current package before relying on the result."

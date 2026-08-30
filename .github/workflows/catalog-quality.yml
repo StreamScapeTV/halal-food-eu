@@ -59,7 +59,8 @@ jobs:
             --payload-root "$RUNNER_TEMP/change"
           python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
           python3 Tools/catalog_quality.py validate-policy \
-            --policy Data/quality/catalog-quality-policy-v1.json
+            --policy Data/quality/catalog-quality-policy-v1.json \
+            --source-reviews Data/quality/source-review-policy-v1.json
 
       - name: Validate source-specific change semantics
         env:
@@ -100,13 +101,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/quality/payload"
+          PROPOSAL_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           python3 Tools/catalog_quality.py evaluate \
             --policy Data/quality/catalog-quality-policy-v1.json \
+            --source-reviews Data/quality/source-review-policy-v1.json \
             --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
             --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
             --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
             --source-key "$SOURCE_KEY" \
             --snapshot-id "$SNAPSHOT_ID" \
+            --as-of "$PROPOSAL_AT" \
             --output "$RUNNER_TEMP/quality/payload/quality-report.json" \
             --summary-output "$RUNNER_TEMP/quality/quality-summary.md" \
             --defer-blocker-exit
@@ -123,7 +127,7 @@ jobs:
             --completeness complete \
             --redistribution-class metadata-only \
             --content-schema-version quality-report-v1 \
-            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --created-at "$PROPOSAL_AT" \
             --output "$RUNNER_TEMP/quality/handoff.json"
 
       - name: Define artifact name

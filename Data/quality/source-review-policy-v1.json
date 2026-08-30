@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "1.0.0",
+  "sources": {
+    "open-food-facts": {
+      "state": "approved",
+      "reviewedAt": "2026-08-30T00:00:00Z",
+      "expiresAt": "2027-08-30T00:00:00Z",
+      "licenseIdentifiers": ["ODbL"],
+      "scope": "Public bulk product database use under the committed Open Food Facts source policy."
+    },
+    "open-prices": {
+      "state": "approved",
+      "reviewedAt": "2026-08-30T00:00:00Z",
+      "expiresAt": "2027-08-30T00:00:00Z",
+      "licenseIdentifiers": ["ODbL"],
+      "scope": "Public bulk retailer-observation use under the committed Open Prices source policy."
+    }
+  }
+}

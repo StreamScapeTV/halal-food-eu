@@ -52,6 +52,37 @@ struct CatalogIntegrationTests {
         #expect(product.observation == nil)
     }
 
+    @Test("A known product without a current reviewed assessment remains a truthful unknown")
+    func loadsKnownUnreviewedProductAsUnknown() async throws {
+        let fixture = try makeTemporaryCatalogFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        try executeSQLite(
+            """
+            UPDATE products
+            SET current_assessment_id = NULL
+            WHERE gtin = '00200000000028';
+            """,
+            databaseURL: fixture.database
+        )
+        try refreshManifestDigest(databaseURL: fixture.database, manifestURL: fixture.manifest)
+
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.database,
+            manifestURL: fixture.manifest
+        )
+        let barcode = try Barcode(validating: "00200000000028")
+        let product = try #require(try await catalog.product(for: barcode))
+
+        #expect(product.assessment.status == .unknown)
+        #expect(product.assessment.summary == "No reviewed halal assessment is available for this product.")
+        #expect(product.assessment.methodologyVersion == nil)
+        #expect(product.assessment.reviewedAt == nil)
+        #expect(product.assessment.reasons.map(\.code) == [HalalAssessment.missingReviewReasonCode])
+        #expect(product.assessment.certifications.isEmpty)
+        #expect(product.observation != nil)
+    }
+
     @Test("A valid absent GTIN returns nil instead of an unknown product")
     func returnsNilForAbsentProduct() async throws {
         let catalog = try makeCatalog()
@@ -183,7 +214,7 @@ struct CatalogIntegrationTests {
 
         do {
             _ = try await catalog.product(for: barcode)
-            Issue.record("Catalogs with foreign-key violations must fail closed")
+            Issue.record("Catalogs with foreign-key violations must not be readable")
         } catch ProductCatalogError.invalidRecord {
             // The fixture proves a digest-matched foreign-key violation above. SQLite may
             // surface it through either integrity validation path across system versions.

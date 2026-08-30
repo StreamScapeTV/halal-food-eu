@@ -30,10 +30,14 @@ PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.
 USES_LINE = re.compile(r"^-?\s*uses\s*:\s*(?P<target>.+?)\s*$")
 PERMISSIONS_HEADER = re.compile(r"^(?P<indent> *)permissions\s*:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 PERMISSION_ENTRY = re.compile(r"^(?P<indent> +)(?P<scope>[A-Za-z0-9-]+)\s*:\s*(?P<access>read|write|none)\s*(?:#.*)?$")
-RELEASE_BUILDER = "python3 Tools/catalog_builder.py"
-RELEASE_VALIDATOR = "python3 Tools/validate_catalog.py"
-RELEASE_DATABASE = "HalalFoodEU/Resources/catalog.sqlite3"
-RELEASE_MANIFEST = "HalalFoodEU/Resources/catalog-manifest.json"
+RELEASE_FIXTURE_BUILDER = "python3 Tools/catalog_builder.py"
+RELEASE_FIXTURE_VALIDATOR = "python3 Tools/validate_catalog.py"
+RELEASE_PRODUCTION_RECEIPT = "Data/catalog/production-catalog-release-input-v1.json"
+RELEASE_PRODUCTION_MATERIALIZER = "python3 Tools/production_catalog_release_input.py materialize-request"
+RELEASE_PRODUCTION_BUILDER = "python3 Tools/production_catalog_request.py build"
+RELEASE_PRODUCTION_VALIDATOR = "python3 Tools/production_catalog.py validate"
+RELEASE_DATABASE = "database/payload/catalog.sqlite3"
+RELEASE_MANIFEST = "manifest/payload/catalog-manifest.json"
 XCODEGEN_VERSION = "2.46.0"
 XCODEGEN_COMMIT = "8445e778451c7e44237b90281bde622d764b0084"
 DANGEROUS_SHELL_PATTERNS = (
@@ -95,22 +99,55 @@ def _validate_permissions(path: Path, text: str) -> None:
 
 
 def _validate_release_materialization(path: Path, text: str) -> None:
-    """Ensure release evidence never assumes ignored generated bundle files exist."""
-    if text.count(RELEASE_BUILDER) < 2:
-        raise ContractError(
-            f"{path.name} must materialize generated catalog subjects in evidence and attestation jobs"
-        )
-    if text.count(RELEASE_VALIDATOR) < 2:
-        raise ContractError(f"{path.name} must validate both generated release subject sets")
-    if text.find(RELEASE_BUILDER) > text.find(RELEASE_VALIDATOR):
-        raise ContractError(f"{path.name} must materialize the catalog before validating release evidence")
-    for required in (RELEASE_DATABASE, RELEASE_MANIFEST, "Data/sample-products.json"):
-        if required not in text:
-            raise ContractError(f"{path.name} is missing integrated release input/path {required}")
-    if text.count("Tools/catalog_security.py bind-manifest") < 2:
-        raise ContractError(f"{path.name} must bind each release manifest to reviewed source policy")
+    """Ensure release evidence rebuilds from reviewed inputs instead of ignored files."""
+    required = (
+        RELEASE_PRODUCTION_RECEIPT,
+        "python3 Tools/production_catalog_release_input.py validate",
+        RELEASE_PRODUCTION_MATERIALIZER,
+        '--integrated-source-commit "$GITHUB_SHA"',
+        RELEASE_PRODUCTION_BUILDER,
+        RELEASE_PRODUCTION_VALIDATOR,
+        "run-id: ${{ steps.mode.outputs.source_run_id }}",
+        "github-token: ${{ github.token }}",
+        RELEASE_DATABASE,
+        RELEASE_MANIFEST,
+        RELEASE_FIXTURE_BUILDER,
+        RELEASE_FIXTURE_VALIDATOR,
+        "Data/sample-products.json",
+        "release-evidence-${{ github.sha }}",
+    )
+    for value in required:
+        if value not in text:
+            raise ContractError(f"{path.name} is missing integrated release input/path {value}")
+
+    if text.find(RELEASE_PRODUCTION_MATERIALIZER) > text.find(RELEASE_PRODUCTION_BUILDER):
+        raise ContractError(f"{path.name} must verify reviewed inputs before production rematerialization")
+    if text.find(RELEASE_PRODUCTION_BUILDER) > text.find(RELEASE_PRODUCTION_VALIDATOR):
+        raise ContractError(f"{path.name} must materialize the production catalog before validation")
+    if text.find(RELEASE_FIXTURE_BUILDER) > text.find(RELEASE_FIXTURE_VALIDATOR):
+        raise ContractError(f"{path.name} must materialize the fixture catalog before validation")
+    if text.count("run-id: ${{ steps.mode.outputs.source_run_id }}") < 3:
+        raise ContractError(f"{path.name} must download all reviewed production inputs from the receipt run")
+    if text.count("github-token: ${{ github.token }}") < 3:
+        raise ContractError(f"{path.name} must authenticate every cross-run production artifact download")
+    if text.count(RELEASE_PRODUCTION_VALIDATOR) < 2:
+        raise ContractError(f"{path.name} must revalidate production subjects before optional attestation")
+    if text.count(RELEASE_FIXTURE_VALIDATOR) < 2:
+        raise ContractError(f"{path.name} must revalidate fixture subjects before optional attestation")
+    if text.count("Tools/catalog_security.py bind-manifest") < 1:
+        raise ContractError(f"{path.name} must bind the synthetic fallback manifest to reviewed source policy")
     if text.count("Tools/catalog_security.py validate-manifest") < 2:
-        raise ContractError(f"{path.name} must validate each release manifest source-policy binding")
+        raise ContractError(f"{path.name} must validate synthetic source-policy binding before evidence and attestation")
+
+    attestation = text.find("  attestation:")
+    if attestation < 0:
+        raise ContractError(f"{path.name} is missing optional attestation job")
+    attestation_text = text[attestation:]
+    for forbidden in (RELEASE_FIXTURE_BUILDER, RELEASE_PRODUCTION_BUILDER):
+        if forbidden in attestation_text:
+            raise ContractError(
+                f"{path.name} attestation must reuse exact release-evidence subjects instead of rebuilding them"
+            )
 
 
 def _validate_xcodegen_pin(path: Path, text: str) -> None:

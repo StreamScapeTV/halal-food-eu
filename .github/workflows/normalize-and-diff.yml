@@ -109,6 +109,21 @@ jobs:
           evidence = json.loads(Path(os.environ["EVIDENCE"]).read_text(encoding="utf-8"))
           print(f"record_count={len(evidence['currentSelections'])}")
           PY
+          elif [[ "$SOURCE_KEY" == "open-prices" ]]; then
+            test -f "$RUNNER_TEMP/source/acquisition-metadata.json"
+            python3 Tools/open_prices.py normalize \
+              --snapshot "$RUNNER_TEMP/source/payload/source-records.jsonl" \
+              --metadata "$RUNNER_TEMP/source/acquisition-metadata.json" \
+              --evidence-output "$RUNNER_TEMP/normalized/payload/evidence.json" \
+              --quality-output "$RUNNER_TEMP/normalized/source-quality.json" \
+              --change-output "$RUNNER_TEMP/change/payload/change-report.json"
+            python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+            EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+          evidence = json.loads(Path(os.environ["EVIDENCE"]).read_text(encoding="utf-8"))
+          print(f"record_count={len(evidence['retailerEvidence'])}")
+          PY
           else
             echo "No normalized adapter is admitted for $SOURCE_KEY" >&2
             exit 2

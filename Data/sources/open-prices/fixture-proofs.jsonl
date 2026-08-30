@@ -1,0 +1,2 @@
+{"id":101,"location_id":1,"type":"RECEIPT","date":"2026-08-20","currency":"EUR","owner":"fixture-user@example.invalid","file_path":"private/receipt-101.jpg","created":"2026-08-20T15:30:00Z","updated":"2026-08-20T15:30:00Z"}
+{"id":102,"location_id":2,"type":"PRICE_TAG","date":"2026-08-21","currency":"EUR","owner":"fixture-user-2","file_path":"private/tag-102.jpg","created":"2026-08-21T16:00:00Z","updated":"2026-08-21T16:00:00Z"}

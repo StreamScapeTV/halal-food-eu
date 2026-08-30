@@ -72,6 +72,33 @@ jobs:
           python3 -m json.tool Data/sources/open-food-facts/source-policy-v1.json >/dev/null
           python3 -m unittest discover -s Tools/tests -p 'test_open_food_facts*.py'
 
+      - name: Validate Open Prices retailer-observation adapter
+        run: |
+          python3 -m py_compile \
+            Tools/open_prices.py \
+            Tools/open_prices_common.py \
+            Tools/open_prices_acquire.py \
+            Tools/open_prices_normalize.py \
+            Tools/tests/test_open_prices.py
+          python3 -m json.tool Data/sources/open-prices/source-policy-v1.json >/dev/null
+          python3 -m json.tool Data/sources/open-prices/retailer-aliases-v1.json >/dev/null
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_open_prices.py'
+          mkdir -p "$RUNNER_TEMP/open-prices"
+          PYTHONPATH=Tools python3 Tools/open_prices.py acquire \
+            --output "$RUNNER_TEMP/open-prices/source-records.jsonl" \
+            --metadata-output "$RUNNER_TEMP/open-prices/acquisition-metadata.json" \
+            --snapshot-id ci-open-prices-fixture \
+            --mode fixture \
+            --retrieved-at 2026-08-30T00:00:00Z
+          PYTHONPATH=Tools python3 Tools/open_prices.py normalize \
+            --snapshot "$RUNNER_TEMP/open-prices/source-records.jsonl" \
+            --metadata "$RUNNER_TEMP/open-prices/acquisition-metadata.json" \
+            --evidence-output "$RUNNER_TEMP/open-prices/evidence.json" \
+            --quality-output "$RUNNER_TEMP/open-prices/source-quality.json" \
+            --change-output "$RUNNER_TEMP/open-prices/change-report.json"
+          python3 Tools/evidence_model.py validate \
+            --input "$RUNNER_TEMP/open-prices/evidence.json"
+
       - name: Validate catalog workflow contract and trust boundaries
         run: |
           python3 -m py_compile \

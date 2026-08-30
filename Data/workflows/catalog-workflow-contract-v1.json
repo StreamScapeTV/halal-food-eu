@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -143,6 +143,16 @@
       "credentialsRequired": false,
       "redistributionClass": "redistributable",
       "allowedHosts": ["static.openfoodfacts.org"],
+      "adapterVersion": "1.0.0"
+    },
+    {
+      "key": "open-prices",
+      "enabled": true,
+      "sourceClass": "open-database",
+      "accessMethod": "https-export",
+      "credentialsRequired": false,
+      "redistributionClass": "redistributable",
+      "allowedHosts": ["prices.openfoodfacts.org"],
       "adapterVersion": "1.0.0"
     }
   ],

@@ -210,35 +210,38 @@ def validate_release_gate(
         gtin = str(selection.get("gtin", ""))
         market = str(selection.get("market", ""))
         assessment_id = selection.get("assessmentID")
-        if not isinstance(assessment_id, str) or assessment_id not in assessments:
-            raise ValueError(f"{gtin}/{market} has no current reviewed assessment")
-        assessment = assessments[assessment_id]
-        status = assessment.get("status")
-        if not isinstance(status, str):
-            raise ValueError(f"{gtin}/{market} has an invalid assessment status")
-        status_counts[status] += 1
+        assessment: dict[str, Any] | None = None
+        status: str | None = None
+        if assessment_id is not None:
+            if not isinstance(assessment_id, str) or assessment_id not in assessments:
+                raise ValueError(f"{gtin}/{market} selected assessment is missing")
+            assessment = assessments[assessment_id]
+            status = assessment.get("status")
+            if not isinstance(status, str):
+                raise ValueError(f"{gtin}/{market} has an invalid assessment status")
+            status_counts[status] += 1
 
-        approved = _approved_reviews(envelope, assessment_id)
-        terminal = _terminal_reviews(envelope, assessment_id)
-        if terminal:
-            raise ValueError(f"{gtin}/{market} current assessment has a terminal rejected/superseded review")
-        reviewers = sorted({str(item.get("reviewerID")) for item in approved if str(item.get("reviewerID", "")).strip()})
-        if not reviewers:
-            raise ValueError(f"{gtin}/{market} current assessment has no approved reviewer")
-        reviewed_times = sorted(_parse_timestamp(item.get("reviewedAt"), "approved review reviewedAt") for item in approved)
-        identity = identities.get(selection.get("identityObservationID"))
-        identity_source = sources.get(identity.get("sourceKey")) if isinstance(identity, dict) else None
-        synthetic = isinstance(identity_source, dict) and identity_source.get("sourceClass") == "synthetic"
-        required = 1 if synthetic else required_reviewers
-        if status in positives and len(reviewers) < required:
-            second_review_deficits += 1
-            raise ValueError(
-                f"{gtin}/{market} positive assessment has {len(reviewers)} independent reviewer(s); requires {required}"
-            )
-        assessment_reviews[assessment_id] = {
-            "reviewedAt": reviewed_times[-1].isoformat().replace("+00:00", "Z"),
-            "approvedReviewerCount": len(reviewers),
-        }
+            approved = _approved_reviews(envelope, assessment_id)
+            terminal = _terminal_reviews(envelope, assessment_id)
+            if terminal:
+                raise ValueError(f"{gtin}/{market} current assessment has a terminal rejected/superseded review")
+            reviewers = sorted({str(item.get("reviewerID")) for item in approved if str(item.get("reviewerID", "")).strip()})
+            if not reviewers:
+                raise ValueError(f"{gtin}/{market} current assessment has no approved reviewer")
+            reviewed_times = sorted(_parse_timestamp(item.get("reviewedAt"), "approved review reviewedAt") for item in approved)
+            identity = identities.get(selection.get("identityObservationID"))
+            identity_source = sources.get(identity.get("sourceKey")) if isinstance(identity, dict) else None
+            synthetic = isinstance(identity_source, dict) and identity_source.get("sourceClass") == "synthetic"
+            required = 1 if synthetic else required_reviewers
+            if status in positives and len(reviewers) < required:
+                second_review_deficits += 1
+                raise ValueError(
+                    f"{gtin}/{market} positive assessment has {len(reviewers)} independent reviewer(s); requires {required}"
+                )
+            assessment_reviews[assessment_id] = {
+                "reviewedAt": reviewed_times[-1].isoformat().replace("+00:00", "Z"),
+                "approvedReviewerCount": len(reviewers),
+            }
 
         ingredient_id = selection.get("ingredientObservationID")
         if ingredient_id is None:
@@ -254,8 +257,11 @@ def validate_release_gate(
                 refresh_months=refresh_months,
                 stale_months=stale_months,
             )
+            approved_targets = {ingredient_id}
+            if isinstance(assessment_id, str):
+                approved_targets.add(assessment_id)
             if ingredient.get("supersedesID") and not any(
-                review.get("targetID") in {ingredient_id, assessment_id}
+                review.get("targetID") in approved_targets
                 for review in envelope.get("reviews", [])
                 if isinstance(review, dict) and review.get("state") == "approved"
             ):
@@ -274,7 +280,9 @@ def validate_release_gate(
             if status in positives:
                 raise ValueError(f"{gtin}/{market} positive assessment cannot be compiled with a formulation conflict")
 
-        if status == "not-halal" and not any(reason.get("severity") == "prohibitive" for reason in assessment.get("reasons", [])):
+        if assessment is not None and status == "not-halal" and not any(
+            reason.get("severity") == "prohibitive" for reason in assessment.get("reasons", [])
+        ):
             raise ValueError(f"{gtin}/{market} not-halal assessment lacks a prohibitive structured reason")
 
     metrics = quality_report["metrics"]

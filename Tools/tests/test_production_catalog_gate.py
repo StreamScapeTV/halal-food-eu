@@ -121,6 +121,13 @@ def _report(envelope: dict, *, status: str = "pass") -> dict:
     return report
 
 
+def _redigest(report: dict) -> None:
+    report.pop("reportSha256", None)
+    report["reportSha256"] = hashlib.sha256(
+        production_catalog_gate.canonical_json(report).encode("utf-8")
+    ).hexdigest()
+
+
 class ProductionCatalogGateTests(unittest.TestCase):
     def test_accepts_exact_positive_with_independent_reviews(self):
         envelope = _envelope()
@@ -133,14 +140,29 @@ class ProductionCatalogGateTests(unittest.TestCase):
         self.assertEqual(result["assessmentReviews"]["assessment-1"]["reviewedAt"], "2026-08-22T12:00:00Z")
         self.assertEqual(result["ingredientFreshness"]["ingredient-1"], "fresh")
 
+    def test_accepts_current_selection_without_assessment(self):
+        envelope = _envelope()
+        envelope["currentSelections"][0]["assessmentID"] = None
+        envelope["assessments"] = []
+        envelope["reviews"] = []
+        report = _report(envelope)
+        report["metrics"]["assessmentStatus"]["halal-reviewed"] = 0
+        _redigest(report)
+
+        result = production_catalog_gate.validate_release_gate(
+            envelope=envelope,
+            quality_report=report,
+            quality_policy=_policy(),
+        )
+
+        self.assertEqual(result["assessmentReviews"], {})
+        self.assertEqual(result["ingredientFreshness"]["ingredient-1"], "fresh")
+
     def test_rejects_missing_second_independent_positive_review(self):
         envelope = _envelope(reviewer_count=1)
         report = _report(envelope)
         report["metrics"]["positiveSecondReviewDeficits"] = 1
-        report.pop("reportSha256")
-        report["reportSha256"] = hashlib.sha256(
-            production_catalog_gate.canonical_json(report).encode("utf-8")
-        ).hexdigest()
+        _redigest(report)
         with self.assertRaisesRegex(ValueError, "requires 2"):
             production_catalog_gate.validate_release_gate(
                 envelope=envelope,
@@ -174,10 +196,7 @@ class ProductionCatalogGateTests(unittest.TestCase):
         report["sourceKey"] = "synthetic-fixture"
         report["snapshotID"] = "fixture-snapshot"
         report["sourceRights"] = {"fixtureOnly": True}
-        report.pop("reportSha256")
-        report["reportSha256"] = hashlib.sha256(
-            production_catalog_gate.canonical_json(report).encode("utf-8")
-        ).hexdigest()
+        _redigest(report)
         result = production_catalog_gate.validate_release_gate(
             envelope=envelope,
             quality_report=report,
@@ -192,10 +211,7 @@ class ProductionCatalogGateTests(unittest.TestCase):
         report = _report(envelope)
         report["metrics"]["assessmentStatus"]["halal-reviewed"] = 0
         report["metrics"]["assessmentStatus"]["not-halal"] = 1
-        report.pop("reportSha256")
-        report["reportSha256"] = hashlib.sha256(
-            production_catalog_gate.canonical_json(report).encode("utf-8")
-        ).hexdigest()
+        _redigest(report)
         with self.assertRaisesRegex(ValueError, "prohibitive"):
             production_catalog_gate.validate_release_gate(
                 envelope=envelope,

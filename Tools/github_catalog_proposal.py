@@ -124,6 +124,29 @@ def _receipt_bytes(receipt: dict[str, Any]) -> bytes:
     return (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
+def _decode_receipt_response(value: Any, label: str) -> bytes:
+    if not isinstance(value, dict) or value.get("type") != "file":
+        raise ProposalMutationError(f"{label} path is not a regular file")
+    encoded = value.get("content")
+    if not isinstance(encoded, str):
+        raise ProposalMutationError(f"{label} content is unavailable")
+    try:
+        return base64.b64decode(encoded.replace("\n", ""), validate=True)
+    except ValueError as exc:
+        raise ProposalMutationError(f"{label} content is invalid base64") from exc
+
+
+def _validated_receipt_bytes(data: bytes, label: str) -> dict[str, Any]:
+    try:
+        raw = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProposalMutationError(f"{label} is not valid UTF-8 JSON") from exc
+    try:
+        return validate_release_input(raw)
+    except ReleaseInputError as exc:
+        raise ProposalMutationError(f"{label} is invalid: {exc}") from exc
+
+
 def _nonnegative_int(value: Any, label: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ProposalMutationError(f"proposal release summary {label} is invalid")
@@ -193,6 +216,7 @@ def proposal_copy(receipt: dict[str, Any], proposal: dict[str, Any]) -> tuple[st
             f"- Detailed records: `{record_count}`",
             f"- Proposed catalog SHA-256: `{receipt['proposedCatalogSha256']}`",
             f"- Proposed manifest SHA-256: `{receipt['proposedManifestSha256']}`",
+            f"- Logical catalog SHA-256: `{receipt['logicalCatalogSha256']}`",
             f"- Selection policy: `{receipt['selectionPolicyVersion']}`",
             f"- Immutable source run: `{receipt['sourceRunId']}`",
             "",
@@ -256,15 +280,30 @@ def materialize(
         raise ProposalMutationError("proposal report catalog digest differs from release receipt")
     if proposal.get("manifestSha256") != validated["proposedManifestSha256"]:
         raise ProposalMutationError("proposal report manifest digest differs from release receipt")
+    if proposal.get("logicalCatalogSha256") != validated["logicalCatalogSha256"]:
+        raise ProposalMutationError("proposal report logical catalog digest differs from release receipt")
     if proposal.get("requiresHumanReview") is not True or proposal.get("materialChangeAutoMergeAllowed") is not False:
         raise ProposalMutationError("proposal report does not require fail-closed human review")
 
-    # Validate and render the review copy before mutating any deterministic branch.
+    # Validate and render review copy before any deterministic branch mutation.
     title, body = proposal_copy(validated, proposal)
 
     owner = _repository_owner(repository)
     branch = validated["proposalKey"]
     desired = _receipt_bytes(validated)
+
+    # Compare against the accepted receipt at the exact reviewed base commit before
+    # creating a branch. A new source run/version may change physical SQLite bytes and
+    # receipt lineage while leaving all runtime/evidence semantics unchanged. In that
+    # case issue #12 requires no generated PR at all.
+    accepted = client.get_optional(_content_path(base_sha))
+    if accepted is not None:
+        accepted_receipt = _validated_receipt_bytes(
+            _decode_receipt_response(accepted, "accepted main release receipt"),
+            "accepted main release receipt",
+        )
+        if accepted_receipt["logicalCatalogSha256"] == validated["logicalCatalogSha256"]:
+            return {"branch": branch, "pullRequest": None, "unchanged": True}
 
     ref = client.get_optional(_ref_path(branch))
     if ref is None:
@@ -281,15 +320,7 @@ def materialize(
             },
         )
     else:
-        if not isinstance(existing, dict) or existing.get("type") != "file":
-            raise ProposalMutationError("existing proposal receipt path is not a regular file")
-        encoded = existing.get("content")
-        if not isinstance(encoded, str):
-            raise ProposalMutationError("existing proposal receipt content is unavailable")
-        try:
-            current = base64.b64decode(encoded.replace("\n", ""), validate=True)
-        except ValueError as exc:
-            raise ProposalMutationError("existing proposal receipt content is invalid base64") from exc
+        current = _decode_receipt_response(existing, "existing proposal receipt")
         if current != desired:
             raise ProposalMutationError("existing deterministic proposal branch contains a different release receipt")
 

@@ -126,6 +126,7 @@ jobs:
     needs: [trusted-default-branch, quality, build]
     uses: ./.github/workflows/propose-catalog-update.yml
     with:
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
       snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       database_artifact_name: ${{ needs.build.outputs.database_artifact_name }}
       manifest_artifact_name: ${{ needs.build.outputs.manifest_artifact_name }}

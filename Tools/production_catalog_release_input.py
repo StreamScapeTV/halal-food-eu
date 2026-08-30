@@ -395,6 +395,7 @@ def build_request_from_release_input(
         "sourceCommit": integrated_source_commit,
         "workflowRun": workflow_run,
         "maxDatabaseBytes": MAX_DATABASE_BYTES,
+        "expectedLogicalCatalogSha256": validated["logicalCatalogSha256"],
     }
 
 

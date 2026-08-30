@@ -19,9 +19,18 @@ SPEC.loader.exec_module(proposal_module)
 
 
 class FakeClient:
-    def __init__(self, *, branch_exists: bool = False, receipt: bytes | None = None, compare_files: list[str] | None = None, pull: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        branch_exists: bool = False,
+        branch_receipt: bytes | None = None,
+        accepted_receipt: bytes | None = None,
+        compare_files: list[str] | None = None,
+        pull: int | None = None,
+    ) -> None:
         self.branch_exists = branch_exists
-        self.receipt = receipt
+        self.branch_receipt = branch_receipt
+        self.accepted_receipt = accepted_receipt
         self.compare_files = [proposal_module.RECEIPT_PATH] if compare_files is None else compare_files
         self.pull = pull
         self.posts: list[tuple[str, dict[str, object]]] = []
@@ -31,9 +40,12 @@ class FakeClient:
         if path.startswith("/git/ref/"):
             return {"ref": "refs/heads/x"} if self.branch_exists else None
         if path.startswith("/contents/"):
-            if self.receipt is None:
+            query = parse_qs(urlsplit(path).query)
+            ref = query.get("ref", [None])[0]
+            data = self.accepted_receipt if ref == "a" * 40 else self.branch_receipt
+            if data is None:
                 return None
-            return {"type": "file", "content": base64.b64encode(self.receipt).decode("ascii")}
+            return {"type": "file", "content": base64.b64encode(data).decode("ascii")}
         raise AssertionError(path)
 
     def get(self, path: str):
@@ -56,7 +68,7 @@ class FakeClient:
 
     def put(self, path: str, body: dict[str, object]):
         self.puts.append((path, body))
-        self.receipt = base64.b64decode(str(body["content"]))
+        self.branch_receipt = base64.b64decode(str(body["content"]))
         return {"content": {"path": proposal_module.RECEIPT_PATH}}
 
 
@@ -79,6 +91,7 @@ class GitHubCatalogProposalTests(unittest.TestCase):
             "sourceRunId": "33300000123",
             "proposedCatalogSha256": "1" * 64,
             "proposedManifestSha256": "2" * 64,
+            "logicalCatalogSha256": "5" * 64,
             "selectionPolicyVersion": "1.0.0",
             "qualityEvaluatedAt": "2026-08-30T15:00:00Z",
             "inputs": {
@@ -105,6 +118,7 @@ class GitHubCatalogProposalTests(unittest.TestCase):
             "proposalKey": "catalog-update/open-food-facts-0123456789abcdef",
             "catalogSha256": "1" * 64,
             "manifestSha256": "2" * 64,
+            "logicalCatalogSha256": "5" * 64,
             "recordCount": 53774,
             "releaseSummary": {
                 "recordCount": 53774,
@@ -133,6 +147,10 @@ class GitHubCatalogProposalTests(unittest.TestCase):
             "materialChangeAutoMergeAllowed": False,
         }
 
+    @staticmethod
+    def _bytes(receipt: dict[str, object]) -> bytes:
+        return (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
     def test_new_proposal_creates_one_receipt_branch_and_pr(self) -> None:
         client = FakeClient()
         result = proposal_module.materialize(
@@ -152,10 +170,60 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertNotIn("catalog.sqlite3", serialized_writes)
         self.assertNotIn("HalalFoodEU/Resources", serialized_writes)
 
+    def test_same_logical_catalog_as_accepted_main_creates_no_branch_or_pr(self) -> None:
+        accepted = self._receipt()
+        accepted["snapshotId"] = "off-2026-08-01"
+        accepted["catalogVersion"] = "1.1.0"
+        accepted["sourceRunId"] = "33200000123"
+        accepted["proposedCatalogSha256"] = "8" * 64
+        accepted["proposedManifestSha256"] = "9" * 64
+        client = FakeClient(accepted_receipt=self._bytes(accepted))
+        result = proposal_module.materialize(
+            client=client,
+            repository="StreamScapeTV/halal-food-eu",
+            base_ref="main",
+            base_sha="a" * 40,
+            receipt=self._receipt(),
+            proposal=self._proposal(),
+        )
+        self.assertTrue(result["unchanged"])
+        self.assertIsNone(result["pullRequest"])
+        self.assertEqual(client.posts, [])
+        self.assertEqual(client.puts, [])
+
+    def test_malformed_accepted_receipt_fails_closed_before_branch_write(self) -> None:
+        client = FakeClient(accepted_receipt=b"{}\n")
+        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "accepted main release receipt is invalid"):
+            proposal_module.materialize(
+                client=client,
+                repository="StreamScapeTV/halal-food-eu",
+                base_ref="main",
+                base_sha="a" * 40,
+                receipt=self._receipt(),
+                proposal=self._proposal(),
+            )
+        self.assertEqual(client.posts, [])
+        self.assertEqual(client.puts, [])
+
+    def test_logical_digest_mismatch_fails_before_branch_write(self) -> None:
+        proposal = self._proposal()
+        proposal["logicalCatalogSha256"] = "6" * 64
+        client = FakeClient()
+        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "logical catalog digest differs"):
+            proposal_module.materialize(
+                client=client,
+                repository="StreamScapeTV/halal-food-eu",
+                base_ref="main",
+                base_sha="a" * 40,
+                receipt=self._receipt(),
+                proposal=proposal,
+            )
+        self.assertEqual(client.posts, [])
+        self.assertEqual(client.puts, [])
+
     def test_identical_existing_branch_reuses_open_pr_without_write(self) -> None:
         receipt = self._receipt()
-        desired = (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        client = FakeClient(branch_exists=True, receipt=desired, pull=41)
+        client = FakeClient(branch_exists=True, branch_receipt=self._bytes(receipt), pull=41)
         result = proposal_module.materialize(
             client=client,
             repository="StreamScapeTV/halal-food-eu",
@@ -169,7 +237,7 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertEqual(client.posts, [])
 
     def test_existing_branch_with_different_receipt_fails_closed(self) -> None:
-        client = FakeClient(branch_exists=True, receipt=b"{}\n")
+        client = FakeClient(branch_exists=True, branch_receipt=b"{}\n")
         with self.assertRaisesRegex(proposal_module.ProposalMutationError, "different release receipt"):
             proposal_module.materialize(
                 client=client,
@@ -194,8 +262,7 @@ class GitHubCatalogProposalTests(unittest.TestCase):
 
     def test_integrated_identical_receipt_creates_no_pull_request(self) -> None:
         receipt = self._receipt()
-        desired = (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
-        client = FakeClient(branch_exists=True, receipt=desired, compare_files=[])
+        client = FakeClient(branch_exists=True, branch_receipt=self._bytes(receipt), compare_files=[])
         result = proposal_module.materialize(
             client=client,
             repository="StreamScapeTV/halal-food-eu",
@@ -214,6 +281,7 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertIn("never auto-merged", body)
         self.assertIn("not committed", body)
         self.assertIn("53774", body)
+        self.assertIn("Logical catalog SHA-256", body)
         self.assertIn("## Release review summary", body)
         self.assertIn("Additions: `53774`", body)
         self.assertIn("formulation changes: `12`", body)

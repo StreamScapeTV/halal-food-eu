@@ -57,6 +57,7 @@ class MethodologyEvidenceIntegrationTests(unittest.TestCase):
         envelope["assessments"].append(result["assessment"])
         envelope["reviews"].append(result["review"])
         selection["assessmentID"] = result["assessment"]["id"]
+        selection["id"] = METHODOLOGY_MODULE.derive_id("currentSelections", selection)
 
         EVIDENCE_MODULE.validate_envelope(envelope)
         runtime = EVIDENCE_MODULE.runtime_projection(envelope)

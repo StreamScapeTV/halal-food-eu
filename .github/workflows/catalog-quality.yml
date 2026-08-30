@@ -46,7 +46,7 @@ jobs:
           name: ${{ inputs.change_artifact_name }}
           path: ${{ runner.temp }}/change
 
-      - name: Validate immutable handoffs and evidence semantics
+      - name: Validate immutable handoffs, evidence semantics, and quality policy
         run: |
           set -euo pipefail
           python3 Tools/catalog_workflow.py validate-handoff \
@@ -58,50 +58,26 @@ jobs:
             --consumer-stage quality \
             --payload-root "$RUNNER_TEMP/change"
           python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+          python3 Tools/catalog_quality.py validate-policy \
+            --policy Data/quality/catalog-quality-policy-v1.json
 
-      - name: Emit deterministic source-aware quality report
+      - name: Evaluate deterministic release quality policy
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
-          CHANGE_REPORT: ${{ runner.temp }}/change/payload/change-report.json
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/quality/payload"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          change = json.loads(Path(os.environ["CHANGE_REPORT"]).read_text(encoding="utf-8"))
-          findings = []
-          if change.get("sourceKey") != os.environ["SOURCE_KEY"]:
-              findings.append("change-report-source-mismatch")
-          if change.get("snapshotID") != os.environ["SNAPSHOT_ID"]:
-              findings.append("change-report-snapshot-mismatch")
-          if change.get("noCompletenessClaim") is not True:
-              findings.append("source-completeness-claim-not-prohibited")
-          if not isinstance(change.get("reviewQueue"), list):
-              findings.append("review-queue-missing")
-          if os.environ["SOURCE_KEY"] == "open-food-facts" and not isinstance(change.get("selectionDecisionReasons"), dict):
-              findings.append("selection-reason-metrics-missing")
-          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("observationalOnly") is not True:
-              findings.append("retailer-observational-boundary-missing")
-          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("formulationChanges") != 0:
-              findings.append("retailer-source-must-not-change-formulation")
-          report = {
-              "schemaVersion": 1,
-              "sourceKey": os.environ["SOURCE_KEY"],
-              "snapshotId": os.environ["SNAPSHOT_ID"],
-              "status": "pass" if not findings else "fail",
-              "releaseBlockingFindings": findings,
-              "fixtureOnly": os.environ["SOURCE_KEY"] == "synthetic-fixture",
-              "reviewQueueCount": len(change.get("reviewQueue", [])),
-              "formulationChanges": change.get("formulationChanges", 0),
-              "removals": change.get("removals", 0),
-          }
-          output = Path(os.environ["RUNNER_TEMP"] + "/quality/payload/quality-report.json")
-          output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          if findings:
-              raise SystemExit("release-blocking catalog quality findings: " + ", ".join(findings))
-          PY
+          python3 Tools/catalog_quality.py evaluate \
+            --policy Data/quality/catalog-quality-policy-v1.json \
+            --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
+            --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+            --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --output "$RUNNER_TEMP/quality/payload/quality-report.json" \
+            --summary-output "$RUNNER_TEMP/quality/quality-summary.md" \
+            --defer-blocker-exit
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind quality-report \
             --source-key "$SOURCE_KEY" \
@@ -125,10 +101,26 @@ jobs:
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
         run: echo "artifact_name=quality-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload quality report
+      - name: Upload machine and human quality reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.name.outputs.artifact_name }}
           path: ${{ runner.temp }}/quality
           if-no-files-found: error
           retention-days: 14
+
+      - name: Enforce release quality gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(
+              Path(os.environ["RUNNER_TEMP"] + "/quality/payload/quality-report.json").read_text(encoding="utf-8")
+          )
+          if report.get("status") != "pass":
+              codes = sorted({item.get("code", "unknown") for item in report.get("releaseBlockingFindings", [])})
+              raise SystemExit("release-blocking catalog quality findings: " + ", ".join(codes))
+          PY

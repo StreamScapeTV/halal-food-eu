@@ -19,6 +19,7 @@ from typing import Any, Iterable
 REQUEST_SCHEMA_VERSION = 1
 MAX_DATABASE_BYTES = 250 * 1024 * 1024
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA64_RE = re.compile(r"^[0-9a-f]{64}$")
 VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 WORKFLOW_RUN_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._:/-]{0,127}$")
 
@@ -38,11 +39,12 @@ _REQUIRED_KEYS = {
     "workflowRun",
     "maxDatabaseBytes",
 }
-_OPTIONAL_KEYS = {
+_OPTIONAL_PATH_KEYS = {
     "logicalDumpOutputPath",
     "releaseNotesOutputPath",
     "previousManifestPath",
 }
+_OPTIONAL_KEYS = _OPTIONAL_PATH_KEYS | {"expectedLogicalCatalogSha256"}
 
 
 class BuildRequestError(ValueError):
@@ -109,7 +111,7 @@ def validate_request(raw: Any) -> dict[str, Any]:
         "manifestOutputPath",
     ):
         _relative_path(request[key], key)
-    for key in _OPTIONAL_KEYS:
+    for key in _OPTIONAL_PATH_KEYS:
         if key in request:
             _relative_path(request[key], key)
 
@@ -132,6 +134,11 @@ def validate_request(raw: Any) -> dict[str, Any]:
     max_bytes = request["maxDatabaseBytes"]
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or not (1 <= max_bytes <= MAX_DATABASE_BYTES):
         raise BuildRequestError(f"maxDatabaseBytes must be between 1 and {MAX_DATABASE_BYTES}")
+    expected_logical = request.get("expectedLogicalCatalogSha256")
+    if expected_logical is not None and (
+        not isinstance(expected_logical, str) or not SHA64_RE.fullmatch(expected_logical)
+    ):
+        raise BuildRequestError("expectedLogicalCatalogSha256 must be an exact lowercase SHA-256")
 
     outputs = [request["databaseOutputPath"], request["manifestOutputPath"]]
     outputs.extend(request[key] for key in ("logicalDumpOutputPath", "releaseNotesOutputPath") if key in request)
@@ -295,8 +302,9 @@ def build_from_request(*, request_path: Path, root: Path, workflow_contract_path
     )
 
     import production_catalog
+    import production_catalog_logical
 
-    return production_catalog.build_catalog(
+    manifest = production_catalog.build_catalog(
         evidence_path=evidence_payload,
         database_path=resolved["databaseOutputPath"],
         manifest_path=resolved["manifestOutputPath"],
@@ -314,6 +322,16 @@ def build_from_request(*, request_path: Path, root: Path, workflow_contract_path
         previous_manifest_path=resolved.get("previousManifestPath"),
         max_database_bytes=request["maxDatabaseBytes"],
     )
+    try:
+        logical_identity = production_catalog_logical.bind_manifest(
+            database_path=resolved["databaseOutputPath"],
+            manifest_path=resolved["manifestOutputPath"],
+            expected_sha256=request.get("expectedLogicalCatalogSha256"),
+        )
+    except production_catalog_logical.LogicalCatalogError as exc:
+        raise BuildRequestError(f"logical catalog identity validation failed: {exc}") from exc
+    manifest["logicalCatalog"] = logical_identity
+    return manifest
 
 
 def build_parser() -> argparse.ArgumentParser:

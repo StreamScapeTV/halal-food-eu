@@ -50,6 +50,7 @@ class CatalogQualityEdgeCaseTests(unittest.TestCase):
         envelope["currentSelections"].append(fr_selection)
 
         report = self.evaluate(envelope)
+        self.assertEqual(report["metrics"]["products"], 2)
         self.assertEqual(report["metrics"]["formulationFreshness"]["fresh"], 1)
         self.assertEqual(report["metrics"]["formulationFreshness"]["stale"], 1)
 

@@ -1,0 +1,184 @@
+name: Germany catalog benchmark
+
+on:
+  push:
+    branches:
+      - agent/30-germany-catalog-benchmark
+    paths:
+      - Tools/catalog_benchmark.py
+      - Tools/tests/test_catalog_benchmark.py
+      - Tools/tests/test_open_food_facts_redirect.py
+      - Data/sources/open-food-facts/source-policy-v1.json
+      - .github/workflows/catalog-benchmark.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-germany-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      OPEN_FOOD_FACTS_USER_AGENT: HalalFoodEU/1.0 (https://github.com/StreamScapeTV/halal-food-eu)
+    steps:
+      - name: Check out benchmark candidate without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate benchmark tooling on deterministic fixtures
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/catalog_benchmark.py \
+            Tools/tests/test_catalog_benchmark.py \
+            Tools/tests/test_open_food_facts_redirect.py
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_catalog_benchmark.py' -v
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_open_food_facts_redirect.py' -v
+
+      - name: Acquire and normalize current Germany Open Food Facts snapshot
+        env:
+          ROOT: ${{ runner.temp }}/catalog-benchmark
+          SNAPSHOT_ID: off-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          STARTED=$(date +%s)
+          mkdir -p "$ROOT/off" "$ROOT/op" "$ROOT/work"
+          echo "$STARTED" > "$ROOT/started-epoch"
+          python3 Tools/open_food_facts.py acquire \
+            --output "$ROOT/off/source-records.jsonl" \
+            --metadata-output "$ROOT/off/acquisition-metadata.json" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --mode full
+          printf 'off-acquired\t%s\n' "$(du -sb "$ROOT" | cut -f1)" >> "$ROOT/disk.tsv"
+          /usr/bin/time -v -o "$ROOT/off/normalize.time" \
+            python3 Tools/open_food_facts.py normalize \
+              --snapshot "$ROOT/off/source-records.jsonl" \
+              --evidence-output "$ROOT/off/evidence.json" \
+              --selection-output "$ROOT/off/selection.json" \
+              --quality-output "$ROOT/off/quality.json" \
+              --change-output "$ROOT/off/change.json"
+          printf 'off-normalized\t%s\n' "$(du -sb "$ROOT" | cut -f1)" >> "$ROOT/disk.tsv"
+          rm -f "$ROOT/off/source-records.jsonl"
+
+      - name: Acquire and normalize current Germany Open Prices observations
+        env:
+          ROOT: ${{ runner.temp }}/catalog-benchmark
+          SNAPSHOT_ID: op-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python3 Tools/open_prices.py acquire \
+            --output "$ROOT/op/source-records.jsonl" \
+            --metadata-output "$ROOT/op/acquisition-metadata.json" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --mode full
+          printf 'open-prices-acquired\t%s\n' "$(du -sb "$ROOT" | cut -f1)" >> "$ROOT/disk.tsv"
+          /usr/bin/time -v -o "$ROOT/op/normalize.time" \
+            python3 Tools/open_prices.py normalize \
+              --snapshot "$ROOT/op/source-records.jsonl" \
+              --metadata "$ROOT/op/acquisition-metadata.json" \
+              --evidence-output "$ROOT/op/evidence.json" \
+              --quality-output "$ROOT/op/quality.json" \
+              --change-output "$ROOT/op/change.json"
+          printf 'open-prices-normalized\t%s\n' "$(du -sb "$ROOT" | cut -f1)" >> "$ROOT/disk.tsv"
+          rm -f "$ROOT/op/source-records.jsonl"
+
+      - name: Build and measure current/audit/runtime SQLite projections
+        env:
+          ROOT: ${{ runner.temp }}/catalog-benchmark
+        run: |
+          set -euo pipefail
+          /usr/bin/time -v -o "$ROOT/benchmark.time" \
+            python3 Tools/catalog_benchmark.py \
+              --off-evidence "$ROOT/off/evidence.json" \
+              --off-selection "$ROOT/off/selection.json" \
+              --off-quality "$ROOT/off/quality.json" \
+              --off-metadata "$ROOT/off/acquisition-metadata.json" \
+              --open-prices-evidence "$ROOT/op/evidence.json" \
+              --open-prices-quality "$ROOT/op/quality.json" \
+              --open-prices-metadata "$ROOT/op/acquisition-metadata.json" \
+              --review-fixture Data/evidence/sample-evidence-v1.json \
+              --off-source-policy Data/sources/open-food-facts/source-policy-v1.json \
+              --open-prices-source-policy Data/sources/open-prices/source-policy-v1.json \
+              --selection-policy Data/selection/catalog-selection-policy-v1.json \
+              --retailer-aliases Data/sources/open-prices/retailer-aliases-v1.json \
+              --work-dir "$ROOT/work" \
+              --report "$ROOT/report.json"
+          printf 'benchmark-complete\t%s\n' "$(du -sb "$ROOT" | cut -f1)" >> "$ROOT/disk.tsv"
+
+      - name: Bind GitHub-hosted runner resource evidence into report
+        env:
+          ROOT: ${{ runner.temp }}/catalog-benchmark
+        run: |
+          set -euo pipefail
+          ROOT="$ROOT" GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" python3 - <<'PY'
+          import json, os, platform, re, time
+          from pathlib import Path
+          root = Path(os.environ["ROOT"])
+          report_path = root / "report.json"
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          disk = {}
+          for line in (root / "disk.tsv").read_text(encoding="utf-8").splitlines():
+              stage, raw = line.split("\t", 1)
+              disk[stage] = int(raw)
+          def max_rss(path):
+              text = path.read_text(encoding="utf-8")
+              match = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text)
+              return int(match.group(1)) if match else None
+          environment = report.setdefault("measurementEnvironment", {})
+          environment.update({
+              "githubHostedRunner": "ubuntu-latest",
+              "repositoryCommit": os.environ["GITHUB_SHA"],
+              "workflowRunID": os.environ["GITHUB_RUN_ID"],
+              "workflowRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "kernel": platform.platform(),
+              "runnerTempBytesByStage": disk,
+              "peakRunnerTempBytesObserved": max(disk.values()) if disk else 0,
+              "offNormalizeMaxRSSKiB": max_rss(root / "off/normalize.time"),
+              "openPricesNormalizeMaxRSSKiB": max_rss(root / "op/normalize.time"),
+              "benchmarkMaxRSSKiB": max_rss(root / "benchmark.time"),
+              "endToEndSeconds": time.time() - int((root / "started-epoch").read_text().strip()),
+          })
+          report_path.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          PY
+          python3 -m json.tool "$ROOT/report.json" >/dev/null
+
+      - name: Enforce architecture acceptance budgets
+        env:
+          ROOT: ${{ runner.temp }}/catalog-benchmark
+        run: |
+          set -euo pipefail
+          ROOT="$ROOT" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads((Path(os.environ["ROOT"]) / "report.json").read_text(encoding="utf-8"))
+          one = report["projectionMeasurements"]["minimalRuntime"][0]
+          five = report["projectionMeasurements"]["minimalRuntime"][2]
+          if one["vacuumBytes"] >= 250 * 1024 * 1024:
+              raise SystemExit(f"1x runtime catalog exceeds accepted 250 MiB baseline: {one['vacuumBytes']}")
+          if one["warmLookupMs"]["p95"] >= 50:
+              raise SystemExit(f"warm p95 lookup exceeds 50 ms: {one['warmLookupMs']['p95']}")
+          if one["firstLookupAfterOpenMs"]["p95"] >= 150:
+              raise SystemExit(f"first-open p95 lookup exceeds 150 ms: {one['firstLookupAfterOpenMs']['p95']}")
+          if not any("PRIMARY KEY" in line or "products" in line for line in one["queryPlan"]):
+              raise SystemExit("exact GTIN query plan did not use the indexed products path")
+          if five["productRows"] != report["realCatalog"]["uniqueValidSelectedGTINs"] * 5:
+              raise SystemExit("5x growth model did not materialize the requested row count")
+          if report["licenseBoundary"]["unauthorizedRetailerScrapingUsed"]:
+              raise SystemExit("benchmark admitted unauthorized retailer scraping")
+          if report["licenseBoundary"]["productImageBinariesIncluded"]:
+              raise SystemExit("benchmark admitted product image binaries")
+          PY
+
+      - name: Upload benchmark evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: germany-catalog-benchmark-${{ github.sha }}
+          path: ${{ runner.temp }}/catalog-benchmark/report.json
+          if-no-files-found: error
+          retention-days: 30

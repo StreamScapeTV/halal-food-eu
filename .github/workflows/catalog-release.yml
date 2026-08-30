@@ -4,12 +4,19 @@ on:
   push:
     branches: [main]
     paths:
+      - "Data/catalog/production-catalog-release-input-v1.json"
+      - "Data/quality/catalog-quality-policy-v1.json"
+      - "Data/sources/open-food-facts/source-policy-v1.json"
+      - "Data/workflows/**"
       - "HalalFoodEU/Resources/catalog.sqlite3"
       - "HalalFoodEU/Resources/catalog-manifest.json"
-      - "Tools/catalog_workflow.py"
+      - "Tools/catalog_builder.py"
       - "Tools/catalog_security.py"
-      - "Data/workflows/**"
-      - "Data/security/**"
+      - "Tools/catalog_workflow.py"
+      - "Tools/production_catalog.py"
+      - "Tools/production_catalog_release_input.py"
+      - "Tools/production_catalog_request.py"
+      - "Tools/validate_catalog.py"
       - ".github/workflows/catalog-release.yml"
   workflow_dispatch:
     inputs:
@@ -20,6 +27,7 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -29,7 +37,7 @@ concurrency:
 jobs:
   evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Require integrated main ref
         env:
@@ -43,72 +51,207 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Materialize deterministic bundled catalog from integrated reviewed input
+      - name: Resolve exact integrated release mode
+        id: mode
         run: |
           set -euo pipefail
+          RECEIPT=Data/catalog/production-catalog-release-input-v1.json
+          if [[ -f "$RECEIPT" ]]; then
+            python3 Tools/production_catalog_release_input.py validate --input "$RECEIPT"
+            RECEIPT="$RECEIPT" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+
+          receipt = json.loads(Path(os.environ['RECEIPT']).read_text(encoding='utf-8'))
+          print('production=true')
+          print(f"source_key={receipt['sourceKey']}")
+          print(f"snapshot_id={receipt['snapshotId']}")
+          print(f"catalog_version={receipt['catalogVersion']}")
+          print(f"source_run_id={receipt['sourceRunId']}")
+          print(f"normalized_artifact_name={receipt['inputs']['normalizedEvidence']['artifactName']}")
+          print(f"quality_artifact_name={receipt['inputs']['qualityReport']['artifactName']}")
+          print(f"basic_exclusions_artifact_name={receipt['inputs']['basicExclusions']['artifactName']}")
+          PY
+          else
+            echo "production=false" >> "$GITHUB_OUTPUT"
+            echo "source_key=synthetic-fixture" >> "$GITHUB_OUTPUT"
+            echo "snapshot_id=main-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+            echo "catalog_version=0.0.0-demo.1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download reviewed normalized evidence
+        if: steps.mode.outputs.production == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.mode.outputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/release-root/normalized
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.mode.outputs.source_run_id }}
+
+      - name: Download reviewed quality report
+        if: steps.mode.outputs.production == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.mode.outputs.quality_artifact_name }}
+          path: ${{ runner.temp }}/release-root/quality
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.mode.outputs.source_run_id }}
+
+      - name: Download reviewed basic exclusions
+        if: steps.mode.outputs.production == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.mode.outputs.basic_exclusions_artifact_name }}
+          path: ${{ runner.temp }}/release-root/basic-exclusions
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.mode.outputs.source_run_id }}
+
+      - name: Materialize production catalog from reviewed immutable inputs
+        if: steps.mode.outputs.production == 'true'
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/release-root"
+          mkdir -p \
+            "$ROOT/repository/Data/quality" \
+            "$ROOT/repository/Data/sources/open-food-facts" \
+            "$ROOT/database/payload" \
+            "$ROOT/manifest/payload"
+          cp Data/quality/catalog-quality-policy-v1.json \
+            "$ROOT/repository/Data/quality/catalog-quality-policy-v1.json"
+          cp Data/sources/open-food-facts/source-policy-v1.json \
+            "$ROOT/repository/Data/sources/open-food-facts/source-policy-v1.json"
+          python3 Tools/production_catalog_release_input.py materialize-request \
+            --input Data/catalog/production-catalog-release-input-v1.json \
+            --normalized-handoff "$ROOT/normalized/handoff.json" \
+            --normalized-root "$ROOT/normalized" \
+            --quality-handoff "$ROOT/quality/handoff.json" \
+            --quality-root "$ROOT/quality" \
+            --basic-exclusions-handoff "$ROOT/basic-exclusions/handoff.json" \
+            --basic-exclusions-root "$ROOT/basic-exclusions" \
+            --integrated-source-commit "$GITHUB_SHA" \
+            --workflow-run "github:${GITHUB_RUN_ID}:attempt:${GITHUB_RUN_ATTEMPT}" \
+            --output "$ROOT/production-build-request.json"
+          python3 Tools/production_catalog_request.py validate \
+            --request "$ROOT/production-build-request.json" \
+            --root "$ROOT"
+          python3 Tools/production_catalog_request.py build \
+            --request "$ROOT/production-build-request.json" \
+            --root "$ROOT" \
+            --workflow-contract Data/workflows/catalog-workflow-contract-v1.json
+          python3 Tools/production_catalog.py validate \
+            --database "$ROOT/database/payload/catalog.sqlite3" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          ROOT="$ROOT" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ['ROOT'])
+          receipt = json.loads(Path('Data/catalog/production-catalog-release-input-v1.json').read_text(encoding='utf-8'))
+          manifest = json.loads((root / 'manifest/payload/catalog-manifest.json').read_text(encoding='utf-8'))
+          expected = {
+              'catalogVersion': receipt['catalogVersion'],
+              'selectionPolicyVersion': receipt['selectionPolicyVersion'],
+              'sourceCommit': os.environ['GITHUB_SHA'],
+          }
+          for key, value in expected.items():
+              if manifest.get(key) != value:
+                  raise SystemExit(f'post-merge manifest {key} differs from reviewed release lineage')
+          PY
+
+      - name: Materialize deterministic synthetic fallback
+        if: steps.mode.outputs.production != 'true'
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/release-root"
+          mkdir -p "$ROOT/database/payload" "$ROOT/manifest/payload"
           python3 Tools/catalog_builder.py \
             --input Data/sample-products.json \
-            --database HalalFoodEU/Resources/catalog.sqlite3 \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json
+            --database "$ROOT/database/payload/catalog.sqlite3" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json"
           python3 Tools/catalog_security.py bind-manifest \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
             --source-policy Data/workflows/catalog-workflow-contract-v1.json
-
-      - name: Validate bundled catalog before release evidence
-        run: |
-          set -euo pipefail
           python3 Tools/validate_catalog.py \
-            --database HalalFoodEU/Resources/catalog.sqlite3 \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
+            --database "$ROOT/database/payload/catalog.sqlite3" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
             --source Data/sample-products.json
           python3 Tools/catalog_security.py validate-manifest \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
             --source-policy Data/workflows/catalog-workflow-contract-v1.json
-          python3 Tools/catalog_workflow.py validate-contract
 
-      - name: Emit post-merge checksum report
+      - name: Validate workflow contract after exact rematerialization
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/release/payload"
+          python3 Tools/catalog_workflow.py validate-contract
+
+      - name: Emit post-merge checksum and lineage report
+        env:
+          PRODUCTION: ${{ steps.mode.outputs.production }}
+          SOURCE_KEY: ${{ steps.mode.outputs.source_key }}
+          SNAPSHOT_ID: ${{ steps.mode.outputs.snapshot_id }}
+          CATALOG_VERSION: ${{ steps.mode.outputs.catalog_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-root/release/payload"
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path
-          database = Path('HalalFoodEU/Resources/catalog.sqlite3')
-          manifest = Path('HalalFoodEU/Resources/catalog-manifest.json')
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'release-root'
+          database = root / 'database/payload/catalog.sqlite3'
+          manifest = root / 'manifest/payload/catalog-manifest.json'
           report = {
               'schemaVersion': 1,
               'commitSha': os.environ['GITHUB_SHA'],
+              'releaseMode': 'production' if os.environ['PRODUCTION'] == 'true' else 'synthetic-fixture',
+              'sourceKey': os.environ['SOURCE_KEY'],
+              'snapshotId': os.environ['SNAPSHOT_ID'],
+              'catalogVersion': os.environ['CATALOG_VERSION'],
               'databaseSha256': hashlib.sha256(database.read_bytes()).hexdigest(),
               'manifestSha256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
-              'sourcePolicy': json.loads(manifest.read_text(encoding='utf-8'))['sourcePolicy'],
               'appStoreSigningPerformed': False,
               'remoteCatalogPublicationPerformed': False,
           }
-          Path(os.environ['RUNNER_TEMP'] + '/release/payload/release-report.json').write_text(
+          receipt_path = Path('Data/catalog/production-catalog-release-input-v1.json')
+          if os.environ['PRODUCTION'] == 'true':
+              receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+              report['reviewedSourceCommit'] = receipt['reviewedSourceCommit']
+              report['reviewedSourceRunId'] = receipt['sourceRunId']
+              report['proposedCatalogSha256'] = receipt['proposedCatalogSha256']
+              report['proposedManifestSha256'] = receipt['proposedManifestSha256']
+          else:
+              report['sourcePolicy'] = json.loads(manifest.read_text(encoding='utf-8'))['sourcePolicy']
+          (root / 'release/payload/release-report.json').write_text(
               json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8'
           )
           PY
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind release-report \
-            --source-key aggregate \
-            --snapshot-id "main-${GITHUB_SHA:0:12}" \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
             --producer-commit "$GITHUB_SHA" \
             --producer-workflow catalog-release.yml \
             --run-id "$GITHUB_RUN_ID" \
-            --payload "$RUNNER_TEMP/release/payload/release-report.json" \
+            --payload "$RUNNER_TEMP/release-root/release/payload/release-report.json" \
             --payload-relative-path payload/release-report.json \
             --record-count 1 \
             --completeness complete \
             --redistribution-class metadata-only \
             --content-schema-version release-report-v1 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --output "$RUNNER_TEMP/release/handoff.json"
+            --output "$RUNNER_TEMP/release-root/release/handoff.json"
 
-      - name: Upload release evidence
+      - name: Upload exact integrated release evidence and attestation subjects
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/release
+          path: |
+            ${{ runner.temp }}/release-root/database
+            ${{ runner.temp }}/release-root/manifest
+            ${{ runner.temp }}/release-root/release
           if-no-files-found: error
           retention-days: 14
 
@@ -118,6 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: read
       id-token: write
       attestations: write
@@ -127,31 +271,52 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Materialize exact attestation subjects from integrated reviewed input
-        run: |
-          set -euo pipefail
-          python3 Tools/catalog_builder.py \
-            --input Data/sample-products.json \
-            --database HalalFoodEU/Resources/catalog.sqlite3 \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json
-          python3 Tools/catalog_security.py bind-manifest \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
-            --source-policy Data/workflows/catalog-workflow-contract-v1.json
+      - name: Download the exact subjects validated by release evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/release-evidence
 
-      - name: Revalidate attestation subjects
+      - name: Revalidate exact attestation subjects
         run: |
           set -euo pipefail
-          python3 Tools/validate_catalog.py \
-            --database HalalFoodEU/Resources/catalog.sqlite3 \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
-            --source Data/sample-products.json
-          python3 Tools/catalog_security.py validate-manifest \
-            --manifest HalalFoodEU/Resources/catalog-manifest.json \
-            --source-policy Data/workflows/catalog-workflow-contract-v1.json
+          ROOT="$RUNNER_TEMP/release-evidence"
+          MODE="$(python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'release-evidence'
+          report = json.loads((root / 'release/payload/release-report.json').read_text(encoding='utf-8'))
+          if report.get('commitSha') != os.environ['GITHUB_SHA']:
+              raise SystemExit('release evidence commit differs from attestation commit')
+          subjects = {
+              'databaseSha256': root / 'database/payload/catalog.sqlite3',
+              'manifestSha256': root / 'manifest/payload/catalog-manifest.json',
+          }
+          for key, path in subjects.items():
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              if report.get(key) != actual:
+                  raise SystemExit(f'release evidence {key} differs from attestation subject')
+          print(report['releaseMode'])
+          PY
+          )"
+          if [[ "$MODE" == "production" ]]; then
+            python3 Tools/production_catalog.py validate \
+              --database "$ROOT/database/payload/catalog.sqlite3" \
+              --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          else
+            python3 Tools/validate_catalog.py \
+              --database "$ROOT/database/payload/catalog.sqlite3" \
+              --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
+              --source Data/sample-products.json
+            python3 Tools/catalog_security.py validate-manifest \
+              --manifest "$ROOT/manifest/payload/catalog-manifest.json" \
+              --source-policy Data/workflows/catalog-workflow-contract-v1.json
+          fi
 
       - name: Attest integrated catalog provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: |
-            HalalFoodEU/Resources/catalog.sqlite3
-            HalalFoodEU/Resources/catalog-manifest.json
+            ${{ runner.temp }}/release-evidence/database/payload/catalog.sqlite3
+            ${{ runner.temp }}/release-evidence/manifest/payload/catalog-manifest.json

@@ -8,6 +8,7 @@
     "schemaVersion",
     "evidenceHandoffPath",
     "qualityHandoffPath",
+    "basicExclusionsHandoffPath",
     "qualityPolicyPath",
     "sourcePolicyPaths",
     "databaseOutputPath",
@@ -23,6 +24,7 @@
     "schemaVersion": { "const": 1 },
     "evidenceHandoffPath": { "$ref": "#/$defs/relativePath" },
     "qualityHandoffPath": { "$ref": "#/$defs/relativePath" },
+    "basicExclusionsHandoffPath": { "$ref": "#/$defs/relativePath" },
     "qualityPolicyPath": { "$ref": "#/$defs/relativePath" },
     "sourcePolicyPaths": {
       "type": "array",
@@ -31,7 +33,6 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/relativePath" }
     },
-    "basicExclusionsPath": { "$ref": "#/$defs/relativePath" },
     "databaseOutputPath": { "$ref": "#/$defs/relativePath" },
     "manifestOutputPath": { "$ref": "#/$defs/relativePath" },
     "logicalDumpOutputPath": { "$ref": "#/$defs/relativePath" },

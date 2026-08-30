@@ -31,14 +31,21 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile \
+            Tools/basic_exclusions.py \
             Tools/build_production_fixture.py \
             Tools/production_catalog_gate.py \
             Tools/production_catalog.py \
+            Tools/production_catalog_request.py \
+            Tools/tests/test_basic_exclusions.py \
             Tools/tests/test_production_catalog_gate.py \
-            Tools/tests/test_production_catalog.py
+            Tools/tests/test_production_catalog.py \
+            Tools/tests/test_production_catalog_request.py
           PYTHONPATH=Tools python3 -m unittest discover \
             -s Tools/tests \
             -p 'test_production_catalog*.py' \
+            -v
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_basic_exclusions \
             -v
 
       - name: Build the exact production-schema iOS fixture

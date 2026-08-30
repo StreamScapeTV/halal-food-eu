@@ -2,9 +2,9 @@
 """Validate and execute the immutable production catalog build-request contract.
 
 The request is deliberately local-file-only. Cross-stage payloads remain digest-bound
-through the existing workflow handoff contract; this adapter only turns an already
-reviewed pair of complete handoffs into exact arguments for ``production_catalog``.
-It never acquires or refreshes source data.
+through the existing workflow handoff contract; this adapter turns an already reviewed
+set of complete handoffs into exact arguments for ``production_catalog``. It never
+acquires or refreshes source data, and it never admits an unbound basic-exclusion path.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ _REQUIRED_KEYS = {
     "schemaVersion",
     "evidenceHandoffPath",
     "qualityHandoffPath",
+    "basicExclusionsHandoffPath",
     "qualityPolicyPath",
     "sourcePolicyPaths",
     "databaseOutputPath",
@@ -38,7 +39,6 @@ _REQUIRED_KEYS = {
     "maxDatabaseBytes",
 }
 _OPTIONAL_KEYS = {
-    "basicExclusionsPath",
     "logicalDumpOutputPath",
     "releaseNotesOutputPath",
     "previousManifestPath",
@@ -103,6 +103,7 @@ def validate_request(raw: Any) -> dict[str, Any]:
     for key in (
         "evidenceHandoffPath",
         "qualityHandoffPath",
+        "basicExclusionsHandoffPath",
         "qualityPolicyPath",
         "databaseOutputPath",
         "manifestOutputPath",
@@ -139,10 +140,12 @@ def validate_request(raw: Any) -> dict[str, Any]:
     inputs = {
         request["evidenceHandoffPath"],
         request["qualityHandoffPath"],
+        request["basicExclusionsHandoffPath"],
         request["qualityPolicyPath"],
         *normalized_policies,
     }
-    inputs.update(request[key] for key in ("basicExclusionsPath", "previousManifestPath") if key in request)
+    if "previousManifestPath" in request:
+        inputs.add(request["previousManifestPath"])
     overlap = sorted(inputs.intersection(outputs))
     if overlap:
         raise BuildRequestError(f"build outputs overlap immutable inputs: {', '.join(overlap)}")
@@ -172,14 +175,20 @@ def _under_root(root: Path, relative: str, *, must_exist: bool) -> Path:
 def resolve_request_paths(request: dict[str, Any], root: Path) -> dict[str, Any]:
     validated = validate_request(request)
     resolved: dict[str, Any] = dict(validated)
-    for key in ("evidenceHandoffPath", "qualityHandoffPath", "qualityPolicyPath"):
+    for key in (
+        "evidenceHandoffPath",
+        "qualityHandoffPath",
+        "basicExclusionsHandoffPath",
+        "qualityPolicyPath",
+    ):
         resolved[key] = _under_root(root, validated[key], must_exist=True)
     resolved["sourcePolicyPaths"] = [
         _under_root(root, relative, must_exist=True) for relative in validated["sourcePolicyPaths"]
     ]
-    for key in ("basicExclusionsPath", "previousManifestPath"):
-        if key in validated:
-            resolved[key] = _under_root(root, validated[key], must_exist=True)
+    if "previousManifestPath" in validated:
+        resolved["previousManifestPath"] = _under_root(
+            root, validated["previousManifestPath"], must_exist=True
+        )
     for key in ("databaseOutputPath", "manifestOutputPath", "logicalDumpOutputPath", "releaseNotesOutputPath"):
         if key in validated:
             resolved[key] = _under_root(root, validated[key], must_exist=False)
@@ -194,7 +203,23 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return _object(value, label)
 
 
-def validate_build_handoffs(*, resolved: dict[str, Any], workflow_contract_path: Path) -> tuple[Path, Path]:
+def _validate_basic_exclusions_payload(path: Path, expected_policy_version: str) -> None:
+    payload = _load_json(path, "basic-exclusions payload")
+    if payload.get("schemaVersion") != 1:
+        raise BuildRequestError("basic-exclusions payload schemaVersion is unsupported")
+    if payload.get("selectionPolicyVersion") != expected_policy_version:
+        raise BuildRequestError("basic-exclusions payload selection-policy version differs from build request")
+    records = payload.get("records")
+    if not isinstance(records, list):
+        raise BuildRequestError("basic-exclusions payload records must be an array")
+
+
+def validate_build_handoffs(
+    *,
+    resolved: dict[str, Any],
+    workflow_contract_path: Path,
+    selection_policy_version: str | None = None,
+) -> tuple[Path, Path, Path]:
     # Imported lazily so request-shape validation remains independently testable and
     # the adapter does not create a second workflow-contract implementation.
     from catalog_workflow_contract import WorkflowContract
@@ -203,6 +228,7 @@ def validate_build_handoffs(*, resolved: dict[str, Any], workflow_contract_path:
     contract = WorkflowContract.load(workflow_contract_path)
     evidence_path = resolved["evidenceHandoffPath"]
     quality_path = resolved["qualityHandoffPath"]
+    exclusions_path = resolved["basicExclusionsHandoffPath"]
     evidence = validate_handoff(
         contract,
         _load_json(evidence_path, "evidence handoff"),
@@ -215,26 +241,44 @@ def validate_build_handoffs(*, resolved: dict[str, Any], workflow_contract_path:
         consumer_stage="build",
         payload_root=quality_path.parent,
     )
+    exclusions = validate_handoff(
+        contract,
+        _load_json(exclusions_path, "basic-exclusions handoff"),
+        consumer_stage="build",
+        payload_root=exclusions_path.parent,
+    )
     if evidence["artifactKind"] != "normalized-evidence":
         raise BuildRequestError("evidence handoff must contain normalized-evidence")
     if quality["artifactKind"] != "quality-report":
         raise BuildRequestError("quality handoff must contain quality-report")
-    if evidence["sourceKey"] != quality["sourceKey"]:
-        raise BuildRequestError("evidence and quality handoffs have different sourceKey values")
-    if evidence["snapshotId"] != quality["snapshotId"]:
-        raise BuildRequestError("evidence and quality handoffs have different snapshotId values")
+    if exclusions["artifactKind"] != "basic-exclusions":
+        raise BuildRequestError("basic-exclusions handoff must contain basic-exclusions")
+
+    handoffs = (evidence, quality, exclusions)
+    if len({handoff["sourceKey"] for handoff in handoffs}) != 1:
+        raise BuildRequestError("evidence, quality, and basic-exclusions handoffs have different sourceKey values")
+    if len({handoff["snapshotId"] for handoff in handoffs}) != 1:
+        raise BuildRequestError("evidence, quality, and basic-exclusions handoffs have different snapshotId values")
 
     evidence_payload = _under_root(evidence_path.parent, evidence["payload"]["relativePath"], must_exist=True)
     quality_payload = _under_root(quality_path.parent, quality["payload"]["relativePath"], must_exist=True)
-    return evidence_payload, quality_payload
+    exclusions_payload = _under_root(
+        exclusions_path.parent,
+        exclusions["payload"]["relativePath"],
+        must_exist=True,
+    )
+    if selection_policy_version is not None:
+        _validate_basic_exclusions_payload(exclusions_payload, selection_policy_version)
+    return evidence_payload, quality_payload, exclusions_payload
 
 
 def build_from_request(*, request_path: Path, root: Path, workflow_contract_path: Path) -> dict[str, Any]:
     request = load_request(request_path)
     resolved = resolve_request_paths(request, root)
-    evidence_payload, quality_payload = validate_build_handoffs(
+    evidence_payload, quality_payload, exclusions_payload = validate_build_handoffs(
         resolved=resolved,
         workflow_contract_path=workflow_contract_path,
+        selection_policy_version=request["selectionPolicyVersion"],
     )
 
     import production_catalog
@@ -244,7 +288,7 @@ def build_from_request(*, request_path: Path, root: Path, workflow_contract_path
         database_path=resolved["databaseOutputPath"],
         manifest_path=resolved["manifestOutputPath"],
         policy_paths=resolved["sourcePolicyPaths"],
-        basic_exclusions_path=resolved.get("basicExclusionsPath"),
+        basic_exclusions_path=exclusions_payload,
         quality_report_path=quality_payload,
         quality_policy_path=resolved["qualityPolicyPath"],
         catalog_version=request["catalogVersion"],

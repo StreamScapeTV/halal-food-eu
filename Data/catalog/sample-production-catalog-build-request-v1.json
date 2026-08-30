@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "evidenceHandoffPath": "normalized/handoff.json",
   "qualityHandoffPath": "quality/handoff.json",
+  "basicExclusionsHandoffPath": "basic-exclusions/handoff.json",
   "qualityPolicyPath": "repository/Data/quality/catalog-quality-policy-v1.json",
   "sourcePolicyPaths": [
     "repository/Data/sources/open-food-facts/source-policy-v1.json"

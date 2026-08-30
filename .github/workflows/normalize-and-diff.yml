@@ -17,6 +17,8 @@ on:
         value: ${{ jobs.normalize.outputs.normalized_artifact_name }}
       change_artifact_name:
         value: ${{ jobs.normalize.outputs.change_artifact_name }}
+      basic_exclusions_artifact_name:
+        value: ${{ jobs.normalize.outputs.basic_exclusions_artifact_name }}
 
 permissions:
   contents: read
@@ -28,6 +30,7 @@ jobs:
     outputs:
       normalized_artifact_name: ${{ steps.names.outputs.normalized_artifact_name }}
       change_artifact_name: ${{ steps.names.outputs.change_artifact_name }}
+      basic_exclusions_artifact_name: ${{ steps.names.outputs.basic_exclusions_artifact_name }}
     steps:
       - name: Check out trusted workflow code without persisted credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -62,7 +65,10 @@ jobs:
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/normalized/payload" "$RUNNER_TEMP/change/payload"
+          mkdir -p \
+            "$RUNNER_TEMP/normalized/payload" \
+            "$RUNNER_TEMP/change/payload" \
+            "$RUNNER_TEMP/basic-exclusions/payload"
           if [[ "$SOURCE_KEY" == "synthetic-fixture" ]]; then
             python3 Tools/evidence_model.py validate --input Data/evidence/sample-evidence-v1.json
             python3 Tools/catalog_workflow.py validate-synthetic-normalization \
@@ -95,6 +101,10 @@ jobs:
           )
           print("record_count=2", file=open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8"))
           PY
+            POLICY_VERSION="$(python3 -c 'import json; print(json.load(open("Data/selection/catalog-selection-policy-v1.json", encoding="utf-8"))["policyVersion"])')"
+            python3 Tools/basic_exclusions.py empty \
+              --policy-version "$POLICY_VERSION" \
+              --output "$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json"
           elif [[ "$SOURCE_KEY" == "open-food-facts" ]]; then
             python3 Tools/open_food_facts.py normalize \
               --snapshot "$RUNNER_TEMP/source/payload/source-records.jsonl" \
@@ -103,6 +113,9 @@ jobs:
               --quality-output "$RUNNER_TEMP/normalized/source-quality.json" \
               --change-output "$RUNNER_TEMP/change/payload/change-report.json"
             python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+            python3 Tools/basic_exclusions.py project \
+              --selection-report "$RUNNER_TEMP/normalized/selection-report.json" \
+              --output "$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json"
             EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           from pathlib import Path
@@ -118,6 +131,10 @@ jobs:
               --quality-output "$RUNNER_TEMP/normalized/source-quality.json" \
               --change-output "$RUNNER_TEMP/change/payload/change-report.json"
             python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+            POLICY_VERSION="$(python3 -c 'import json; print(json.load(open("Data/selection/catalog-selection-policy-v1.json", encoding="utf-8"))["policyVersion"])')"
+            python3 Tools/basic_exclusions.py empty \
+              --policy-version "$POLICY_VERSION" \
+              --output "$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json"
             EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           from pathlib import Path
@@ -128,12 +145,19 @@ jobs:
             echo "No normalized adapter is admitted for $SOURCE_KEY" >&2
             exit 2
           fi
+          BASIC_EXCLUSIONS="$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path(os.environ["BASIC_EXCLUSIONS"]).read_text(encoding="utf-8"))
+          print(f"basic_exclusion_count={len(payload['records'])}")
+          PY
 
-      - name: Emit immutable normalized and change handoffs
+      - name: Emit immutable normalized, change, and basic-exclusion handoffs
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           RECORD_COUNT: ${{ steps.normalize.outputs.record_count }}
+          BASIC_EXCLUSION_COUNT: ${{ steps.normalize.outputs.basic_exclusion_count }}
           INPUT_COMPLETENESS: ${{ steps.source_handoff.outputs.completeness }}
         run: |
           set -euo pipefail
@@ -167,6 +191,21 @@ jobs:
             --content-schema-version change-report-v1 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --output "$RUNNER_TEMP/change/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind basic-exclusions \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow normalize-and-diff.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json" \
+            --payload-relative-path payload/basic-exclusions.json \
+            --record-count "$BASIC_EXCLUSION_COUNT" \
+            --completeness "$INPUT_COMPLETENESS" \
+            --redistribution-class redistributable \
+            --content-schema-version basic-exclusions-v1 \
+            --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output "$RUNNER_TEMP/basic-exclusions/handoff.json"
 
       - name: Define artifact names
         id: names
@@ -176,6 +215,7 @@ jobs:
         run: |
           echo "normalized_artifact_name=normalized-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
           echo "change_artifact_name=changes-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "basic_exclusions_artifact_name=basic-exclusions-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Upload normalized evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -192,3 +232,11 @@ jobs:
           path: ${{ runner.temp }}/change
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload digest-bound basic exclusions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.basic_exclusions_artifact_name }}
+          path: ${{ runner.temp }}/basic-exclusions
+          if-no-files-found: error
+          retention-days: 7

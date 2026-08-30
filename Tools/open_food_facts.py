@@ -95,6 +95,15 @@ def main() -> None:
         selection_policy=selection_policy,
         previous_evidence=previous,
     )
+    acquisition = reports["quality"]["acquisition"]
+    changes["parserQuality"] = {
+        "recordsExamined": acquisition["recordsExamined"],
+        "recordsEmitted": acquisition["recordsEmitted"],
+        "malformedRecords": acquisition["malformedRecords"],
+        "oversizedLines": acquisition["oversizedLines"],
+        "malformedRate": acquisition.get("malformedRate", 0.0),
+        "schemaErrors": 0,
+    }
     _write_json(args.evidence_output, evidence)
     _write_json(args.selection_output, reports["selection"])
     _write_json(args.quality_output, reports["quality"])

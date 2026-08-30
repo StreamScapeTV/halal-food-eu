@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "1.0.0",
+  "market": "DE",
+  "freshness": {
+    "formulation": {
+      "anchorField": "observedAt",
+      "refreshRecommendedMonths": 9,
+      "staleMonths": 12
+    },
+    "retailer": {
+      "anchorFields": ["observedAt", "snapshotAt"],
+      "refreshRecommendedMonths": 1,
+      "staleMonths": 3
+    },
+    "certification": {
+      "anchorField": "lastCheckedAt",
+      "refreshRecommendedMonths": 3,
+      "staleMonths": 6
+    }
+  },
+  "sourceTrust": {
+    "package-photo": 600,
+    "manufacturer": 500,
+    "certifier": 450,
+    "identity-registry": 400,
+    "retailer-official": 300,
+    "open-database": 200,
+    "community-observation": 100,
+    "synthetic": 1000
+  },
+  "releaseThresholds": {
+    "minimumBaselineRecords": 100,
+    "maximumCountDecreaseFraction": 0.25,
+    "maximumCountIncreaseFraction": 1.0,
+    "maximumParserErrorFraction": 0.001
+  },
+  "review": {
+    "positiveStatusesRequiringIndependentSecondReview": [
+      "halal-certified",
+      "halal-reviewed"
+    ],
+    "minimumIndependentReviewers": 2
+  },
+  "sampling": {
+    "seed": "catalog-quality-v1",
+    "baseSize": 25,
+    "widenedSize": 100,
+    "defectRateThreshold": 0.05
+  }
+}

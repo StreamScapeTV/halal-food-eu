@@ -77,6 +77,19 @@ def main() -> None:
         aliases=aliases,
         previous_evidence_path=args.previous_evidence,
     )
+    metadata = common.load_json(args.metadata)
+    malformed = metadata.get("malformedRecords", {})
+    malformed_count = sum(value for value in malformed.values() if isinstance(value, int) and not isinstance(value, bool)) if isinstance(malformed, dict) else 0
+    emitted = metadata.get("recordsEmitted", 0)
+    emitted_count = emitted if isinstance(emitted, int) and not isinstance(emitted, bool) else 0
+    examined = emitted_count + malformed_count
+    changes["parserQuality"] = {
+        "recordsExamined": examined,
+        "recordsEmitted": emitted_count,
+        "malformedRecords": malformed_count,
+        "malformedRate": (malformed_count / examined) if examined else 0.0,
+        "schemaErrors": 0,
+    }
     _write_json(args.evidence_output, evidence)
     _write_json(args.quality_output, quality)
     _write_json(args.change_output, changes)

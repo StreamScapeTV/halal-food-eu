@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscapetv.github.io/halal-food-eu/schema/catalog-quality-policy-v1.json",
+  "title": "Halal Food EU catalog quality policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "policyVersion", "market", "freshness", "sourceTrust", "releaseThresholds", "review", "sampling"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "policyVersion": {"type": "string", "minLength": 1},
+    "market": {"type": "string", "pattern": "^[A-Z]{2}$"},
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formulation", "retailer", "certification"],
+      "properties": {
+        "formulation": {"$ref": "#/$defs/monthClock"},
+        "retailer": {"$ref": "#/$defs/multiAnchorMonthClock"},
+        "certification": {"$ref": "#/$defs/monthClock"}
+      }
+    },
+    "sourceTrust": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0},
+      "minProperties": 1
+    },
+    "releaseThresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimumBaselineRecords", "maximumCountDecreaseFraction", "maximumCountIncreaseFraction", "maximumParserErrorFraction"],
+      "properties": {
+        "minimumBaselineRecords": {"type": "integer", "minimum": 1},
+        "maximumCountDecreaseFraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximumCountIncreaseFraction": {"type": "number", "minimum": 0},
+        "maximumParserErrorFraction": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positiveStatusesRequiringIndependentSecondReview", "minimumIndependentReviewers"],
+      "properties": {
+        "positiveStatusesRequiringIndependentSecondReview": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["halal-certified", "halal-reviewed", "not-halal", "questionable", "unknown"]}
+        },
+        "minimumIndependentReviewers": {"type": "integer", "minimum": 2}
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "baseSize", "widenedSize", "defectRateThreshold"],
+      "properties": {
+        "seed": {"type": "string", "minLength": 1},
+        "baseSize": {"type": "integer", "minimum": 1},
+        "widenedSize": {"type": "integer", "minimum": 1},
+        "defectRateThreshold": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "monthClock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchorField", "refreshRecommendedMonths", "staleMonths"],
+      "properties": {
+        "anchorField": {"type": "string", "minLength": 1},
+        "refreshRecommendedMonths": {"type": "integer", "minimum": 1},
+        "staleMonths": {"type": "integer", "minimum": 1}
+      }
+    },
+    "multiAnchorMonthClock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchorFields", "refreshRecommendedMonths", "staleMonths"],
+      "properties": {
+        "anchorFields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "refreshRecommendedMonths": {"type": "integer", "minimum": 1},
+        "staleMonths": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

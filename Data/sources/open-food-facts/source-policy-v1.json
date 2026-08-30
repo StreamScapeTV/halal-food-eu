@@ -6,7 +6,8 @@
   "accessMethod": "public-bulk",
   "exportURL": "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz",
   "allowedAcquisitionHosts": [
-    "static.openfoodfacts.org"
+    "static.openfoodfacts.org",
+    "openfoodfacts-ds.s3.eu-west-3.amazonaws.com"
   ],
   "allowedReferenceHosts": [
     "images.openfoodfacts.org",

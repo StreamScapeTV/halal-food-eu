@@ -486,6 +486,8 @@ def complete_review(
     unresolved = open_queues - resolved
     findings = [item for item in report.get("candidateFindings", []) if isinstance(item, dict)]
 
+    if decision in POSITIVE_STATUSES and any(item.get("outcome") == "prohibited-candidate" for item in findings):
+        raise MethodologyError("positive review cannot preserve an unresolved prohibited candidate")
     if decision in POSITIVE_STATUSES and unresolved:
         raise MethodologyError("positive review requires every open review queue to be explicitly resolved with evidence")
     if decision in POSITIVE_STATUSES and report.get("freshnessState") != "fresh":

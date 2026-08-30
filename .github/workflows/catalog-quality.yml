@@ -61,6 +61,38 @@ jobs:
           python3 Tools/catalog_quality.py validate-policy \
             --policy Data/quality/catalog-quality-policy-v1.json
 
+      - name: Validate source-specific change semantics
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          CHANGE_REPORT: ${{ runner.temp }}/change/payload/change-report.json
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          change = json.loads(Path(os.environ["CHANGE_REPORT"]).read_text(encoding="utf-8"))
+          findings = []
+          if change.get("sourceKey") != os.environ["SOURCE_KEY"]:
+              findings.append("change-report-source-mismatch")
+          if change.get("snapshotID") != os.environ["SNAPSHOT_ID"]:
+              findings.append("change-report-snapshot-mismatch")
+          if change.get("noCompletenessClaim") is not True:
+              findings.append("source-completeness-claim-not-prohibited")
+          if not isinstance(change.get("reviewQueue"), list):
+              findings.append("review-queue-missing")
+          if os.environ["SOURCE_KEY"] == "open-food-facts" and not isinstance(change.get("selectionDecisionReasons"), dict):
+              findings.append("selection-reason-metrics-missing")
+          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("observationalOnly") is not True:
+              findings.append("retailer-observational-boundary-missing")
+          if os.environ["SOURCE_KEY"] == "open-prices" and change.get("formulationChanges") != 0:
+              findings.append("retailer-source-must-not-change-formulation")
+          if findings:
+              raise SystemExit("release-blocking source-specific quality findings: " + ", ".join(findings))
+          PY
+
       - name: Evaluate deterministic release quality policy
         env:
           SOURCE_KEY: ${{ inputs.source_key }}

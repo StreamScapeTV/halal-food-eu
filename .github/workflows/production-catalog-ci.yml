@@ -31,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile \
+            Tools/build_production_fixture.py \
             Tools/production_catalog_gate.py \
             Tools/production_catalog.py \
             Tools/tests/test_production_catalog_gate.py \
@@ -39,3 +40,15 @@ jobs:
             -s Tools/tests \
             -p 'test_production_catalog*.py' \
             -v
+
+      - name: Build the exact production-schema iOS fixture
+        run: |
+          set -euo pipefail
+          python3 Tools/build_production_fixture.py \
+            --database "${RUNNER_TEMP}/catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/catalog-manifest.json" \
+            --source-commit "${GITHUB_SHA}" \
+            --workflow-run "${GITHUB_RUN_ID}"
+          python3 Tools/production_catalog.py validate \
+            --database "${RUNNER_TEMP}/catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/catalog-manifest.json"

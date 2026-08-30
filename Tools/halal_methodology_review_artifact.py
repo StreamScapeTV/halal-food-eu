@@ -1,11 +1,23 @@
 """Immutable review-artifact enrichment for explicit methodology reviews."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from halal_methodology_core import MethodologyError, digest
 
 POSITIVE_DECISIONS = {"halal-certified", "halal-reviewed"}
+SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+
+
+def _validate_analysis_integrity(analysis: dict[str, Any]) -> None:
+    supplied = analysis.get("analysisSha256")
+    if not isinstance(supplied, str) or not SHA256_RE.fullmatch(supplied):
+        raise MethodologyError("analysis report lacks a valid analysisSha256")
+    unsigned = dict(analysis)
+    unsigned.pop("analysisSha256", None)
+    if digest(unsigned) != supplied:
+        raise MethodologyError("analysis report content does not match analysisSha256")
 
 
 def attach_checklist_snapshot(
@@ -13,7 +25,8 @@ def attach_checklist_snapshot(
     analysis: dict[str, Any],
     methodology: dict[str, Any],
 ) -> dict[str, Any]:
-    """Snapshot the exact reviewed checklists so later methodology edits cannot rewrite history."""
+    """Bind immutable source/hash/checklist evidence to one explicit review artifact."""
+    _validate_analysis_integrity(analysis)
     artifact = result.get("reviewArtifact")
     if not isinstance(artifact, dict):
         raise MethodologyError("review result lacks reviewArtifact")
@@ -35,6 +48,7 @@ def attach_checklist_snapshot(
     missing = sorted(set(open_queues) - set(queue_defs))
     if missing:
         raise MethodologyError(f"analysis references review queues missing from methodology: {', '.join(missing)}")
+    artifact["ingredientContentHash"] = analysis.get("ingredientContentHash")
     artifact["checklists"] = [
         {"queueID": queue_id, "items": list(queue_defs[queue_id])}
         for queue_id in sorted(set(open_queues))

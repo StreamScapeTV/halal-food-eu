@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "1.0.0",
+  "reviewedAt": "2026-08-30T00:00:00Z",
+  "identityOnly": true,
+  "entries": [
+    {
+      "id": "E422",
+      "names": {
+        "de": ["Glycerin", "Glycerol"],
+        "en": ["Glycerol", "Glycerin"]
+      },
+      "originConclusion": "unknown-without-evidence",
+      "halalConclusion": null,
+      "references": ["https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"]
+    },
+    {
+      "id": "E471",
+      "names": {
+        "de": ["Mono- und Diglyceride von Speisefettsäuren", "Mono- und Diglyceride"],
+        "en": ["Mono- and diglycerides of fatty acids", "Mono- and diglycerides"]
+      },
+      "originConclusion": "unknown-without-evidence",
+      "halalConclusion": null,
+      "references": ["https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"]
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscapetv.github.io/halal-food-eu/schema/halal-methodology-v1.json",
+  "title": "Halal Food EU methodology v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "methodologyVersion",
+    "marketScope",
+    "languages",
+    "reviewedAt",
+    "principles",
+    "certificationPolicy",
+    "rules",
+    "reviewQueues",
+    "changeLog"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "methodologyVersion": {"type": "string", "minLength": 1},
+    "marketScope": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[A-Z]{2}$"}
+    },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$"}
+    },
+    "reviewedAt": {"type": "string", "format": "date-time"},
+    "principles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noMatchStatus",
+        "parserMayCreatePositiveStatus",
+        "parserMayCreateFinalNegativeStatus",
+        "translatedOnlyStatus",
+        "ocrOnlyStatus",
+        "staleOrDateUnknownStatus",
+        "conflictStatus"
+      ],
+      "properties": {
+        "noMatchStatus": {"const": "unknown"},
+        "parserMayCreatePositiveStatus": {"const": false},
+        "parserMayCreateFinalNegativeStatus": {"const": false},
+        "translatedOnlyStatus": {"enum": ["questionable", "unknown"]},
+        "ocrOnlyStatus": {"enum": ["questionable", "unknown"]},
+        "staleOrDateUnknownStatus": {"enum": ["questionable", "unknown"]},
+        "conflictStatus": {"const": "questionable"}
+      }
+    },
+    "certificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyVersion", "defaultDecision", "acceptedCertifiers"],
+      "properties": {
+        "policyVersion": {"type": "string", "minLength": 1},
+        "defaultDecision": {"const": "review-required"},
+        "acceptedCertifiers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["certifier", "scheme", "markets", "reviewedAt"],
+            "properties": {
+              "certifier": {"type": "string", "minLength": 1},
+              "scheme": {"type": "string", "minLength": 1},
+              "markets": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z]{2}$"}},
+              "reviewedAt": {"type": "string", "format": "date-time"},
+              "expiresAt": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/rule"}
+    },
+    "reviewQueues": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/reviewQueue"}
+    },
+    "changeLog": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "date", "summary"],
+        "properties": {
+          "version": {"type": "string", "minLength": 1},
+          "date": {"type": "string", "format": "date"},
+          "summary": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "text", "match"],
+      "properties": {
+        "language": {"type": "string", "pattern": "^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$"},
+        "text": {"type": "string", "minLength": 1},
+        "match": {"enum": ["token", "token-prefix", "phrase", "e-number"]}
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "outcome", "aliases", "reasonCode", "title", "reviewQueue", "references", "reviewedAt"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "category": {"enum": ["explicit-animal-source", "explicit-pork-porcine", "alcohol-ethanol-context", "gelatine", "enzymes", "rennet", "emulsifiers", "flavourings", "processing-aids", "carriers-solvents", "colourants", "other-ambiguous-origin"]},
+        "outcome": {"enum": ["prohibited-candidate", "acceptable-with-evidence", "ambiguous-review-required", "informational"]},
+        "aliases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/alias"}},
+        "excludeContexts": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "reasonCode": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "title": {"type": "string", "minLength": 1},
+        "reviewQueue": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "references": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "reviewedAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "reviewQueue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "checklist"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "checklist": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

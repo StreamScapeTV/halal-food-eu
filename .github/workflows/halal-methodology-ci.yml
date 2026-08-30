@@ -1,0 +1,58 @@
+name: Halal methodology CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: halal-methodology-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  methodology:
+    name: Methodology safety and review semantics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate methodology data and Python tooling
+        run: |
+          set -euo pipefail
+          python3 -m json.tool Data/methodology/halal-methodology-v1.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-methodology-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/additive-identities-v1.json >/dev/null
+          python3 -m json.tool Data/methodology/additive-identities-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-review-input-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-review-artifact-v1.schema.json >/dev/null
+          python3 -m json.tool Data/methodology/methodology-report-v1.schema.json >/dev/null
+          python3 -m py_compile \
+            Tools/halal_methodology.py \
+            Tools/halal_methodology_core.py \
+            Tools/halal_methodology_batch.py \
+            Tools/halal_methodology_reference.py \
+            Tools/halal_methodology_review_artifact.py \
+            Tools/tests/test_halal_methodology.py \
+            Tools/tests/test_halal_methodology_batch.py \
+            Tools/tests/test_halal_methodology_certification.py \
+            Tools/tests/test_halal_methodology_cli.py \
+            Tools/tests/test_halal_methodology_evidence_integration.py \
+            Tools/tests/test_halal_methodology_reference.py \
+            Tools/tests/test_halal_methodology_review_artifact.py
+          python3 Tools/halal_methodology.py validate
+
+      - name: Run methodology safety, context, review, evidence-integration, certification, and migration tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=Tools python3 -m unittest discover -s Tools/tests -p 'test_halal_methodology*.py'

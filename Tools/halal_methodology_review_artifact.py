@@ -5,6 +5,8 @@ from typing import Any
 
 from halal_methodology_core import MethodologyError, digest
 
+POSITIVE_DECISIONS = {"halal-certified", "halal-reviewed"}
+
 
 def attach_checklist_snapshot(
     result: dict[str, Any],
@@ -15,6 +17,15 @@ def attach_checklist_snapshot(
     artifact = result.get("reviewArtifact")
     if not isinstance(artifact, dict):
         raise MethodologyError("review result lacks reviewArtifact")
+    findings = [
+        item
+        for item in analysis.get("candidateFindings", [])
+        if isinstance(item, dict)
+    ]
+    if artifact.get("decision") in POSITIVE_DECISIONS and any(
+        item.get("outcome") == "prohibited-candidate" for item in findings
+    ):
+        raise MethodologyError("positive review cannot preserve an unresolved prohibited candidate")
     queue_defs = {
         item["id"]: item["checklist"]
         for item in methodology.get("reviewQueues", [])

@@ -95,11 +95,17 @@ struct ProductResultView: View {
         }
 
         Section("Review") {
-            LabeledContent(
-                "Reviewed",
-                value: product.assessment.reviewedAt.formatted(date: .abbreviated, time: .omitted)
-            )
-            LabeledContent("Methodology", value: product.assessment.methodologyVersion)
+            if let reviewedAt = product.assessment.reviewedAt {
+                LabeledContent(
+                    "Reviewed",
+                    value: reviewedAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            } else {
+                LabeledContent("Reviewed", value: "Not reviewed")
+            }
+            if let methodologyVersion = product.assessment.methodologyVersion {
+                LabeledContent("Methodology", value: methodologyVersion)
+            }
         }
     }
 }

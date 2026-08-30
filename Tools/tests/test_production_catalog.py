@@ -158,6 +158,7 @@ class ProductionCatalogTests(unittest.TestCase):
         self.assertEqual(manifest["counts"]["retailerEvidence"], 1)
         self.assertEqual(manifest["counts"]["remoteImageReferences"], 1)
         self.assertEqual(manifest["counts"]["basicExclusions"], 1)
+        self.assertEqual(manifest["counts"]["unreviewedProducts"], 0)
         self.assertEqual(manifest["qualityGate"]["policyVersion"], "1.0.0")
         self.assertEqual(len(manifest["qualityGate"]["reportSha256"]), 64)
         self.assertEqual(len(manifest["qualityGate"]["policySha256"]), 64)
@@ -177,6 +178,36 @@ class ProductionCatalogTests(unittest.TestCase):
             )
             self.assertEqual(db.execute("SELECT COUNT(*) FROM remote_image_references").fetchone()[0], 1)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM basic_exclusions").fetchone()[0], 1)
+
+    def test_preserves_unassessed_current_selection_as_unknown_without_fabricating_review(self):
+        envelope = json.loads(self.evidence.read_text(encoding="utf-8"))
+        selection = next(
+            item for item in envelope["currentSelections"]
+            if item["gtin"] == "00200000000028"
+        )
+        selection["assessmentID"] = None
+        self.evidence.write_text(json.dumps(envelope, sort_keys=True) + "\n", encoding="utf-8")
+        self._evaluate_quality()
+
+        manifest = self.build()
+        production_catalog.validate_catalog(self.database, self.manifest)
+
+        self.assertEqual(manifest["counts"]["products"], 2)
+        self.assertEqual(manifest["counts"]["assessments"], 1)
+        self.assertEqual(manifest["counts"]["unreviewedProducts"], 1)
+        self.assertEqual(
+            manifest["statusDistribution"],
+            {"halal-certified": 1, "unknown": 1},
+        )
+        with sqlite3.connect(self.database) as db:
+            row = db.execute(
+                """SELECT current_observation_id,current_assessment_id
+                   FROM products WHERE gtin=?""",
+                ("00200000000028",),
+            ).fetchone()
+            self.assertIsNotNone(row[0])
+            self.assertIsNone(row[1])
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM product_assessments").fetchone()[0], 1)
 
     def test_rejects_non_passing_quality_report_even_with_valid_self_digest(self):
         import hashlib

@@ -17,8 +17,10 @@ from halal_methodology_core import (
     validate_methodology,
     validity_events_from_migration,
 )
+from halal_methodology_reference import AdditiveReferenceError, validate_additive_identities
 
 DEFAULT_METHODOLOGY = Path("Data/methodology/halal-methodology-v1.json")
+DEFAULT_ADDITIVES = Path("Data/methodology/additive-identities-v1.json")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -61,8 +63,9 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
 
-    validate = sub.add_parser("validate", help="validate the committed methodology data")
+    validate = sub.add_parser("validate", help="validate the committed methodology and identity-only additive data")
     validate.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
+    validate.add_argument("--additives", type=Path, default=DEFAULT_ADDITIVES)
 
     analyze = sub.add_parser("analyze", help="analyze one current GTIN/market ingredient observation")
     analyze.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
@@ -99,7 +102,12 @@ def main() -> None:
         methodology = load_json(args.methodology)
         validate_methodology(methodology)
         if args.command == "validate":
-            print(f"Validated halal methodology {methodology['methodologyVersion']}")
+            additives = load_json(args.additives)
+            validate_additive_identities(additives)
+            print(
+                f"Validated halal methodology {methodology['methodologyVersion']} "
+                f"and additive identities {additives['datasetVersion']}"
+            )
             return
 
         envelope = load_json(args.evidence)
@@ -153,7 +161,7 @@ def main() -> None:
         migration["validityEvents"] = validity_events_from_migration(migration, occurred_at=args.occurred_at)
         write_json(args.output, migration)
         print(f"Methodology migration: {migration['invalidated']} invalidated, {migration['carriedForward']} carried forward")
-    except (MethodologyError, EvidenceValidationError) as exc:
+    except (MethodologyError, EvidenceValidationError, AdditiveReferenceError) as exc:
         raise SystemExit(f"halal methodology failed: {exc}") from exc
 
 

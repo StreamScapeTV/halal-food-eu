@@ -71,18 +71,18 @@ raise SystemExit("No available iPhone simulator was found")
 xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
-TEST_FILTER=()
+XCODEBUILD_ARGS=(
+  -project HalalFoodEU.xcodeproj
+  -scheme HalalFoodEU
+  -configuration Debug
+  -destination "platform=iOS Simulator,id=${SIMULATOR_ID}"
+  -derivedDataPath .build/DerivedData
+  -enableCodeCoverage YES
+  CODE_SIGNING_ALLOWED=NO
+)
 if [[ "$PREBUILT_MODE" == "true" ]]; then
-  TEST_FILTER=(-only-testing:HalalFoodEUTests/ProductionCatalogArtifactCompatibilityTests)
+  XCODEBUILD_ARGS+=(-only-testing:HalalFoodEUTests/ProductionCatalogArtifactCompatibilityTests)
 fi
+XCODEBUILD_ARGS+=(test)
 
-xcodebuild \
-  -project HalalFoodEU.xcodeproj \
-  -scheme HalalFoodEU \
-  -configuration Debug \
-  -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
-  -derivedDataPath .build/DerivedData \
-  -enableCodeCoverage YES \
-  CODE_SIGNING_ALLOWED=NO \
-  "${TEST_FILTER[@]}" \
-  test
+xcodebuild "${XCODEBUILD_ARGS[@]}"

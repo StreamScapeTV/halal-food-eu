@@ -30,6 +30,10 @@ SHA40 = re.compile(r"^[0-9a-f]{40}$")
 SHA64 = re.compile(r"^[0-9a-f]{64}$")
 SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?$")
 WORKFLOW_RUN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._:/-]{0,127}$")
+PRODUCTION_SOURCE_POLICY_PATHS = [
+    "repository/Data/sources/open-food-facts/source-policy-v1.json",
+    "repository/Data/sources/open-prices/source-policy-v1.json",
+]
 
 
 class ReleaseInputError(ValueError):
@@ -386,7 +390,7 @@ def build_request_from_release_input(
         "qualityHandoffPath": "quality/handoff.json",
         "basicExclusionsHandoffPath": "basic-exclusions/handoff.json",
         "qualityPolicyPath": "repository/Data/quality/catalog-quality-policy-v1.json",
-        "sourcePolicyPaths": ["repository/Data/sources/open-food-facts/source-policy-v1.json"],
+        "sourcePolicyPaths": list(PRODUCTION_SOURCE_POLICY_PATHS),
         "databaseOutputPath": "database/payload/catalog.sqlite3",
         "manifestOutputPath": "manifest/payload/catalog-manifest.json",
         "catalogVersion": validated["catalogVersion"],

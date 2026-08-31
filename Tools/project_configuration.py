@@ -101,7 +101,7 @@ def validate_credential_policy(raw: dict[str, Any], path: Path) -> CredentialPol
     if set(raw) != {"schemaVersion", "sourceKey", "authentication"} or raw.get("schemaVersion") != 1:
         raise ConfigurationError(f"{path} has unsupported credential policy schema or fields")
     source_key = raw.get("sourceKey")
-    if not isinstance(source_key, str) or not SOURCE_KEY.fulmatch(source_key):
+    if not isinstance(source_key, str) or not SOURCE_KEY.fullmatch(source_key):
         raise ConfigurationError(f"{path} has invalid sourceKey")
     auth = raw.get("authentication")
     if not isinstance(auth, dict) or set(auth) != {"mode", "requiredSecretNames"}:
@@ -181,40 +181,120 @@ def validate_contracts(
 def evaluate_health(
     *,
     config_path: Path = DEFAULT_CONFIG,
-    workflow_contract_path: Path = DEFAULT×ÕÓÔ’Ñ“Õ×ÐÓÓ•PÕˆÛÝ\˜ÙWÜ›ÛÝˆ]HQUSÔÓÕTÑWÔ“ÓÕˆÛÛ™šYÝ\™YÜÙXÜ™]Û˜[Y\Îˆ]\˜X›VÜÝ—HH
+    workflow_contract_path: Path = DEFAULT_WORKFLOW_CONTRACT,
+    source_root: Path = DEFAULT_SOURCE_ROOT,
+    configured_secret_names: Iterable[str] = (),
+) -> dict[str, Any]:
+    _, registry, policies = validate_contracts(
+        config_path=config_path,
+        workflow_contract_path=workflow_contract_path,
+        source_root=source_root,
+    )
+    declared_names = {name for policy in policies.values() for name in policy.required_secret_names}
+    configured = set(configured_secret_names)
+    unknown = sorted(configured - declared_names)
+    if unknown:
+        raise ConfigurationError(f"configured secret-name state contains undeclared names: {unknown}")
 
-KŠHOˆXÝÜÝ‹[žWN‚ˆË™YÚ\ÝžKÛXÚY\ÈH˜[Y]WØÛÛ˜XÝÊˆÛÛ™šY×Ü]XÛÛ™šY×Ü]ˆÛÜšÙ›Ý×ØÛÛ˜XÝÜ]]ÛÜšÙ›Ý×ØÛÛ˜XÝÜ]ˆÛÝ\˜ÙWÜ›ÛÝ\ÛÝ\˜ÙWÜ›ÛÝˆ
-BˆXÛ\™YÛ˜[Y\ÈHÛ˜[YH›ÜˆÛXÞH[ˆÛXÚY\Ë˜[Y\Ê
-H›Üˆ˜[YH[ˆÛXÞKœ™\]Z\™YÜÙXÜ™]Û˜[Y\ßBˆÛÛ™šYÝ\™YHÙ]
-ÛÛ™šYÝ\™YÜÙXÜ™]Û˜[Y\ÊBˆ[šÛ›ÝÛˆHÛÜY
-ÛÛ™šYÝ\™YHXÛ\™YÛ˜[Y\ÊBˆYˆ[šÛ›ÝÛŽ‚ˆ˜Z\ÙHÛÛ™šYÝ\˜][Û‘\œ›ÜŠˆ˜ÛÛ™šYÝ\™YÙXÜ™][˜[YHÝ]HÛÛZ[œÈ[™XÛ\™Y˜[Y\ÎˆÝ[šÛ›ÝÛŸHŠB‚ˆÛÝ\˜Ù\Îˆ\ÝÙXÝÜÝ‹[žWWHH×Bˆ›ØÚÙ\œÎˆ\ÝÙXÝÜÝ‹[žWWHH×Bˆ›ÜˆÛÝ\˜ÙWÚÙ^H[ˆÛÜY
-™YÚ\ÝžJN‚ˆÛÝ\˜ÙHH™YÚ\ÝžVÜÛÝ\˜ÙWÚÙ^WBˆÛXÞHHÛXÚY\Ë™Ù]
-ÛÝ\˜ÙWÚÙ^JBˆYˆ›ÝÛÝ\˜ÙVÈ™[˜X›Y—N‚ˆYˆÛXÞH\È›Ý›Û™N‚ˆÛÝ\˜Ù\Ë˜\[™
-ÂˆœÛÝ\˜ÙRÙ^HŽˆÛÝ\˜ÙWÚÙ^KˆœÝ]HŽˆ™\ØX›Y‹ˆ˜]][XØ][Û“[ÙHŽˆÛXÞK›[ÙKˆœ™\]Z\™YÙXÜ™]ÈŽˆÂˆÈ›˜[YHŽˆ˜[YK˜ÛÛ™šYÝ\™YŽˆ˜[YH[ˆÛÛ™šYÝ\™YBˆ›Üˆ˜[YH[ˆÛXÞKœ™\]Z\™YÜÙXÜ™]Û˜[Y\ÂˆKˆJBˆÛÛ[YBˆYˆ›ÝÛÝ\˜ÙVÈ˜Ü™Y[X[Ô™\]Z\™Y—N‚ˆÛÛ[YBˆ\ÜÙ\ÛXÞH\È›Ý›Û™BˆÝ]\ÈHÂˆÈ›˜[YHŽˆ˜[YK˜ÛÛ™šYÝ\™YŽˆ˜[YH[ˆÛÛ™šYÝ\™YBˆ›Üˆ˜[YH[ˆÛXÞKœ™\]Z\™YÜÙXÜ™]Û˜[Y\ÂˆBˆZ\ÜÚ[™ÈHÚ][VÈ›˜[YH—H›Üˆ][H[ˆÝ]\ÈYˆ›Ý][VÈ˜ÛÛ™šYÝ\™Y—WBˆÛÝ\˜Ù\Ë˜\[™
-ÂˆœÛÝ\˜ÙRÙ^HŽˆÛÝ\˜ÙWÚÙ^KˆœÝ]HŽˆ™[˜X›Y‹ˆ˜]][XØ][Û“[ÙHŽˆÛXÞK›[ÙKˆœ™\]Z\™YÙXÜ™]ÈŽˆÝ]\ËˆJBˆYˆZ\ÜÚ[™Î‚ˆ›ØÚÙ\œË˜\[™
-ÂˆœÛÝ\˜ÙRÙ^HŽˆÛÝ\˜ÙWÚÙ^Kˆ˜ÛÙHŽˆœ™\]Z\™YXÜ™Y[X[Ë[›ÝXÛÛ™šYÝ\™Y‹ˆœ™\]Z\™YÙXÜ™]˜[Y\ÈŽˆ\Ý
-ÛXÞKœ™\]Z\™YÜÙXÜ™]Û˜[Y\ÊKˆ›Z\ÜÚ[™ÔÙXÜ™]˜[Y\ÈŽˆZ\ÜÚ[™ËˆJB‚ˆ™\ÜHÂˆœØÚ[XU™\œÚ[ÛˆŽˆKˆœÝ]\ÈŽˆ˜›ØÚÙYˆYˆ›ØÚÙ\œÈ[ÙHšX[H‹ˆ›ÝÛ™\’[œ]™\]Z\™YŽˆ›ÛÛ
-›ØÚÙ\œÊKˆ™Y\XØ][Û’Ù^HŽˆPSÒÑVKˆœX›XÐÛÛ™šYÝ\˜][ÛˆŽˆÛ˜[YNˆ˜[Yˆ›Üˆ˜[YH[ˆÛÜY
-P“P×ÒÑVTÊ_KˆœÛÝ\˜Ù\ÈŽˆÛÝ\˜Ù\Ëˆ˜›ØÚÙ\œÈŽˆ›ØÚÙ\œËˆBˆ™]\›ˆ™\Ü‚‚™YˆÜš]WÚœÛÛŠ]ˆ]˜[YNˆXÝÜÝ‹[žWJHOˆ›Û™N‚ˆ]œ\™[›ZÙ\Š\™[ÏUYK^\ÝÛÚÏUYJBˆ]Üš]WÝ^
-œÛÛ‹™[\Ê˜[YK[™[L‹ÛÜÚÙ^\ÏUYJH
-È—ˆ‹[˜ÛÙ[™ÏH]‹NŠB‚‚™Yˆ\œÙWØ\™ÜÊ\™ÝŽˆ\ÝÜÝ—H›Û™HH›Û™JHOˆ\™Ü\œÙK“˜[Y\ÜXÙN‚ˆ\œÙ\ˆH\™Ü\œÙK\™Ý[Y[\œÙ\Š\ØÜš\[ÛW×ÙØ××ÊBˆ\œÙ\‹˜YØ\™Ý[Y[
-‹KXÛÛ™šYÈ‹\OT]Y˜][QQUSÐÓÓ‘’QÊBˆ\œÙ\‹˜YØ\™Ý[Y[
-‹K]ÛÜšÙ›ÝËXÛÛ˜XÝ‹\OT]Y˜][QQUSÕÓÔ’Ñ“Õ×ÐÓÓ•PÕ
-Bˆ\œÙ\‹˜YØ\™Ý[Y[
-‹K\ÛÝ\˜ÙK\›ÛÝ‹\OT]Y˜][QQUSÔÓÕTÑWÔ“ÓÕ
-BˆÝXˆH\œÙ\‹˜YÜÝXœ\œÙ\œÊ\ÝH˜ÛÛ[X[™‹™\]Z\™YUYJB‚ˆÝX‹˜YÜ\œÙ\Š˜[Y]H‹[H˜[Y]HX›XÈ˜[Y\È[™ÛÝ\˜ÙHÜ™Y[X[ÛÛ˜XÝÈŠBˆÙ]HÝX‹˜YÜ\œÙ\Š™Ù]‹[Hœš[Û™H™]šY]ÙYX›XÈ˜[YHŠBˆÙ]˜YØ\™Ý[Y[
-‹K[˜[YH‹ÚÚXÙ\Ï\ÛÜY
-P“P×ÒÑVTÊK™\]Z\™YUYJBˆX[HÝX‹˜YÜ\œÙ\ŠšX[‹[H™]˜[X]HÜ[Û˜[Ü™Y[X[ÛÛ™šYÝ\˜][ÛˆÚ]Ý]ÙXÜ™]˜[Y\ÈŠBˆX[˜YØ\™Ý[Y[
-‹KXÛÛ™šYÝ\™Y\ÙXÜ™][˜[YH‹XÝ[ÛH˜\[™‹Y˜][V×JBˆX[˜YØ\™Ý[Y[
-‹K[Ý]]‹\OT]™\]Z\™YUYJBˆ™]\›ˆ\œÙ\‹œ\œÙWØ\™ÜÊ\™ÝŠB‚‚™YˆXZ[Š\™ÝŽˆ\ÝÜÝ—H›Û™HH›Û™JHOˆ[‚ˆ\™ÜÈH\œÙWØ\™ÜÊ\™ÝŠBˆžN‚ˆ˜[Y\ËËÛXÚY\ÈH˜[Y]WØÛÛ˜XÝÊˆÛÛ™šY×Ü]X\™ÜË˜ÛÛ™šYËˆÛÜšÙ›Ý×ØÛÛ˜XÝÜ]X\™ÜËÛÜšÙ›Ý×ØÛÛ˜XÝˆÛÝ\˜ÙWÜ›ÛÝX\™ÜËœÛÝ\˜ÙWÜ›ÛÝˆ
-BˆYˆ\™ÜË˜ÛÛ[X[™OH˜[Y]HŽ‚ˆš[
-ˆ•˜[Y]YX›XÈ›Ú™XÝÛÛ™šYÝ\˜][Ûˆ[™Û[ŠÛXÚY\Ê_HÜ[Û˜[ÛÝ\˜ÙHÜ™Y[X[ÛXÚY\ÈŠBˆ™]\›ˆˆYˆ\™ÜË˜ÛÛ[X[™OH™Ù]Ž‚ˆš[
-˜[Y\ÖØ\™ÜË›˜[YWJBˆ™]\›ˆˆ™\ÜH]˜[X]WÚX[
-ˆÛÛ™šY×Ü]X\™ÜË˜ÛÛ™šYËˆÛÜšÙ›Ý×ØÛÛ˜XÝÜ]X\™ÜËÛÜšÙ›Ý×ØÛÛ˜XÝˆÛÝ\˜ÙWÜ›ÛÝX\™ÜËœÛÝ\˜ÙWÜ›ÛÝˆÛÛ™šYÝ\™YÜÙXÜ™]Û˜[Y\ÏX\™ÜË˜ÛÛ™šYÝ\™YÜÙXÜ™]Û˜[YKˆ
-BˆÜš]WÚœÛÛŠ\™ÜË›Ý]]™\Ü
-Bˆš[
-ˆÛÛ™šYÝ\˜][ÛˆX[ˆÜ™\ÜÉÜÝ]\É×_H
-Û[Š™\ÜÉØ›ØÚÙ\œÉ×J_H›ØÚÙ\œÊHŠBˆ™]\›ˆˆYˆ™\ÜÈœÝ]\È—HOHšX[Hˆ[ÙHˆ^Ù\ÛÛ™šYÝ\˜][Û‘\œ›Üˆ\È^Î‚ˆš[
-ˆœ›Ú™XÝÛÛ™šYÝ\˜][Ûˆ˜[Y][Ûˆ˜Z[YˆÙ^ßH‹š[O\Þ\ËœÝ\œŠBˆ™]\›ˆ‚‚‚šYˆ×Û˜[YW×ÈOH—×ÛXZ[—×ÈŽ‚ˆ˜Z\ÙHÞ\Ý[Q^]
-XZ[Š
-JB
+    sources: list[dict[str, Any]] = []
+    blockers: list[dict[str, Any]] = []
+    for source_key in sorted(registry):
+        source = registry[source_key]
+        policy = policies.get(source_key)
+        if not source["enabled"]:
+            if policy is not None:
+                sources.append({
+                    "sourceKey": source_key,
+                    "state": "disabled",
+                    "authenticationMode": policy.mode,
+                    "requiredSecrets": [
+                        {"name": name, "configured": name in configured}
+                        for name in policy.required_secret_names
+                    ],
+                })
+            continue
+        if not source["credentialsRequired"]:
+            continue
+        assert policy is not None
+        states = [
+            {"name": name, "configured": name in configured}
+            for name in policy.required_secret_names
+        ]
+        missing = [item["name"] for item in states if not item["configured"]]
+        sources.append({
+            "sourceKey": source_key,
+            "state": "enabled",
+            "authenticationMode": policy.mode,
+            "requiredSecrets": states,
+        })
+        if missing:
+            blockers.append({
+                "sourceKey": source_key,
+                "code": "required-credentials-not-configured",
+                "requiredSecretNames": list(policy.required_secret_names),
+                "missingSecretNames": missing,
+            })
+
+    report = {
+        "schemaVersion": 1,
+        "status": "blocked" if blockers else "healthy",
+        "ownerInputRequired": bool(blockers),
+        "deduplicationKey": HEALTH_KEY,
+        "publicConfiguration": {name: "valid" for name in sorted(PUBLIC_KEYS)},
+        "sources": sources,
+        "blockers": blockers,
+    }
+    return report
+
+
+def write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--workflow-contract", type=Path, default=DEFAULT_WORKFLOW_CONTRACT)
+    parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE_ROOT)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("validate", help="validate public values and source credential contracts")
+    get = sub.add_parser("get", help="print one reviewed public value")
+    get.add_argument("--name", choices=sorted(PUBLIC_KEYS), required=True)
+    health = sub.add_parser("health", help="evaluate optional credential configuration without secret values")
+    health.add_argument("--configured-secret-name", action="append", default=[])
+    health.add_argument("--output", type=Path, required=True)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        values, _, policies = validate_contracts(
+            config_path=args.config,
+            workflow_contract_path=args.workflow_contract,
+            source_root=args.source_root,
+        )
+        if args.command == "validate":
+            print(f"Validated public project configuration and {len(policies)} optional source credential policies")
+            return 0
+        if args.command == "get":
+            print(values[args.name])
+            return 0
+        report = evaluate_health(
+            config_path=args.config,
+            workflow_contract_path=args.workflow_contract,
+            source_root=args.source_root,
+            configured_secret_names=args.configured_secret_name,
+        )
+        write_json(args.output, report)
+        print(f"Configuration health: {report['status']} ({len(report['blockers'])} blockers)")
+        return 2 if report["status"] != "healthy" else 0
+    except ConfigurationError as exc:
+        print(f"project configuration validation failed: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

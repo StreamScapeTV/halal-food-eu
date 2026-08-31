@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "publicValues": {
+    "OPEN_FOOD_FACTS_CONTACT_EMAIL": "info@faruqi.dev",
+    "OPEN_FOOD_FACTS_USER_AGENT": "HalalFoodEU/0.1 (info@faruqi.dev)",
+    "PRODUCT_SUBMISSION_EMAIL": "info@faruqi.dev"
+  }
+}

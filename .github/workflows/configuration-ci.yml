@@ -1,0 +1,48 @@
+name: Project configuration CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-configuration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  configuration:
+    name: Public configuration and secret-contract validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate public identity and optional credential contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/project_configuration.py \
+            Tools/github_configuration_health.py \
+            Tools/tests/test_project_configuration.py \
+            Tools/tests/test_github_configuration_health.py \
+            Tools/tests/test_project_configuration_workflow.py
+          python3 -m json.tool Data/config/public-project-configuration-v1.json >/dev/null
+          python3 -m json.tool Data/config/public-project-configuration-v1.schema.json >/dev/null
+          python3 -m json.tool Data/config/source-credential-policy-v1.schema.json >/dev/null
+          PYTHONPATH=Tools python3 Tools/project_configuration.py validate
+          PYTHONPATH=Tools python3 Tools/project_configuration.py health \
+            --output "$RUNNER_TEMP/configuration-health.json"
+          PYTHONPATH=Tools python3 -m unittest discover \
+            -s Tools/tests \
+            -p 'test_*configuration*.py' \
+            -v

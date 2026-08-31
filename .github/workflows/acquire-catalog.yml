@@ -67,8 +67,6 @@ jobs:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           ACQUISITION_MODE: ${{ inputs.mode }}
-          OPEN_FOOD_FACTS_USER_AGENT: ${{ vars.OPEN_FOOD_FACTS_USER_AGENT }}
-          OPEN_FOOD_FACTS_CONTACT_EMAIL: ${{ vars.OPEN_FOOD_FACTS_CONTACT_EMAIL }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/source/payload"
@@ -81,6 +79,10 @@ jobs:
               echo "content_schema_version=synthetic-source-v1"
             } >> "$GITHUB_OUTPUT"
           elif [[ "$SOURCE_KEY" == "open-food-facts" ]]; then
+            export OPEN_FOOD_FACTS_USER_AGENT="$(
+              PYTHONPATH=Tools python3 Tools/project_configuration.py get \
+                --name OPEN_FOOD_FACTS_USER_AGENT
+            )"
             python3 Tools/open_food_facts.py acquire \
               --output "$RUNNER_TEMP/source/payload/source-records.jsonl" \
               --metadata-output "$RUNNER_TEMP/source/acquisition-metadata.json" \

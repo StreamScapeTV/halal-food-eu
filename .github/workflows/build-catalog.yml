@@ -102,6 +102,7 @@ jobs:
             "$RUNNER_TEMP/build-root/repository/Data/quality" \
             "$RUNNER_TEMP/build-root/repository/Data/selection" \
             "$RUNNER_TEMP/build-root/repository/Data/sources/open-food-facts" \
+            "$RUNNER_TEMP/build-root/repository/Data/sources/open-prices" \
             "$RUNNER_TEMP/build-root/database/payload" \
             "$RUNNER_TEMP/build-root/manifest/payload" \
             "$RUNNER_TEMP/build-root/release-notes/payload"
@@ -111,6 +112,8 @@ jobs:
             "$RUNNER_TEMP/build-root/repository/Data/selection/catalog-selection-policy-v1.json"
           cp Data/sources/open-food-facts/source-policy-v1.json \
             "$RUNNER_TEMP/build-root/repository/Data/sources/open-food-facts/source-policy-v1.json"
+          cp Data/sources/open-prices/source-policy-v1.json \
+            "$RUNNER_TEMP/build-root/repository/Data/sources/open-prices/source-policy-v1.json"
 
       - name: Build and validate admitted no-network catalog
         env:
@@ -160,7 +163,10 @@ jobs:
               "qualityHandoffPath": "quality/handoff.json",
               "basicExclusionsHandoffPath": "basic-exclusions/handoff.json",
               "qualityPolicyPath": "repository/Data/quality/catalog-quality-policy-v1.json",
-              "sourcePolicyPaths": ["repository/Data/sources/open-food-facts/source-policy-v1.json"],
+              "sourcePolicyPaths": [
+                  "repository/Data/sources/open-food-facts/source-policy-v1.json",
+                  "repository/Data/sources/open-prices/source-policy-v1.json",
+              ],
               "databaseOutputPath": "database/payload/catalog.sqlite3",
               "manifestOutputPath": "manifest/payload/catalog-manifest.json",
               "releaseNotesOutputPath": "release-notes/payload/catalog-release-notes.md",
@@ -285,7 +291,7 @@ jobs:
           name: ${{ steps.names.outputs.database_artifact_name }}
           path: ${{ runner.temp }}/build-root/database
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
       - name: Upload catalog manifest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -293,7 +299,7 @@ jobs:
           name: ${{ steps.names.outputs.manifest_artifact_name }}
           path: ${{ runner.temp }}/build-root/manifest
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
       - name: Upload catalog release notes
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -301,4 +307,4 @@ jobs:
           name: ${{ steps.names.outputs.release_notes_artifact_name }}
           path: ${{ runner.temp }}/build-root/release-notes
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90

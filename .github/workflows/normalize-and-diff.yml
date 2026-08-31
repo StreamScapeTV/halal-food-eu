@@ -10,7 +10,32 @@ on:
         required: true
         type: string
       source_artifact_name:
-        required: true
+        required: false
+        default: ""
+        type: string
+      aggregate_retailer_evidence:
+        required: false
+        default: false
+        type: boolean
+      primary_normalized_artifact_name:
+        required: false
+        default: ""
+        type: string
+      retailer_normalized_artifact_name:
+        required: false
+        default: ""
+        type: string
+      primary_change_artifact_name:
+        required: false
+        default: ""
+        type: string
+      primary_basic_exclusions_artifact_name:
+        required: false
+        default: ""
+        type: string
+      retailer_snapshot_id:
+        required: false
+        default: ""
         type: string
     outputs:
       normalized_artifact_name:
@@ -38,15 +63,46 @@ jobs:
           persist-credentials: false
 
       - name: Download source snapshot
+        if: inputs.aggregate_retailer_evidence != true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.source_artifact_name }}
           path: ${{ runner.temp }}/source
 
+      - name: Download primary normalized evidence for production composition
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.primary_normalized_artifact_name }}
+          path: ${{ runner.temp }}/primary-normalized
+
+      - name: Download retailer normalized evidence for production composition
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.retailer_normalized_artifact_name }}
+          path: ${{ runner.temp }}/retailer-normalized
+
+      - name: Download primary change report for production composition
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.primary_change_artifact_name }}
+          path: ${{ runner.temp }}/primary-change
+
+      - name: Download primary basic exclusions for production composition
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.primary_basic_exclusions_artifact_name }}
+          path: ${{ runner.temp }}/primary-basic-exclusions
+
       - name: Validate source handoff and capture completeness
+        if: inputs.aggregate_retailer_evidence != true
         id: source_handoff
         run: |
           set -euo pipefail
+          test -n "${{ inputs.source_artifact_name }}"
           python3 Tools/catalog_workflow.py validate-handoff \
             --input "$RUNNER_TEMP/source/handoff.json" \
             --consumer-stage normalize-diff \
@@ -58,18 +114,113 @@ jobs:
           print(f"completeness={handoff['completeness']}")
           PY
 
+      - name: Validate independently normalized production components
+        if: inputs.aggregate_retailer_evidence == true
+        id: aggregate_handoff
+        env:
+          PRIMARY_SOURCE_KEY: ${{ inputs.source_key }}
+          PRIMARY_SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          RETAILER_SNAPSHOT_ID: ${{ inputs.retailer_snapshot_id }}
+        run: |
+          set -euo pipefail
+          test "$PRIMARY_SOURCE_KEY" = "open-food-facts"
+          test -n "$RETAILER_SNAPSHOT_ID"
+          for artifact in primary-normalized retailer-normalized; do
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/${artifact}/handoff.json" \
+              --consumer-stage build \
+              --payload-root "$RUNNER_TEMP/${artifact}"
+          done
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/primary-change/handoff.json" \
+            --consumer-stage quality \
+            --payload-root "$RUNNER_TEMP/primary-change"
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/primary-basic-exclusions/handoff.json" \
+            --consumer-stage build \
+            --payload-root "$RUNNER_TEMP/primary-basic-exclusions"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          values = {
+              name: json.loads((root / name / "handoff.json").read_text(encoding="utf-8"))
+              for name in ("primary-normalized", "retailer-normalized", "primary-change", "primary-basic-exclusions")
+          }
+          primary_source = os.environ["PRIMARY_SOURCE_KEY"]
+          primary_snapshot = os.environ["PRIMARY_SNAPSHOT_ID"]
+          retailer_snapshot = os.environ["RETAILER_SNAPSHOT_ID"]
+          for name in ("primary-normalized", "primary-change", "primary-basic-exclusions"):
+              if values[name].get("sourceKey") != primary_source or values[name].get("snapshotId") != primary_snapshot:
+                  raise SystemExit(f"{name} lineage differs from primary production snapshot")
+          retailer = values["retailer-normalized"]
+          if retailer.get("sourceKey") != "open-prices" or retailer.get("snapshotId") != retailer_snapshot:
+              raise SystemExit("retailer normalized lineage differs from reviewed Open Prices snapshot")
+          producers = [value.get("producer", {}) for value in values.values()]
+          if any(item.get("commitSha") != os.environ["GITHUB_SHA"] for item in producers):
+              raise SystemExit("production composition inputs were not produced from exact reviewed workflow code")
+          if any(item.get("runId") != os.environ["GITHUB_RUN_ID"] for item in producers):
+              raise SystemExit("production composition inputs were not produced in this exact trusted run")
+          if any(value.get("completeness") != "complete" for value in values.values()):
+              raise SystemExit("production composition requires complete component artifacts")
+          PY
+          echo "completeness=complete" >> "$GITHUB_OUTPUT"
+
       - name: Normalize registered source into v1 evidence and change report
         id: normalize
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          AGGREGATE_RETAILER: ${{ inputs.aggregate_retailer_evidence }}
+          RETAILER_SNAPSHOT_ID: ${{ inputs.retailer_snapshot_id }}
         run: |
           set -euo pipefail
           mkdir -p \
             "$RUNNER_TEMP/normalized/payload" \
             "$RUNNER_TEMP/change/payload" \
             "$RUNNER_TEMP/basic-exclusions/payload"
-          if [[ "$SOURCE_KEY" == "synthetic-fixture" ]]; then
+          if [[ "$AGGREGATE_RETAILER" == "true" ]]; then
+            python3 Tools/production_catalog_aggregate.py merge-evidence \
+              --primary-evidence "$RUNNER_TEMP/primary-normalized/payload/evidence.json" \
+              --retailer-evidence "$RUNNER_TEMP/retailer-normalized/payload/evidence.json" \
+              --primary-source-key "$SOURCE_KEY" \
+              --primary-snapshot-id "$SNAPSHOT_ID" \
+              --retailer-source-key open-prices \
+              --retailer-snapshot-id "$RETAILER_SNAPSHOT_ID" \
+              --output "$RUNNER_TEMP/normalized/payload/evidence.json" \
+              --summary-output "$RUNNER_TEMP/normalized/aggregation-summary.json"
+            MERGED_EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json" \
+            PRIMARY_CHANGE="$RUNNER_TEMP/primary-change/payload/change-report.json" \
+            AGGREGATION_SUMMARY="$RUNNER_TEMP/normalized/aggregation-summary.json" \
+            MERGED_CHANGE="$RUNNER_TEMP/change/payload/change-report.json" \
+            python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          evidence_path = Path(os.environ["MERGED_EVIDENCE"])
+          change = json.loads(Path(os.environ["PRIMARY_CHANGE"]).read_text(encoding="utf-8"))
+          summary = json.loads(Path(os.environ["AGGREGATION_SUMMARY"]).read_text(encoding="utf-8"))
+          change["normalizedEvidenceSha256"] = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+          change["retailerAggregation"] = summary
+          Path(os.environ["MERGED_CHANGE"]).write_text(
+              json.dumps(change, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+            cp "$RUNNER_TEMP/primary-basic-exclusions/payload/basic-exclusions.json" \
+              "$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json"
+            python3 Tools/evidence_model.py validate --input "$RUNNER_TEMP/normalized/payload/evidence.json"
+            EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json" \
+            BASIC_EXCLUSIONS="$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json" \
+            python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+          evidence = json.loads(Path(os.environ["EVIDENCE"]).read_text(encoding="utf-8"))
+          exclusions = json.loads(Path(os.environ["BASIC_EXCLUSIONS"]).read_text(encoding="utf-8"))
+          print(f"record_count={len(evidence['currentSelections'])}")
+          print(f"basic_exclusion_count={len(exclusions['records'])}")
+          PY
+          elif [[ "$SOURCE_KEY" == "synthetic-fixture" ]]; then
             python3 Tools/evidence_model.py validate --input Data/evidence/sample-evidence-v1.json
             python3 Tools/catalog_workflow.py validate-synthetic-normalization \
               --source "$RUNNER_TEMP/source/payload/source-records.jsonl" \
@@ -145,12 +296,14 @@ jobs:
             echo "No normalized adapter is admitted for $SOURCE_KEY" >&2
             exit 2
           fi
-          BASIC_EXCLUSIONS="$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          if [[ "$AGGREGATE_RETAILER" != "true" ]]; then
+            BASIC_EXCLUSIONS="$RUNNER_TEMP/basic-exclusions/payload/basic-exclusions.json" python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           from pathlib import Path
           payload = json.loads(Path(os.environ["BASIC_EXCLUSIONS"]).read_text(encoding="utf-8"))
           print(f"basic_exclusion_count={len(payload['records'])}")
           PY
+          fi
 
       - name: Emit immutable normalized, change, and basic-exclusion handoffs
         env:
@@ -159,8 +312,13 @@ jobs:
           RECORD_COUNT: ${{ steps.normalize.outputs.record_count }}
           BASIC_EXCLUSION_COUNT: ${{ steps.normalize.outputs.basic_exclusion_count }}
           INPUT_COMPLETENESS: ${{ steps.source_handoff.outputs.completeness }}
+          AGGREGATE_COMPLETENESS: ${{ steps.aggregate_handoff.outputs.completeness }}
+          AGGREGATE_RETAILER: ${{ inputs.aggregate_retailer_evidence }}
         run: |
           set -euo pipefail
+          if [[ "$AGGREGATE_RETAILER" == "true" ]]; then
+            INPUT_COMPLETENESS="$AGGREGATE_COMPLETENESS"
+          fi
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind normalized-evidence \
             --source-key "$SOURCE_KEY" \
@@ -212,10 +370,13 @@ jobs:
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          AGGREGATE_RETAILER: ${{ inputs.aggregate_retailer_evidence }}
         run: |
-          echo "normalized_artifact_name=normalized-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
-          echo "change_artifact_name=changes-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
-          echo "basic_exclusions_artifact_name=basic-exclusions-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          SUFFIX=""
+          if [[ "$AGGREGATE_RETAILER" == "true" ]]; then SUFFIX="-aggregate"; fi
+          echo "normalized_artifact_name=normalized-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}${SUFFIX}" >> "$GITHUB_OUTPUT"
+          echo "change_artifact_name=changes-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}${SUFFIX}" >> "$GITHUB_OUTPUT"
+          echo "basic_exclusions_artifact_name=basic-exclusions-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}${SUFFIX}" >> "$GITHUB_OUTPUT"
 
       - name: Upload normalized evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -223,7 +384,7 @@ jobs:
           name: ${{ steps.names.outputs.normalized_artifact_name }}
           path: ${{ runner.temp }}/normalized
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
       - name: Upload change report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -231,7 +392,7 @@ jobs:
           name: ${{ steps.names.outputs.change_artifact_name }}
           path: ${{ runner.temp }}/change
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
       - name: Upload digest-bound basic exclusions
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -239,4 +400,4 @@ jobs:
           name: ${{ steps.names.outputs.basic_exclusions_artifact_name }}
           path: ${{ runner.temp }}/basic-exclusions
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90

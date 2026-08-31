@@ -15,22 +15,43 @@ private final class SQLiteConnection: @unchecked Sendable {
 }
 
 private struct CatalogManifest: Decodable, Sendable {
-    struct SourcePolicy: Decodable, Sendable {
+    struct QualityGate: Decodable, Sendable {
         let schemaVersion: Int
-        let contractVersion: String
-        let sha256: String
+        let policyVersion: String
+        let policySha256: String
+        let reportSha256: String
+        let reportFileSha256: String
+        let sourceKey: String
+        let snapshotID: String
+        let evaluatedAt: String
+        let warningCount: Int
     }
 
+    struct SourcePolicy: Decodable, Sendable {
+        let sourceKey: String
+        let path: String
+        let sha256: String
+        let schemaVersion: Int
+        let license: String
+        let attribution: String
+    }
+
+    let manifestSchemaVersion: Int
     let catalogVersion: String
     let schemaVersion: Int
+    let methodologyVersion: String
+    let selectionPolicyVersion: String
     let recordCount: Int
     let sha256: String
-    let sourcePolicy: SourcePolicy
+    let qualityGate: QualityGate
+    let sourcePolicies: [SourcePolicy]
 }
 
 actor SQLiteProductCatalog: ProductCatalog {
-    static let supportedSchemaVersion = 1
+    static let supportedManifestSchemaVersion = 3
+    static let supportedSchemaVersion = 2
     static let supportedSourcePolicySchemaVersion = 1
+    static let supportedQualityGateSchemaVersion = 1
     static let expectedApplicationID: Int32 = 1_212_564_821 // ASCII "HFEU"
 
     private static let requiredTables: Set<String> = [
@@ -41,6 +62,9 @@ actor SQLiteProductCatalog: ProductCatalog {
         "product_assessments",
         "certification_evidence",
         "assessment_reasons",
+        "retailer_evidence",
+        "remote_image_references",
+        "basic_exclusions",
     ]
 
     private let databaseURL: URL
@@ -60,26 +84,30 @@ actor SQLiteProductCatalog: ProductCatalog {
         let productSQL = """
             SELECT
                 p.gtin,
+                p.market,
                 p.name,
                 p.brand,
+                o.id,
                 o.ingredients_text,
                 o.language_code,
                 o.observed_at,
                 o.ingredients_hash,
-                s.name,
-                s.kind,
+                o.freshness_state,
+                s.operator,
+                s.source_class,
                 s.reference,
                 s.license,
                 s.retrieved_at,
                 a.id,
+                a.observation_id,
                 a.status,
                 a.summary,
                 a.methodology_version,
                 a.reviewed_at
             FROM products AS p
-            JOIN product_observations AS o ON o.id = p.current_observation_id
-            JOIN sources AS s ON s.id = o.source_id
-            JOIN product_assessments AS a ON a.observation_id = o.id
+            LEFT JOIN product_assessments AS a ON a.id = p.current_assessment_id
+            LEFT JOIN product_observations AS o ON o.id = p.current_observation_id
+            LEFT JOIN sources AS s ON s.id = o.source_id
             WHERE p.gtin = ?1
             LIMIT 1;
             """
@@ -98,48 +126,51 @@ actor SQLiteProductCatalog: ProductCatalog {
         }
 
         let storedBarcode = try Barcode(validating: requiredText(statement, column: 0))
-        let name = requiredText(statement, column: 1)
-        let brand = optionalText(statement, column: 2)
-        let ingredientsText = requiredText(statement, column: 3)
-        let languageCode = requiredText(statement, column: 4)
-        let observedAt = try parseDate(requiredText(statement, column: 5), field: "observed_at")
-        let ingredientsHash = requiredText(statement, column: 6)
-        let sourceName = requiredText(statement, column: 7)
-        let sourceKind = requiredText(statement, column: 8)
-        let sourceReference = requiredText(statement, column: 9)
-        let sourceLicense = requiredText(statement, column: 10)
-        let retrievedAt = try parseDate(requiredText(statement, column: 11), field: "retrieved_at")
-        let assessmentID = sqlite3_column_int64(statement, 12)
-        let rawStatus = requiredText(statement, column: 13)
-        let summary = requiredText(statement, column: 14)
-        let methodologyVersion = requiredText(statement, column: 15)
-        let reviewedAt = try parseDate(requiredText(statement, column: 16), field: "reviewed_at")
-
-        guard let status = HalalStatus(rawValue: rawStatus) else {
-            throw ProductCatalogError.invalidRecord("unsupported halal status \(rawStatus)")
+        let market = requiredText(statement, column: 1)
+        guard market == "DE" else {
+            throw ProductCatalogError.invalidRecord("runtime catalog contains unsupported market \(market)")
         }
+        let name = requiredText(statement, column: 2)
+        let brand = optionalText(statement, column: 3)
+        let observationID = optionalInt64(statement, column: 4)
 
-        let reasons = try reasons(for: assessmentID, connection: connection)
-        guard !reasons.isEmpty else {
-            throw ProductCatalogError.invalidRecord("assessment \(assessmentID) has no reasons")
-        }
-
-        let certifications = try certifications(for: assessmentID, connection: connection)
-        if status == .halalCertified, certifications.isEmpty {
-            throw ProductCatalogError.invalidRecord(
-                "certified assessment \(assessmentID) has no certification evidence"
+        let observation: IngredientObservation?
+        if observationID == nil {
+            observation = nil
+        } else {
+            let ingredientsText = requiredText(statement, column: 5)
+            let languageCode = requiredText(statement, column: 6)
+            let observedAt = try optionalDate(statement, column: 7, field: "observed_at")
+            let ingredientsHash = requiredText(statement, column: 8)
+            let rawFreshness = requiredText(statement, column: 9)
+            guard let freshness = EvidenceFreshness(rawValue: rawFreshness) else {
+                throw ProductCatalogError.invalidRecord(
+                    "unsupported formulation freshness \(rawFreshness)"
+                )
+            }
+            let sourceName = requiredText(statement, column: 10)
+            let sourceKind = requiredText(statement, column: 11)
+            let sourceReference = requiredText(statement, column: 12)
+            let sourceLicense = requiredText(statement, column: 13)
+            let retrievedAt = try parseDate(
+                requiredText(statement, column: 14),
+                field: "retrieved_at"
             )
-        }
-
-        return ProductRecord(
-            barcode: storedBarcode,
-            name: name,
-            brand: brand,
-            observation: IngredientObservation(
+            guard !ingredientsText.isEmpty,
+                  !languageCode.isEmpty,
+                  !ingredientsHash.isEmpty,
+                  !sourceName.isEmpty,
+                  !sourceKind.isEmpty,
+                  !sourceReference.isEmpty,
+                  !sourceLicense.isEmpty else {
+                throw ProductCatalogError.invalidRecord("ingredient evidence is incomplete")
+            }
+            observation = IngredientObservation(
                 text: ingredientsText,
                 languageCode: languageCode,
                 observedAt: observedAt,
                 contentHash: ingredientsHash,
+                freshness: freshness,
                 source: ProductSource(
                     name: sourceName,
                     kind: sourceKind,
@@ -147,15 +178,73 @@ actor SQLiteProductCatalog: ProductCatalog {
                     license: sourceLicense,
                     retrievedAt: retrievedAt
                 )
-            ),
-            assessment: HalalAssessment(
+            )
+        }
+
+        let assessment: HalalAssessment
+        if let assessmentID = optionalInt64(statement, column: 15) {
+            let assessmentObservationID = optionalInt64(statement, column: 16)
+            let rawStatus = requiredText(statement, column: 17)
+            let summary = requiredText(statement, column: 18)
+            let methodologyVersion = requiredText(statement, column: 19)
+            let reviewedAt = try parseDate(requiredText(statement, column: 20), field: "reviewed_at")
+
+            guard let status = HalalStatus(rawValue: rawStatus) else {
+                throw ProductCatalogError.invalidRecord("unsupported halal status \(rawStatus)")
+            }
+            guard assessmentObservationID == observationID else {
+                throw ProductCatalogError.invalidRecord("current assessment is not bound to the current formulation")
+            }
+            if observationID == nil, status != .unknown {
+                throw ProductCatalogError.invalidRecord(
+                    "product without ingredient evidence has non-unknown status \(rawStatus)"
+                )
+            }
+
+            let reasons = try reasons(for: assessmentID, connection: connection)
+            guard !reasons.isEmpty else {
+                throw ProductCatalogError.invalidRecord("assessment \(assessmentID) has no reasons")
+            }
+
+            let certifications = try certifications(for: assessmentID, connection: connection)
+            if status == .halalCertified, certifications.isEmpty {
+                throw ProductCatalogError.invalidRecord(
+                    "certified assessment \(assessmentID) has no certification evidence"
+                )
+            }
+            if status == .notHalal, !reasons.contains(where: { $0.severity == .prohibitive }) {
+                throw ProductCatalogError.invalidRecord(
+                    "not-halal assessment \(assessmentID) has no prohibitive reason"
+                )
+            }
+
+            assessment = HalalAssessment(
                 status: status,
                 summary: summary,
                 methodologyVersion: methodologyVersion,
                 reviewedAt: reviewedAt,
                 reasons: reasons,
                 certifications: certifications
-            ),
+            )
+        } else {
+            guard sqlite3_column_type(statement, 16) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 17) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 18) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 19) == SQLITE_NULL,
+                  sqlite3_column_type(statement, 20) == SQLITE_NULL else {
+                throw ProductCatalogError.invalidRecord(
+                    "unreviewed product unexpectedly exposes assessment columns"
+                )
+            }
+            assessment = .unreviewedUnknown
+        }
+
+        return ProductRecord(
+            barcode: storedBarcode,
+            name: name,
+            brand: brand,
+            observation: observation,
+            assessment: assessment,
             catalogVersion: catalogVersion
         )
     }
@@ -165,7 +254,10 @@ actor SQLiteProductCatalog: ProductCatalog {
             return (connection, catalogVersion)
         }
 
-        let manifest = try Self.loadAndValidateManifest(manifestURL: manifestURL, databaseURL: databaseURL)
+        let manifest = try Self.loadAndValidateManifest(
+            manifestURL: manifestURL,
+            databaseURL: databaseURL
+        )
 
         var openedDatabase: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
@@ -208,22 +300,52 @@ actor SQLiteProductCatalog: ProductCatalog {
 
         try Self.validateIntegrity(database: openedDatabase)
         try Self.validateRequiredTables(database: openedDatabase)
+        try Self.validateMetadata(manifest: manifest, database: openedDatabase)
+        try Self.validateSourcePolicies(manifest: manifest, database: openedDatabase)
 
         let openedCatalogVersion = try Self.readMetadata("catalogVersion", database: openedDatabase)
-        guard openedCatalogVersion == manifest.catalogVersion else {
-            throw ProductCatalogError.invalidRecord("catalog manifest and SQLite catalog versions differ")
-        }
-        let metadataSchema = try Self.readMetadata("schemaVersion", database: openedDatabase)
-        guard metadataSchema == String(manifest.schemaVersion) else {
-            throw ProductCatalogError.invalidRecord("catalog metadata schema version differs from manifest")
-        }
-
         let productCount = try Self.readCount(
             "SELECT COUNT(*) FROM products;",
             database: openedDatabase
         )
         guard productCount == manifest.recordCount else {
             throw ProductCatalogError.invalidRecord("catalog manifest record count differs from SQLite")
+        }
+        guard try Self.readCount(
+            """
+            SELECT COUNT(*)
+            FROM products AS p
+            JOIN product_assessments AS a ON a.id = p.current_assessment_id
+            WHERE NOT (a.observation_id IS p.current_observation_id);
+            """,
+            database: openedDatabase
+        ) == 0 else {
+            throw ProductCatalogError.invalidRecord(
+                "catalog contains a current assessment not bound to the current formulation"
+            )
+        }
+        guard try Self.readCount(
+            """
+            SELECT COUNT(*)
+            FROM products AS p
+            JOIN product_assessments AS a ON a.id = p.current_assessment_id
+            WHERE p.current_observation_id IS NULL AND a.status <> 'unknown';
+            """,
+            database: openedDatabase
+        ) == 0 else {
+            throw ProductCatalogError.invalidRecord(
+                "catalog contains a non-unknown product without ingredient evidence"
+            )
+        }
+        guard try Self.readCount(
+            """
+            SELECT COUNT(*)
+            FROM basic_exclusions AS b
+            JOIN products AS p ON p.gtin = b.gtin AND p.market = b.market;
+            """,
+            database: openedDatabase
+        ) == 0 else {
+            throw ProductCatalogError.invalidRecord("basic exclusions overlap detailed products")
         }
 
         connection = openedConnection
@@ -289,8 +411,8 @@ actor SQLiteProductCatalog: ProductCatalog {
                 c.scope,
                 c.valid_from,
                 c.valid_until,
-                s.name,
-                s.kind,
+                s.operator,
+                s.source_class,
                 s.reference,
                 s.license,
                 s.retrieved_at
@@ -386,6 +508,13 @@ actor SQLiteProductCatalog: ProductCatalog {
         return String(cString: value)
     }
 
+    private func optionalInt64(_ statement: OpaquePointer, column: Int32) -> Int64? {
+        guard sqlite3_column_type(statement, column) != SQLITE_NULL else {
+            return nil
+        }
+        return sqlite3_column_int64(statement, column)
+    }
+
     private func optionalDate(
         _ statement: OpaquePointer,
         column: Int32,
@@ -428,22 +557,54 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.invalidRecord("catalog manifest is malformed or incomplete")
         }
 
+        guard manifest.manifestSchemaVersion == supportedManifestSchemaVersion else {
+            throw ProductCatalogError.invalidRecord(
+                "unsupported catalog manifest schema \(manifest.manifestSchemaVersion)"
+            )
+        }
         guard manifest.schemaVersion == supportedSchemaVersion else {
             throw ProductCatalogError.incompatibleSchema(
                 expected: supportedSchemaVersion,
                 actual: manifest.schemaVersion
             )
         }
-        guard manifest.recordCount >= 0 else {
-            throw ProductCatalogError.invalidRecord("catalog manifest record count is invalid")
+        guard manifest.recordCount >= 0,
+              !manifest.catalogVersion.isEmpty,
+              !manifest.methodologyVersion.isEmpty,
+              !manifest.selectionPolicyVersion.isEmpty else {
+            throw ProductCatalogError.invalidRecord("catalog manifest identity is invalid")
         }
         guard isLowercaseSHA256(manifest.sha256) else {
             throw ProductCatalogError.invalidRecord("catalog manifest SHA-256 is invalid")
         }
-        guard manifest.sourcePolicy.schemaVersion == supportedSourcePolicySchemaVersion,
-              !manifest.sourcePolicy.contractVersion.isEmpty,
-              isLowercaseSHA256(manifest.sourcePolicy.sha256) else {
-            throw ProductCatalogError.invalidRecord("catalog manifest source-policy identity is invalid")
+
+        let quality = manifest.qualityGate
+        guard quality.schemaVersion == supportedQualityGateSchemaVersion,
+              !quality.policyVersion.isEmpty,
+              !quality.sourceKey.isEmpty,
+              !quality.snapshotID.isEmpty,
+              !quality.evaluatedAt.isEmpty,
+              quality.warningCount >= 0,
+              isLowercaseSHA256(quality.policySha256),
+              isLowercaseSHA256(quality.reportSha256),
+              isLowercaseSHA256(quality.reportFileSha256) else {
+            throw ProductCatalogError.invalidRecord("catalog manifest quality-gate identity is invalid")
+        }
+
+        guard !manifest.sourcePolicies.isEmpty else {
+            throw ProductCatalogError.invalidRecord("catalog manifest source-policy identity is missing")
+        }
+        var sourceKeys: Set<String> = []
+        for policy in manifest.sourcePolicies {
+            guard policy.schemaVersion == supportedSourcePolicySchemaVersion,
+                  !policy.sourceKey.isEmpty,
+                  !policy.path.isEmpty,
+                  !policy.license.isEmpty,
+                  !policy.attribution.isEmpty,
+                  isLowercaseSHA256(policy.sha256),
+                  sourceKeys.insert(policy.sourceKey).inserted else {
+                throw ProductCatalogError.invalidRecord("catalog manifest source-policy identity is invalid")
+            }
         }
 
         let actualDigest: String
@@ -456,6 +617,82 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.invalidRecord("catalog database SHA-256 does not match manifest")
         }
         return manifest
+    }
+
+    private static func validateMetadata(
+        manifest: CatalogManifest,
+        database: OpaquePointer
+    ) throws {
+        let expected = [
+            "catalogVersion": manifest.catalogVersion,
+            "schemaVersion": String(manifest.schemaVersion),
+            "methodologyVersion": manifest.methodologyVersion,
+            "selectionPolicyVersion": manifest.selectionPolicyVersion,
+            "qualityPolicyVersion": manifest.qualityGate.policyVersion,
+            "qualityPolicySha256": manifest.qualityGate.policySha256,
+            "qualityReportSha256": manifest.qualityGate.reportSha256,
+            "qualityEvaluatedAt": manifest.qualityGate.evaluatedAt,
+        ]
+        for (key, value) in expected {
+            guard try readMetadata(key, database: database) == value else {
+                throw ProductCatalogError.invalidRecord(
+                    "catalog metadata mismatch for \(key)"
+                )
+            }
+        }
+    }
+
+    private static func validateSourcePolicies(
+        manifest: CatalogManifest,
+        database: OpaquePointer
+    ) throws {
+        let expected = Dictionary(
+            uniqueKeysWithValues: manifest.sourcePolicies.map { ($0.sourceKey, $0) }
+        )
+        var statement: OpaquePointer?
+        let sql = """
+            SELECT source_key, license, attribution, policy_schema_version, policy_sha256
+            FROM sources
+            ORDER BY source_key;
+            """
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var seen: Set<String> = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                guard let keyPointer = sqlite3_column_text(statement, 0),
+                      let licensePointer = sqlite3_column_text(statement, 1),
+                      let attributionPointer = sqlite3_column_text(statement, 2),
+                      let digestPointer = sqlite3_column_text(statement, 4) else {
+                    throw ProductCatalogError.invalidRecord("source-policy binding is incomplete")
+                }
+                let key = String(cString: keyPointer)
+                guard let policy = expected[key],
+                      String(cString: licensePointer) == policy.license,
+                      String(cString: attributionPointer) == policy.attribution,
+                      sqlite3_column_int(statement, 3) == Int32(policy.schemaVersion),
+                      String(cString: digestPointer) == policy.sha256 else {
+                    throw ProductCatalogError.invalidRecord(
+                        "source-policy binding differs from catalog manifest"
+                    )
+                }
+                seen.insert(key)
+            case SQLITE_DONE:
+                guard seen == Set(expected.keys) else {
+                    throw ProductCatalogError.invalidRecord(
+                        "catalog manifest and SQLite source-policy sets differ"
+                    )
+                }
+                return
+            default:
+                throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
+            }
+        }
     }
 
     private static func sha256(of url: URL) throws -> String {

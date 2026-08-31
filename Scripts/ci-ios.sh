@@ -13,23 +13,30 @@ xcodebuild -version
 swift --version
 xcodegen --version
 
-python3 Tools/catalog_builder.py \
-  --input Data/sample-products.json \
+PREBUILT_DATABASE="${HFEU_PREBUILT_CATALOG_DATABASE:-}"
+PREBUILT_MANIFEST="${HFEU_PREBUILT_CATALOG_MANIFEST:-}"
+PREBUILT_MODE=false
+if [[ -n "$PREBUILT_DATABASE" || -n "$PREBUILT_MANIFEST" ]]; then
+  if [[ -z "$PREBUILT_DATABASE" || -z "$PREBUILT_MANIFEST" ]]; then
+    echo "Both HFEU_PREBUILT_CATALOG_DATABASE and HFEU_PREBUILT_CATALOG_MANIFEST are required." >&2
+    exit 1
+  fi
+  test -f "$PREBUILT_DATABASE"
+  test -f "$PREBUILT_MANIFEST"
+  cp "$PREBUILT_DATABASE" HalalFoodEU/Resources/catalog.sqlite3
+  cp "$PREBUILT_MANIFEST" HalalFoodEU/Resources/catalog-manifest.json
+  PREBUILT_MODE=true
+else
+  python3 Tools/build_production_fixture.py \
+    --database HalalFoodEU/Resources/catalog.sqlite3 \
+    --manifest HalalFoodEU/Resources/catalog-manifest.json \
+    --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
+    --workflow-run "${GITHUB_RUN_ID:-local-ios-ci}"
+fi
+
+python3 Tools/production_catalog.py validate \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
-
-python3 Tools/catalog_security.py bind-manifest \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source-policy Data/workflows/catalog-workflow-contract-v1.json
-
-python3 Tools/validate_catalog.py \
-  --database HalalFoodEU/Resources/catalog.sqlite3 \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source Data/sample-products.json
-
-python3 Tools/catalog_security.py validate-manifest \
-  --manifest HalalFoodEU/Resources/catalog-manifest.json \
-  --source-policy Data/workflows/catalog-workflow-contract-v1.json
 
 xcodegen generate
 
@@ -64,12 +71,18 @@ raise SystemExit("No available iPhone simulator was found")
 xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
 xcrun simctl bootstatus "$SIMULATOR_ID" -b
 
-xcodebuild \
-  -project HalalFoodEU.xcodeproj \
-  -scheme HalalFoodEU \
-  -configuration Debug \
-  -destination "platform=iOS Simulator,id=${SIMULATOR_ID}" \
-  -derivedDataPath .build/DerivedData \
-  -enableCodeCoverage YES \
-  CODE_SIGNING_ALLOWED=NO \
-  test
+XCODEBUILD_ARGS=(
+  -project HalalFoodEU.xcodeproj
+  -scheme HalalFoodEU
+  -configuration Debug
+  -destination "platform=iOS Simulator,id=${SIMULATOR_ID}"
+  -derivedDataPath .build/DerivedData
+  -enableCodeCoverage YES
+  CODE_SIGNING_ALLOWED=NO
+)
+if [[ "$PREBUILT_MODE" == "true" ]]; then
+  XCODEBUILD_ARGS+=(-only-testing:HalalFoodEUTests/ProductionCatalogArtifactCompatibilityTests)
+fi
+XCODEBUILD_ARGS+=(test)
+
+xcodebuild "${XCODEBUILD_ARGS[@]}"

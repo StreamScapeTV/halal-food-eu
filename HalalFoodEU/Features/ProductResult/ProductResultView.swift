@@ -3,10 +3,6 @@ import SwiftUI
 struct ProductResultView: View {
     let product: ProductRecord
 
-    private var freshness: EvidenceFreshness {
-        EvidenceFreshnessPolicy.default.status(observedAt: product.observation.observedAt)
-    }
-
     var body: some View {
         Section("Assessment") {
             HStack(alignment: .top, spacing: 12) {
@@ -27,8 +23,13 @@ struct ProductResultView: View {
                 "Assessment: \(product.assessment.status.presentationTitle). \(product.assessment.summary)"
             )
 
-            if freshness != .current {
-                FreshnessWarning(freshness: freshness, observedAt: product.observation.observedAt)
+            if let observation = product.observation, observation.freshness != .current {
+                FreshnessWarning(
+                    freshness: observation.freshness,
+                    observedAt: observation.observedAt
+                )
+            } else if product.observation == nil {
+                MissingFormulationWarning()
             }
         }
 
@@ -61,44 +62,112 @@ struct ProductResultView: View {
             }
         }
 
-        Section("Ingredients") {
-            Text(product.observation.text)
-                .textSelection(.enabled)
-            LabeledContent("Language", value: product.observation.languageCode)
-            LabeledContent(
-                "Observed",
-                value: product.observation.observedAt.formatted(date: .abbreviated, time: .omitted)
-            )
+        if let observation = product.observation {
+            Section("Ingredients") {
+                Text(observation.text)
+                    .textSelection(.enabled)
+                LabeledContent("Language", value: observation.languageCode)
+                if let observedAt = observation.observedAt {
+                    LabeledContent(
+                        "Observed",
+                        value: observedAt.formatted(date: .abbreviated, time: .omitted)
+                    )
+                } else {
+                    LabeledContent("Observed", value: "Date unavailable")
+                }
+            }
+
+            Section("Evidence source") {
+                LabeledContent("Source", value: observation.source.name)
+                LabeledContent("Type", value: observation.source.kind)
+                LabeledContent("Reference", value: observation.source.reference)
+                LabeledContent("Data license", value: observation.source.license)
+                LabeledContent(
+                    "Retrieved",
+                    value: observation.source.retrievedAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            }
+        } else {
+            Section("Ingredients") {
+                Text("No reviewed ingredient formulation is available for this product in the current offline catalog.")
+                    .foregroundStyle(.secondary)
+            }
         }
 
-        Section("Evidence source") {
-            LabeledContent("Source", value: product.observation.source.name)
-            LabeledContent("Type", value: product.observation.source.kind)
-            LabeledContent("Reference", value: product.observation.source.reference)
-            LabeledContent("Data license", value: product.observation.source.license)
-            LabeledContent(
-                "Retrieved",
-                value: product.observation.source.retrievedAt.formatted(date: .abbreviated, time: .omitted)
-            )
-            LabeledContent(
-                "Reviewed",
-                value: product.assessment.reviewedAt.formatted(date: .abbreviated, time: .omitted)
-            )
-            LabeledContent("Methodology", value: product.assessment.methodologyVersion)
+        Section("Review") {
+            if let reviewedAt = product.assessment.reviewedAt {
+                LabeledContent(
+                    "Reviewed",
+                    value: reviewedAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            } else {
+                LabeledContent("Reviewed", value: "Not reviewed")
+            }
+            if let methodologyVersion = product.assessment.methodologyVersion {
+                LabeledContent("Methodology", value: methodologyVersion)
+            }
         }
+    }
+}
+
+private struct MissingFormulationWarning: View {
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Ingredient evidence is unavailable")
+                    .font(.headline)
+                Text("The catalog keeps this product as unknown rather than inferring a halal outcome without a reviewed formulation. Check the current package before relying on the result.")
+                    .font(.footnote)
+            }
+        } icon: {
+            Image(systemName: "questionmark.circle")
+        }
+        .foregroundStyle(.orange)
+        .accessibilityElement(children: .combine)
     }
 }
 
 private struct FreshnessWarning: View {
     let freshness: EvidenceFreshness
-    let observedAt: Date
+    let observedAt: Date?
+
+    private var title: String {
+        switch freshness {
+        case .current:
+            "Ingredient evidence is current"
+        case .refreshRecommended:
+            "Ingredient refresh recommended"
+        case .stale:
+            "Ingredient evidence is stale"
+        case .dateUnknown:
+            "Ingredient evidence date is unknown"
+        case .changedUnreviewed:
+            "Formulation change needs review"
+        }
+    }
+
+    private var detail: String {
+        switch freshness {
+        case .current:
+            return "The reviewed formulation is current under the catalog policy."
+        case .refreshRecommended, .stale:
+            if let observedAt {
+                return "This formulation was recorded on \(observedAt.formatted(date: .long, time: .omitted)). Check the current package before relying on the result."
+            }
+            return "The formulation needs a freshness check. Check the current package before relying on the result."
+        case .dateUnknown:
+            return "The catalog could not establish when this formulation was observed. Check the current package before relying on the result."
+        case .changedUnreviewed:
+            return "A newer formulation exists without sufficient review. Treat the current result cautiously and check the package."
+        }
+    }
 
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(freshness == .stale ? "Ingredient evidence is stale" : "Ingredient refresh recommended")
+                Text(title)
                     .font(.headline)
-                Text("This formulation was recorded on \(observedAt.formatted(date: .long, time: .omitted)). Check the current package before relying on the result.")
+                Text(detail)
                     .font(.footnote)
             }
         } icon: {

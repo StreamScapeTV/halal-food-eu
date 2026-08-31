@@ -1,0 +1,73 @@
+name: Production catalog compiler
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-catalog:
+    name: Production catalog integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate production compiler and release gate
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/basic_exclusions.py \
+            Tools/build_production_fixture.py \
+            Tools/github_catalog_proposal.py \
+            Tools/production_catalog_aggregate.py \
+            Tools/production_catalog_gate.py \
+            Tools/production_catalog.py \
+            Tools/production_catalog_manifest_review.py \
+            Tools/production_catalog_request.py \
+            Tools/production_catalog_proposal.py \
+            Tools/production_catalog_release_input.py \
+            Tools/tests/test_basic_exclusions.py \
+            Tools/tests/test_production_build_workflow.py \
+            Tools/tests/test_production_catalog_aggregate.py \
+            Tools/tests/test_production_catalog_gate.py \
+            Tools/tests/test_production_catalog.py \
+            Tools/tests/test_production_catalog_manifest_review.py \
+            Tools/tests/test_production_catalog_request.py \
+            Tools/tests/test_production_catalog_proposal.py \
+            Tools/tests/test_production_catalog_release_input.py \
+            Tools/tests/test_production_github_catalog_proposal.py \
+            Tools/tests/test_production_retailer_workflow.py
+          PYTHONPATH=Tools python3 -m unittest discover \
+            -s Tools/tests \
+            -p 'test_production_*.py' \
+            -v
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_basic_exclusions \
+            -v
+
+      - name: Build the exact production-schema iOS fixture
+        run: |
+          set -euo pipefail
+          python3 Tools/build_production_fixture.py \
+            --database "${RUNNER_TEMP}/catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/catalog-manifest.json" \
+            --source-commit "${GITHUB_SHA}" \
+            --workflow-run "${GITHUB_RUN_ID}"
+          python3 Tools/production_catalog.py validate \
+            --database "${RUNNER_TEMP}/catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/catalog-manifest.json"

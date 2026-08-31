@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "evidenceHandoffPath": "normalized/handoff.json",
+  "qualityHandoffPath": "quality/handoff.json",
+  "basicExclusionsHandoffPath": "basic-exclusions/handoff.json",
+  "qualityPolicyPath": "repository/Data/quality/catalog-quality-policy-v1.json",
+  "sourcePolicyPaths": [
+    "repository/Data/sources/open-food-facts/source-policy-v1.json"
+  ],
+  "databaseOutputPath": "output/catalog.sqlite3",
+  "manifestOutputPath": "output/catalog-manifest.json",
+  "logicalDumpOutputPath": "output/catalog-logical.json",
+  "releaseNotesOutputPath": "output/catalog-release.md",
+  "catalogVersion": "1.0.0",
+  "selectionPolicyVersion": "1.0.0",
+  "generatedAt": "2026-08-30T10:45:00Z",
+  "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
+  "workflowRun": "fixture:production-catalog-build-request-v1",
+  "maxDatabaseBytes": 262144000
+}

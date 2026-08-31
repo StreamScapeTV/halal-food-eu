@@ -15,6 +15,26 @@ on:
       change_artifact_name:
         required: true
         type: string
+      aggregate_retailer_evidence:
+        required: false
+        default: false
+        type: boolean
+      primary_quality_artifact_name:
+        required: false
+        default: ""
+        type: string
+      retailer_quality_artifact_name:
+        required: false
+        default: ""
+        type: string
+      retailer_normalized_artifact_name:
+        required: false
+        default: ""
+        type: string
+      retailer_snapshot_id:
+        required: false
+        default: ""
+        type: string
     outputs:
       artifact_name:
         value: ${{ jobs.quality.outputs.artifact_name }}
@@ -46,6 +66,27 @@ jobs:
           name: ${{ inputs.change_artifact_name }}
           path: ${{ runner.temp }}/change
 
+      - name: Download primary component quality report
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.primary_quality_artifact_name }}
+          path: ${{ runner.temp }}/primary-quality
+
+      - name: Download retailer component quality report
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.retailer_quality_artifact_name }}
+          path: ${{ runner.temp }}/retailer-quality
+
+      - name: Download exact retailer normalized evidence
+        if: inputs.aggregate_retailer_evidence == true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.retailer_normalized_artifact_name }}
+          path: ${{ runner.temp }}/retailer-normalized
+
       - name: Validate immutable handoffs, evidence semantics, and quality policy
         run: |
           set -euo pipefail
@@ -61,6 +102,41 @@ jobs:
           python3 Tools/catalog_quality.py validate-policy \
             --policy Data/quality/catalog-quality-policy-v1.json \
             --source-reviews Data/quality/source-review-policy-v1.json
+
+      - name: Validate exact independently passing production components
+        if: inputs.aggregate_retailer_evidence == true
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          RETAILER_SNAPSHOT_ID: ${{ inputs.retailer_snapshot_id }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE_KEY" = "open-food-facts"
+          test -n "$RETAILER_SNAPSHOT_ID"
+          for artifact in primary-quality retailer-quality retailer-normalized; do
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/${artifact}/handoff.json" \
+              --consumer-stage build \
+              --payload-root "$RUNNER_TEMP/${artifact}"
+          done
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          primary = json.loads((root / "primary-quality/handoff.json").read_text(encoding="utf-8"))
+          retailer_quality = json.loads((root / "retailer-quality/handoff.json").read_text(encoding="utf-8"))
+          retailer_normalized = json.loads((root / "retailer-normalized/handoff.json").read_text(encoding="utf-8"))
+          if primary.get("sourceKey") != os.environ["SOURCE_KEY"] or primary.get("snapshotId") != os.environ["SNAPSHOT_ID"]:
+              raise SystemExit("primary component quality lineage differs from production snapshot")
+          for label, item in (("retailer quality", retailer_quality), ("retailer normalized", retailer_normalized)):
+              if item.get("sourceKey") != "open-prices" or item.get("snapshotId") != os.environ["RETAILER_SNAPSHOT_ID"]:
+                  raise SystemExit(f"{label} lineage differs from reviewed Open Prices snapshot")
+          for item in (primary, retailer_quality, retailer_normalized):
+              producer = item.get("producer", {})
+              if producer.get("commitSha") != os.environ["GITHUB_SHA"] or producer.get("runId") != os.environ["GITHUB_RUN_ID"]:
+                  raise SystemExit("aggregate quality components must come from this exact reviewed run")
+          PY
 
       - name: Validate source-specific change semantics
         env:
@@ -98,22 +174,66 @@ jobs:
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          AGGREGATE_RETAILER: ${{ inputs.aggregate_retailer_evidence }}
+          RETAILER_SNAPSHOT_ID: ${{ inputs.retailer_snapshot_id }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/quality/payload"
           PROPOSAL_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          python3 Tools/catalog_quality.py evaluate \
-            --policy Data/quality/catalog-quality-policy-v1.json \
-            --source-reviews Data/quality/source-review-policy-v1.json \
-            --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
-            --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
-            --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
-            --source-key "$SOURCE_KEY" \
-            --snapshot-id "$SNAPSHOT_ID" \
-            --as-of "$PROPOSAL_AT" \
-            --output "$RUNNER_TEMP/quality/payload/quality-report.json" \
-            --summary-output "$RUNNER_TEMP/quality/quality-summary.md" \
-            --defer-blocker-exit
+          if [[ "$AGGREGATE_RETAILER" == "true" ]]; then
+            python3 Tools/catalog_quality.py evaluate \
+              --policy Data/quality/catalog-quality-policy-v1.json \
+              --source-reviews Data/quality/source-review-policy-v1.json \
+              --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
+              --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+              --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
+              --source-key "$SOURCE_KEY" \
+              --snapshot-id "$SNAPSHOT_ID" \
+              --as-of "$PROPOSAL_AT" \
+              --output "$RUNNER_TEMP/quality/base-quality-report.json" \
+              --summary-output "$RUNNER_TEMP/quality/quality-summary.md" \
+              --defer-blocker-exit
+            python3 Tools/production_catalog_aggregate.py merge-quality \
+              --base-quality "$RUNNER_TEMP/quality/base-quality-report.json" \
+              --primary-quality "$RUNNER_TEMP/primary-quality/payload/quality-report.json" \
+              --retailer-quality "$RUNNER_TEMP/retailer-quality/payload/quality-report.json" \
+              --merged-evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+              --retailer-evidence "$RUNNER_TEMP/retailer-normalized/payload/evidence.json" \
+              --quality-policy Data/quality/catalog-quality-policy-v1.json \
+              --primary-source-key "$SOURCE_KEY" \
+              --primary-snapshot-id "$SNAPSHOT_ID" \
+              --retailer-source-key open-prices \
+              --retailer-snapshot-id "$RETAILER_SNAPSHOT_ID" \
+              --output "$RUNNER_TEMP/quality/payload/quality-report.json"
+            REPORT="$RUNNER_TEMP/quality/payload/quality-report.json" python3 - <<'PY' >> "$RUNNER_TEMP/quality/quality-summary.md"
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path(os.environ["REPORT"]).read_text(encoding="utf-8"))
+          aggregation = report["aggregation"]
+          print("# Production aggregate catalog quality")
+          print()
+          print(f"- Status: `{report['status']}`")
+          print(f"- Primary snapshot: `{aggregation['primarySnapshotID']}`")
+          print(f"- Retailer snapshot: `{aggregation['retailerSnapshotID']}`")
+          print(f"- Matched retailer observations: {aggregation['matchedRetailerEvidence']}")
+          print(f"- Unmatched retailer observations excluded from runtime projection: {aggregation['unmatchedRetailerEvidence']}")
+          print("- Retailer evidence can change halal assessment: false")
+          print("- Component quality reports: " + ", ".join(item["sourceKey"] for item in report["componentQualityReports"]))
+          PY
+          else
+            python3 Tools/catalog_quality.py evaluate \
+              --policy Data/quality/catalog-quality-policy-v1.json \
+              --source-reviews Data/quality/source-review-policy-v1.json \
+              --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
+              --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+              --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
+              --source-key "$SOURCE_KEY" \
+              --snapshot-id "$SNAPSHOT_ID" \
+              --as-of "$PROPOSAL_AT" \
+              --output "$RUNNER_TEMP/quality/payload/quality-report.json" \
+              --summary-output "$RUNNER_TEMP/quality/quality-summary.md" \
+              --defer-blocker-exit
+          fi
           python3 Tools/catalog_workflow.py emit-handoff \
             --artifact-kind quality-report \
             --source-key "$SOURCE_KEY" \
@@ -135,7 +255,11 @@ jobs:
         env:
           SOURCE_KEY: ${{ inputs.source_key }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
-        run: echo "artifact_name=quality-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          AGGREGATE_RETAILER: ${{ inputs.aggregate_retailer_evidence }}
+        run: |
+          SUFFIX=""
+          if [[ "$AGGREGATE_RETAILER" == "true" ]]; then SUFFIX="-aggregate"; fi
+          echo "artifact_name=quality-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}${SUFFIX}" >> "$GITHUB_OUTPUT"
 
       - name: Upload machine and human quality reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -143,7 +267,7 @@ jobs:
           name: ${{ steps.name.outputs.artifact_name }}
           path: ${{ runner.temp }}/quality
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
       - name: Enforce release quality gate
         run: |

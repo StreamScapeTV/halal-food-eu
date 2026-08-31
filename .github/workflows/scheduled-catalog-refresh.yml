@@ -22,6 +22,11 @@ on:
         default: fixture
         type: choice
         options: [fixture, sample, full]
+      catalog_version:
+        description: Production semantic catalog version. Required only for a manual full Open Food Facts proposal; Open Prices is paired automatically.
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -38,6 +43,10 @@ jobs:
       source_key: ${{ steps.resolve.outputs.source_key }}
       snapshot_id: ${{ steps.resolve.outputs.snapshot_id }}
       mode: ${{ steps.resolve.outputs.mode }}
+      catalog_version: ${{ steps.resolve.outputs.catalog_version }}
+      proposal_enabled: ${{ steps.resolve.outputs.proposal_enabled }}
+      production_aggregate_enabled: ${{ steps.resolve.outputs.production_aggregate_enabled }}
+      retailer_snapshot_id: ${{ steps.resolve.outputs.retailer_snapshot_id }}
     steps:
       - name: Require reviewed default-branch workflow code
         env:
@@ -54,21 +63,54 @@ jobs:
           INPUT_SOURCE_KEY: ${{ inputs.source_key }}
           INPUT_SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CATALOG_VERSION: ${{ inputs.catalog_version }}
         run: |
           set -euo pipefail
+          SOURCE_KEY=""
+          SNAPSHOT_ID=""
+          MODE=""
+          CATALOG_VERSION=""
+          PROPOSAL_ENABLED=false
+          PRODUCTION_AGGREGATE_ENABLED=false
+          RETAILER_SNAPSHOT_ID=""
+
           if [[ "$EVENT_NAME" == "schedule" && "$EVENT_SCHEDULE" == "41 3 * * 5" ]]; then
-            echo "source_key=open-prices" >> "$GITHUB_OUTPUT"
-            echo "snapshot_id=op-scheduled-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
-            echo "mode=full" >> "$GITHUB_OUTPUT"
+            SOURCE_KEY=open-prices
+            SNAPSHOT_ID="op-scheduled-${GITHUB_RUN_ID}"
+            MODE=full
           elif [[ "$EVENT_NAME" == "schedule" ]]; then
-            echo "source_key=open-food-facts" >> "$GITHUB_OUTPUT"
-            echo "snapshot_id=off-scheduled-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
-            echo "mode=full" >> "$GITHUB_OUTPUT"
+            SOURCE_KEY=open-food-facts
+            SNAPSHOT_ID="off-scheduled-${GITHUB_RUN_ID}"
+            MODE=full
           else
-            echo "source_key=$INPUT_SOURCE_KEY" >> "$GITHUB_OUTPUT"
-            echo "snapshot_id=$INPUT_SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
-            echo "mode=$INPUT_MODE" >> "$GITHUB_OUTPUT"
+            SOURCE_KEY="$INPUT_SOURCE_KEY"
+            SNAPSHOT_ID="$INPUT_SNAPSHOT_ID"
+            MODE="$INPUT_MODE"
           fi
+
+          if [[ "$SOURCE_KEY" == "synthetic-fixture" && "$MODE" != "sample" ]]; then
+            CATALOG_VERSION=0.0.0-demo.1
+            PROPOSAL_ENABLED=true
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$SOURCE_KEY" == "open-food-facts" && "$MODE" == "full" && -n "$INPUT_CATALOG_VERSION" ]]; then
+            CATALOG_VERSION="$INPUT_CATALOG_VERSION"
+            CATALOG_VERSION="$CATALOG_VERSION" python3 - <<'PY'
+          import os, re
+          version = os.environ['CATALOG_VERSION']
+          if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+              raise SystemExit('catalog_version must be a production semantic version without a prerelease suffix')
+          PY
+            PROPOSAL_ENABLED=true
+            PRODUCTION_AGGREGATE_ENABLED=true
+            RETAILER_SNAPSHOT_ID="op-production-${GITHUB_RUN_ID}"
+          fi
+
+          echo "source_key=$SOURCE_KEY" >> "$GITHUB_OUTPUT"
+          echo "snapshot_id=$SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "catalog_version=$CATALOG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "proposal_enabled=$PROPOSAL_ENABLED" >> "$GITHUB_OUTPUT"
+          echo "production_aggregate_enabled=$PRODUCTION_AGGREGATE_ENABLED" >> "$GITHUB_OUTPUT"
+          echo "retailer_snapshot_id=$RETAILER_SNAPSHOT_ID" >> "$GITHUB_OUTPUT"
 
   policy:
     needs: trusted-default-branch
@@ -105,25 +147,101 @@ jobs:
       normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
       change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
 
-  # Issue #12 owns production evidence-to-SQLite compilation. Until that compiler
-  # admits multi-source evidence, production source refreshes stop after quality.
-  # The synthetic fixture remains the end-to-end workflow proof.
+  retailer-policy:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: trusted-default-branch
+    uses: ./.github/workflows/source-policy.yml
+    with:
+      source_key: open-prices
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+      mode: full
+
+  retailer-acquire:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: [trusted-default-branch, retailer-policy]
+    uses: ./.github/workflows/acquire-catalog.yml
+    with:
+      source_key: open-prices
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+      mode: full
+      policy_artifact_name: ${{ needs.retailer-policy.outputs.artifact_name }}
+
+  retailer-normalize:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: [trusted-default-branch, retailer-acquire]
+    uses: ./.github/workflows/normalize-and-diff.yml
+    with:
+      source_key: open-prices
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+      source_artifact_name: ${{ needs.retailer-acquire.outputs.artifact_name }}
+
+  retailer-quality:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: [trusted-default-branch, retailer-normalize]
+    uses: ./.github/workflows/catalog-quality.yml
+    with:
+      source_key: open-prices
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+      normalized_artifact_name: ${{ needs.retailer-normalize.outputs.normalized_artifact_name }}
+      change_artifact_name: ${{ needs.retailer-normalize.outputs.change_artifact_name }}
+
+  aggregate-normalize:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: [trusted-default-branch, normalize, quality, retailer-normalize, retailer-quality]
+    uses: ./.github/workflows/normalize-and-diff.yml
+    with:
+      source_key: open-food-facts
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+      aggregate_retailer_evidence: true
+      primary_normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
+      retailer_normalized_artifact_name: ${{ needs.retailer-normalize.outputs.normalized_artifact_name }}
+      primary_change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
+      primary_basic_exclusions_artifact_name: ${{ needs.normalize.outputs.basic_exclusions_artifact_name }}
+      retailer_snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+
+  aggregate-quality:
+    if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
+    needs: [trusted-default-branch, quality, retailer-normalize, retailer-quality, aggregate-normalize]
+    uses: ./.github/workflows/catalog-quality.yml
+    with:
+      source_key: open-food-facts
+      snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+      normalized_artifact_name: ${{ needs.aggregate-normalize.outputs.normalized_artifact_name }}
+      change_artifact_name: ${{ needs.aggregate-normalize.outputs.change_artifact_name }}
+      aggregate_retailer_evidence: true
+      primary_quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
+      retailer_quality_artifact_name: ${{ needs.retailer-quality.outputs.artifact_name }}
+      retailer_normalized_artifact_name: ${{ needs.retailer-normalize.outputs.normalized_artifact_name }}
+      retailer_snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+
+  # Scheduled source refreshes intentionally stop after their independent quality gate.
+  # A trusted main manual full Open Food Facts proposal pairs a same-run full Open Prices
+  # snapshot, independently quality-gates both, composes observational retailer evidence,
+  # and only then enters build/proposal. Synthetic fixture runs remain the no-secret proof.
   build:
-    if: needs.trusted-default-branch.outputs.source_key == 'synthetic-fixture' && needs.trusted-default-branch.outputs.mode != 'sample'
-    needs: [trusted-default-branch, normalize, quality]
+    if: ${{ always() && needs.trusted-default-branch.outputs.proposal_enabled == 'true' && needs.trusted-default-branch.outputs.mode != 'sample' && ((needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.result == 'success' && needs.aggregate-quality.result == 'success') || (needs.trusted-default-branch.outputs.production_aggregate_enabled != 'true' && needs.normalize.result == 'success' && needs.quality.result == 'success')) }}
+    needs: [trusted-default-branch, normalize, quality, aggregate-normalize, aggregate-quality]
     uses: ./.github/workflows/build-catalog.yml
     with:
       source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
       snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
-      normalized_artifact_name: ${{ needs.normalize.outputs.normalized_artifact_name }}
-      quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
+      catalog_version: ${{ needs.trusted-default-branch.outputs.catalog_version }}
+      normalized_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.outputs.normalized_artifact_name || needs.normalize.outputs.normalized_artifact_name }}
+      quality_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-quality.outputs.artifact_name || needs.quality.outputs.artifact_name }}
+      basic_exclusions_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.outputs.basic_exclusions_artifact_name || needs.normalize.outputs.basic_exclusions_artifact_name }}
 
   proposal-gate:
-    if: needs.trusted-default-branch.outputs.source_key == 'synthetic-fixture' && needs.trusted-default-branch.outputs.mode != 'sample'
-    needs: [trusted-default-branch, quality, build]
+    if: ${{ always() && needs.build.result == 'success' }}
+    needs: [trusted-default-branch, normalize, quality, aggregate-normalize, aggregate-quality, build]
+    permissions:
+      contents: write
+      pull-requests: write
     uses: ./.github/workflows/propose-catalog-update.yml
     with:
+      source_key: ${{ needs.trusted-default-branch.outputs.source_key }}
       snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       database_artifact_name: ${{ needs.build.outputs.database_artifact_name }}
       manifest_artifact_name: ${{ needs.build.outputs.manifest_artifact_name }}
-      quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
+      normalized_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.outputs.normalized_artifact_name || needs.normalize.outputs.normalized_artifact_name }}
+      quality_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-quality.outputs.artifact_name || needs.quality.outputs.artifact_name }}
+      basic_exclusions_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.outputs.basic_exclusions_artifact_name || needs.normalize.outputs.basic_exclusions_artifact_name }}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.4.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -20,7 +20,7 @@
     {
       "key": "normalize-diff",
       "accepts": ["source-snapshot"],
-      "produces": ["normalized-evidence", "change-report"],
+      "produces": ["normalized-evidence", "change-report", "basic-exclusions"],
       "requiresCompleteInput": false,
       "mayWriteRepository": false
     },
@@ -33,8 +33,8 @@
     },
     {
       "key": "build",
-      "accepts": ["normalized-evidence", "quality-report"],
-      "produces": ["catalog-database", "catalog-manifest"],
+      "accepts": ["normalized-evidence", "quality-report", "basic-exclusions"],
+      "produces": ["catalog-database", "catalog-manifest", "catalog-release-notes"],
       "requiresCompleteInput": true,
       "mayWriteRepository": false
     },
@@ -88,6 +88,11 @@
       "maxRecords": 1000000,
       "allowedRedistributionClasses": ["metadata-only", "redistributable"]
     },
+    "basic-exclusions": {
+      "maxBytes": 268435456,
+      "maxRecords": 10000000,
+      "allowedRedistributionClasses": ["redistributable"]
+    },
     "quality-report": {
       "maxBytes": 67108864,
       "maxRecords": 1000000,
@@ -101,6 +106,11 @@
     "catalog-manifest": {
       "maxBytes": 16777216,
       "maxRecords": 100000,
+      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
+    },
+    "catalog-release-notes": {
+      "maxBytes": 1048576,
+      "maxRecords": 1,
       "allowedRedistributionClasses": ["metadata-only", "redistributable"]
     },
     "proposal-report": {

@@ -21,10 +21,11 @@ struct ProductEvidenceSubmissionTests {
         draft.productName = "Test product"
         draft.brand = "Test brand"
         draft.retailer = "Example retailer"
+        let isolatedSubmissionID = packageSubmissionID(1)
 
         let builder = try makeBuilder()
         let package = try builder(
-            submissionID: submissionID,
+            submissionID: isolatedSubmissionID,
             request: request,
             draft: draft,
             attachments: requiredAttachments(for: .missingProduct),
@@ -33,7 +34,7 @@ struct ProductEvidenceSubmissionTests {
         defer { package.cleanup() }
 
         #expect(package.destinationEmail == "info@faruqi.dev")
-        #expect(package.subject == "[Halal Food EU Product] \(submissionID) \(barcode.rawValue)")
+        #expect(package.subject == "[Halal Food EU Product] \(isolatedSubmissionID) \(barcode.rawValue)")
         #expect(package.envelope.schemaVersion == 1)
         #expect(package.envelope.sourceType == "user-package-evidence")
         #expect(package.envelope.gtin == "00200000000004")
@@ -197,7 +198,7 @@ struct ProductEvidenceSubmissionTests {
         let draft = acceptedDraft(request: request)
         let builder = try makeBuilder()
         let package = try builder(
-            submissionID: submissionID,
+            submissionID: packageSubmissionID(2),
             request: request,
             draft: draft,
             attachments: requiredAttachments(for: .ingredientsCorrection),
@@ -221,7 +222,7 @@ struct ProductEvidenceSubmissionTests {
             catalogVersion: "2026.09.0"
         )
         let package = try makeBuilder()(
-            submissionID: submissionID,
+            submissionID: packageSubmissionID(3),
             request: request,
             draft: acceptedDraft(request: request),
             attachments: requiredAttachments(for: .missingProduct),
@@ -270,6 +271,10 @@ struct ProductEvidenceSubmissionTests {
             appVersion: "0.1.0",
             catalogVersion: "2026.09.0"
         )
+    }
+
+    private func packageSubmissionID(_ suffix: Int) -> String {
+        "hfeu-submission-12345678-1234-1234-1234-123456789ab\(suffix)"
     }
 
     private func acceptedDraft(

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "datasetVersion": "2.0.0",
   "referenceRevision": "eu-additives-2026-08-18",
-  "reviewedAt": "2026-09-02T00:00:00Z",
-  "nextReviewAt": "2026-10-02T00:00:00Z",
+  "reviewedAt": "2026-09-01T23:00:33Z",
+  "nextReviewAt": "2026-10-01T23:00:33Z",
   "identityOnly": true,
   "languages": [
     "de",
@@ -67,7 +67,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E160a(i)",
@@ -99,7 +99,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E322",
@@ -152,7 +152,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E422",
@@ -192,7 +192,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E471",
@@ -230,7 +230,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E472a",
@@ -264,7 +264,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E901",
@@ -307,7 +307,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E904",
@@ -355,7 +355,7 @@
           "revision": "2026-01-28"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     },
     {
       "id": "E920",
@@ -387,7 +387,7 @@
           "revision": "2026-08-18"
         }
       ],
-      "reviewedAt": "2026-09-02T00:00:00Z"
+      "reviewedAt": "2026-09-01T23:00:33Z"
     }
   ]
 }

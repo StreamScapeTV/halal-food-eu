@@ -51,3 +51,4 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0007 — Germany catalog footprint and runtime storage](ADR-0007-germany-catalog-footprint-and-runtime-storage.md)
 - [ADR-0008 — Catalog quality and release gates](ADR-0008-catalog-quality-release-gates.md)
 - [ADR-0009 — Versioned halal methodology and explicit human review](ADR-0009-versioned-halal-methodology-and-human-review.md)
+- [ADR-0010 — Owner-admitted product evidence with local Apple Vision OCR](ADR-0010-owner-admitted-local-vision-product-evidence-intake.md)

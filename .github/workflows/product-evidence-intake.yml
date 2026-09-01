@@ -1,0 +1,159 @@
+name: Owner-admitted product evidence intake
+
+on:
+  workflow_dispatch:
+    inputs:
+      intake_ref:
+        description: "Repository ref containing an owner-screened package explicitly approved for public Git staging"
+        required: true
+        type: string
+      intake_path:
+        description: "Safe relative directory containing submission.json, admission.json, and declared JPEGs"
+        required: true
+        type: string
+      human_review_path:
+        description: "Optional safe relative JSON path on the same ref; when set, materialize a non-image Git patch bundle"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-evidence-intake-${{ inputs.intake_ref }}-${{ inputs.intake_path }}
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    name: Validate, re-encode, OCR, and prepare review
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      INTAKE_REF: ${{ inputs.intake_ref }}
+      INTAKE_PATH: ${{ inputs.intake_path }}
+      HUMAN_REVIEW_PATH: ${{ inputs.human_review_path }}
+      EXPECTED_REVIEWER: github:${{ github.actor }}
+    steps:
+      - name: Check out trusted default-branch tooling
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          path: trusted
+          persist-credentials: false
+
+      - name: Check out explicitly owner-admitted public staging ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.intake_ref }}
+          path: intake
+          persist-credentials: false
+
+      - name: Fail closed on path/ref ambiguity
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test -n "$INTAKE_REF"
+          python3 - <<'PY'
+          import os
+          from pathlib import PurePosixPath
+
+          def check(name: str, required: bool) -> None:
+              value = os.environ[name]
+              if not value and not required:
+                  return
+              path = PurePosixPath(value)
+              if not value or path.is_absolute() or value.startswith("~") or "\\" in value or any(part in {"", ".", ".."} for part in path.parts):
+                  raise SystemExit(f"unsafe {name}: {value!r}")
+
+          check("INTAKE_PATH", True)
+          check("HUMAN_REVIEW_PATH", False)
+          PY
+
+      - name: Validate owner admission and hostile package boundary
+        run: |
+          set -euo pipefail
+          python3 trusted/Tools/product_evidence_intake.py validate \
+            --package-dir "$GITHUB_WORKSPACE/intake/$INTAKE_PATH" \
+            --registry trusted/Data/submissions/admitted-submission-registry-v1.json \
+            --expected-reviewer "$EXPECTED_REVIEWER" \
+            --output "$RUNNER_TEMP/intake-validation.json"
+          python3 trusted/Tools/product_evidence_intake.py ocr-request \
+            --validation-report "$RUNNER_TEMP/intake-validation.json" \
+            --output "$RUNNER_TEMP/ocr-request.json"
+
+      - name: Re-encode locally and run assistive Apple Vision OCR
+        run: |
+          set -euo pipefail
+          xcrun swiftc trusted/Tools/product_evidence_ocr.swift \
+            -o "$RUNNER_TEMP/product-evidence-ocr"
+          "$RUNNER_TEMP/product-evidence-ocr" \
+            --request "$RUNNER_TEMP/ocr-request.json" \
+            --input-dir "$GITHUB_WORKSPACE/intake/$INTAKE_PATH" \
+            --output-dir "$RUNNER_TEMP/admitted-images" \
+            --report "$RUNNER_TEMP/ocr-report.json"
+          python3 trusted/Tools/product_evidence_intake.py validate-ocr \
+            --validation-report "$RUNNER_TEMP/intake-validation.json" \
+            --ocr-report "$RUNNER_TEMP/ocr-report.json" \
+            --output "$RUNNER_TEMP/validated-ocr-report.json"
+          python3 trusted/Tools/product_evidence_intake.py render-review \
+            --validation-report "$RUNNER_TEMP/intake-validation.json" \
+            --ocr-report "$RUNNER_TEMP/validated-ocr-report.json" \
+            --output "$RUNNER_TEMP/human-review.md"
+
+      - name: Apply explicit human review decision
+        if: inputs.human_review_path != ''
+        run: |
+          set -euo pipefail
+          test -f "$GITHUB_WORKSPACE/intake/$HUMAN_REVIEW_PATH"
+          python3 trusted/Tools/product_evidence_intake.py finalize \
+            --validation-report "$RUNNER_TEMP/intake-validation.json" \
+            --ocr-report "$RUNNER_TEMP/validated-ocr-report.json" \
+            --human-review "$GITHUB_WORKSPACE/intake/$HUMAN_REVIEW_PATH" \
+            --expected-reviewer "$EXPECTED_REVIEWER" \
+            --output "$RUNNER_TEMP/product-evidence-review-result.json"
+          if python3 - "$RUNNER_TEMP/product-evidence-review-result.json" <<'PY'
+          import json, sys
+          value = json.load(open(sys.argv[1], encoding="utf-8"))
+          raise SystemExit(0 if value.get("proposalType") == "owner-admitted-user-package-evidence" else 1)
+          PY
+          then
+            cp "$RUNNER_TEMP/product-evidence-review-result.json" "$RUNNER_TEMP/product-evidence-proposal.json"
+            python3 trusted/Tools/product_evidence_intake.py make-patch \
+              --proposal "$RUNNER_TEMP/product-evidence-proposal.json" \
+              --registry trusted/Data/submissions/admitted-submission-registry-v1.json \
+              --output-dir "$RUNNER_TEMP/git-patch-bundle"
+          else
+            python3 - "$RUNNER_TEMP/product-evidence-review-result.json" <<'PY'
+          import json, sys
+          value = json.load(open(sys.argv[1], encoding="utf-8"))
+          if value.get("resultType") != "rejected-product-evidence":
+              raise SystemExit("unexpected final review result")
+          PY
+          fi
+
+      - name: Assemble bounded review artifact without raw mailbox material
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/review-artifact"
+          cp "$RUNNER_TEMP/intake-validation.json" "$RUNNER_TEMP/review-artifact/"
+          cp "$RUNNER_TEMP/validated-ocr-report.json" "$RUNNER_TEMP/review-artifact/ocr-report.json"
+          cp "$RUNNER_TEMP/human-review.md" "$RUNNER_TEMP/review-artifact/"
+          cp -R "$RUNNER_TEMP/admitted-images" "$RUNNER_TEMP/review-artifact/images"
+          if test -f "$RUNNER_TEMP/product-evidence-review-result.json"; then
+            cp "$RUNNER_TEMP/product-evidence-review-result.json" "$RUNNER_TEMP/review-artifact/"
+          fi
+          if test -f "$RUNNER_TEMP/product-evidence-proposal.json"; then
+            cp "$RUNNER_TEMP/product-evidence-proposal.json" "$RUNNER_TEMP/review-artifact/"
+            cp -R "$RUNNER_TEMP/git-patch-bundle" "$RUNNER_TEMP/review-artifact/"
+          fi
+          test ! -e "$RUNNER_TEMP/review-artifact/raw-email.eml"
+
+      - name: Upload short-lived owner review artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: product-evidence-review-${{ github.run_id }}
+          path: ${{ runner.temp }}/review-artifact
+          if-no-files-found: error
+          retention-days: 7

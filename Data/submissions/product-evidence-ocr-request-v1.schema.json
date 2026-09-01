@@ -1,0 +1,72 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-ocr-request-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "attachments": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "pattern": "^(barcode|front|ingredients|certification|nutrition)-[1-9][0-9]*\\.jpg$",
+            "type": "string"
+          },
+          "inputSha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "barcode",
+              "front",
+              "ingredients",
+              "certification",
+              "nutrition"
+            ]
+          }
+        },
+        "required": [
+          "fileName",
+          "purpose",
+          "inputSha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+    },
+    "languageHints": {
+      "items": {
+        "enum": [
+          "de-DE",
+          "en-US"
+        ]
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "submissionID",
+    "admissionID",
+    "languageHints",
+    "attachments"
+  ],
+  "title": "Local OCR/re-encode request v1",
+  "type": "object"
+}

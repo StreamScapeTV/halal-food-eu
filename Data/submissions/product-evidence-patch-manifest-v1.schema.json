@@ -1,0 +1,67 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-patch-manifest-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "containsImageBytes": {
+      "const": false
+    },
+    "containsRawEmail": {
+      "const": false
+    },
+    "files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "byteSize": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "pattern": "^Data/submissions/(?:admitted/hfeu-submission-[0-9a-f-]+\\.json|admitted-submission-registry-v1\\.json)$",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "byteSize"
+        ],
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "proposalDigest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "requiresReviewedGitPR": {
+      "const": true
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "submissionID",
+    "proposalDigest",
+    "containsImageBytes",
+    "containsRawEmail",
+    "requiresReviewedGitPR",
+    "files"
+  ],
+  "title": "Product evidence reviewed Git patch manifest v1",
+  "type": "object"
+}

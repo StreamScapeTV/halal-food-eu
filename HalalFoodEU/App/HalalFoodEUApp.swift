@@ -5,18 +5,21 @@ import SwiftUI
 struct HalalFoodEUApp: App {
     @State private var scannerViewModel: ScannerViewModel
     @State private var submissionCoordinator: ProductEvidenceSubmissionCoordinator
+    private let additiveReferenceCatalog: AdditiveReferenceCatalog?
 
     init() {
         let container = AppContainer.live()
         _scannerViewModel = State(initialValue: container.makeScannerViewModel())
         _submissionCoordinator = State(initialValue: container.makeSubmissionCoordinator())
+        additiveReferenceCatalog = container.makeAdditiveReferenceCatalog()
     }
 
     var body: some Scene {
         WindowGroup {
             HomeView(
                 viewModel: scannerViewModel,
-                submissionCoordinator: submissionCoordinator
+                submissionCoordinator: submissionCoordinator,
+                additiveReferenceCatalog: additiveReferenceCatalog
             )
         }
     }

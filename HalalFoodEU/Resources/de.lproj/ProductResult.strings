@@ -1,0 +1,113 @@
+"section.assessment" = "Bewertung";
+"section.product" = "Produkt";
+"section.reasons" = "Begründung";
+"section.ingredients" = "Zutaten";
+"section.source" = "Nachweisquelle";
+"section.retailers" = "Händlernachweise";
+"section.certification" = "Zertifizierungsnachweise";
+"section.review" = "Prüfung";
+"section.report" = "Melden oder korrigieren";
+
+"status.certified" = "Halal-zertifiziert";
+"status.reviewed" = "Halal — geprüft";
+"status.notHalal" = "Nicht halal";
+"status.questionable" = "Fraglich";
+"status.unknown" = "Unbekannt";
+
+"assessment.needsReview" = "Prüfung erforderlich";
+"assessment.recordedFormer" = "Früher erfasstes Ergebnis: %@";
+"assessment.recordedSummary" = "Zusammenfassung der erfassten Bewertung";
+"assessment.notCurrent.detail" = "Die erfasste positive Bewertung wird nicht als aktuell angezeigt, weil neuere, veraltete, widersprüchliche, fehlende oder ungeprüfte Nachweise eine erneute Prüfung erfordern.";
+"assessment.certified.detail" = "Aktuelle Zertifizierungsnachweise sind mit genau diesem Produkt verknüpft und stützen das erfasste Ergebnis.";
+"assessment.reviewed.detail" = "Dies ist eine Zutaten- und Nachweisprüfung nach der angegebenen Methodik. Es handelt sich nicht um eine Produktzertifizierung.";
+"assessment.notHalal.detail" = "Die erfassten Nachweise enthalten einen ausschließenden Grund. Prüfen Sie die Nachweise und Gründe unten.";
+"assessment.questionable.detail" = "Mindestens eine Zutat oder ein Nachweispunkt ist noch ungeklärt. Die Gründe unten beschreiben den weiteren Klärungsbedarf.";
+"assessment.unknown.detail" = "Die verfügbaren Nachweise stützen derzeit kein genaueres Ergebnis.";
+"assessment.unknown.missingIngredients" = "Es liegt keine aktuelle geprüfte Zutatenformulierung vor. Daher leitet der Katalog kein Halal-Ergebnis ab.";
+"assessment.unknown.pendingReview" = "Produktnachweise sind vorhanden, aber für die aktuellen Nachweise liegt noch keine freigegebene Halal-Prüfung vor.";
+
+"warning.conflict.title" = "Widersprüchliche Produktnachweise";
+"warning.conflict.detail" = "Die aktuelle Auswahl enthält ungelöste Nachweiskonflikte. Ein früheres positives Ergebnis gilt erst nach Prüfung des Konflikts wieder als aktuell.";
+"warning.missing.title" = "Zutatennachweis fehlt";
+"warning.missing.detail" = "Der Katalog enthält keine aktuelle Zutatenformulierung für dieses Produkt. Prüfen Sie die aktuelle Verpackung, bevor Sie sich auf eine frühere Bewertung verlassen.";
+"warning.changed.title" = "Formulierungsänderung muss geprüft werden";
+"warning.changed.detail" = "Es gibt eine neuere Formulierung ohne ausreichende Prüfung. Eine frühere positive Bewertung ist für diese Formulierung nicht aktuell.";
+"warning.stale.title" = "Zutatennachweis ist veraltet";
+"warning.stale.detail" = "Die gespeicherte Formulierung liegt außerhalb des zulässigen Aktualitätsfensters. Prüfen Sie die aktuelle Verpackung, bevor Sie sich auf ein positives Ergebnis verlassen.";
+"warning.dateUnknown.title" = "Datum des Zutatennachweises unbekannt";
+"warning.dateUnknown.detail" = "Der Katalog kann nicht feststellen, wann diese Formulierung beobachtet wurde. Ohne diesen Nachweis gilt ein positives Ergebnis nicht als aktuell.";
+"warning.refresh.title" = "Aktualisierung der Zutaten empfohlen";
+"warning.refresh.detail" = "Die Formulierung nähert sich der Aktualitätsgrenze. Das erfasste Ergebnis bleibt sichtbar, eine Prüfung der aktuellen Verpackung wird jedoch empfohlen.";
+"warning.unverified.title" = "Zutatentext muss noch menschlich geprüft werden";
+"warning.unverified.detail" = "Der aktuelle Zutatentext ist maschinell unterstützt oder ungeprüft. Ein früheres positives Ergebnis gilt erst nach menschlicher Prüfung des Quelltexts als aktuell.";
+
+"field.name" = "Name";
+"field.brand" = "Marke";
+"field.brandOwner" = "Markeninhaber";
+"field.quantity" = "Menge";
+"field.gtin" = "GTIN";
+"field.market" = "Markt";
+"field.catalog" = "Katalog";
+"field.language" = "Sprache";
+"field.observed" = "Beobachtet";
+"field.retrieved" = "Abgerufen";
+"field.verification" = "Prüfstatus";
+"field.allergens" = "Allergene";
+"field.traces" = "Spuren";
+"field.freshness" = "Aktualität";
+"field.source" = "Quelle";
+"field.sourceType" = "Nachweistyp";
+"field.attribution" = "Quellenangabe";
+"field.license" = "Datenlizenz";
+"field.reference" = "Referenz";
+"field.certificateReference" = "Zertifikatsreferenz";
+"field.scheme" = "System";
+"field.scope" = "Geltungsbereich";
+"field.effective" = "Gültig ab";
+"field.expires" = "Gültig bis";
+"field.lastChecked" = "Zuletzt geprüft";
+"field.assessed" = "Bewertet";
+"field.reviewed" = "Geprüft";
+"field.methodology" = "Methodik";
+"field.approvedReviewers" = "Freigebende Prüfer";
+"field.recheck" = "Erneut prüfen bis";
+
+"value.dateUnavailable" = "Datum nicht verfügbar";
+"value.notReviewed" = "Nicht geprüft";
+"verification.human" = "Menschlich geprüft";
+"verification.machine" = "Maschinell unterstützt — menschliche Prüfung erforderlich";
+"verification.unverified" = "Ungeprüft";
+"freshness.current" = "Aktuell";
+"freshness.refresh" = "Aktualisierung empfohlen";
+"freshness.stale" = "Veraltet";
+"freshness.dateUnknown" = "Datum unbekannt";
+"freshness.changed" = "Geändert — ungeprüft";
+
+"ingredients.exactSourceText" = "Exakter Zutaten-Quelltext";
+"ingredients.sourceTextFooter" = "Der Zutatentext oben ist die exakt gespeicherte Quellenbeobachtung. Abgeleitete Übersetzungen dürfen ihn auch künftig niemals ersetzen.";
+"ingredients.none" = "Für dieses Produkt ist im aktuellen Offline-Katalog keine geprüfte Zutatenformulierung verfügbar.";
+"reason.evidence" = "Nachweis: %@";
+
+"retailer.feed.dated" = "Im freigegebenen %@-Feed vom %@ gelistet";
+"retailer.feed.undated" = "In einem freigegebenen %@-Feed gelistet; das Feed-Datum ist nicht verfügbar";
+"retailer.observation.dated" = "Am %2$@ in einer %1$@-Filiale beobachtet";
+"retailer.observation.undated" = "In einer %@-Filiale beobachtet; das Beobachtungsdatum ist nicht verfügbar";
+"retailer.community.dated" = "Community-Daten melden %@ am %@";
+"retailer.community.undated" = "Community-Daten melden %@; das Beobachtungsdatum ist nicht verfügbar";
+"retailer.scope" = "Geltungsbereich: %@";
+"retailer.source" = "Quelle: %@ — %@";
+"retailer.none" = "Keine Händlernachweise in diesem Katalog.";
+"retailer.footer" = "Händlernachweise beschreiben nur die gespeicherte Quellenbeobachtung. Sie bedeuten keinen aktuellen Bestand, keine bundesweite Verfügbarkeit und kein vollständiges Sortiment.";
+
+"source.licenseOnly" = "Lizenziert als %@";
+"action.openSource" = "Quelle öffnen";
+"certification.footer" = "Eine Zertifizierung stützt ein Ergebnis nur, wenn der erfasste Geltungsbereich genau dieses Produkt umfasst und der Nachweis aktuell ist.";
+
+"action.addIngredients" = "Fehlende Zutatennachweise ergänzen";
+"action.reportIngredients" = "Zutatennachweise melden";
+"action.correctProduct" = "Produktdetails korrigieren";
+"action.reportCertification" = "Zertifizierung oder Ergebnis melden";
+"report.footer" = "Eine Meldung bleibt auf diesem Gerät, bis Sie ausdrücklich eine E-Mail prüfen, das Paket teilen oder die Details kopieren. Einsendungen sind bis zur menschlichen Prüfung nicht vertrauenswürdige Nachweise.";
+
+"accessibility.assessment" = "Bewertung: %@.";
+"accessibility.recordedSummary" = "Zusammenfassung der erfassten Bewertung: %@.";

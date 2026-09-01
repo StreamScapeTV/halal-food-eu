@@ -1,0 +1,113 @@
+"section.assessment" = "Assessment";
+"section.product" = "Product";
+"section.reasons" = "Why this result";
+"section.ingredients" = "Ingredients";
+"section.source" = "Evidence source";
+"section.retailers" = "Retailer evidence";
+"section.certification" = "Certification evidence";
+"section.review" = "Review";
+"section.report" = "Report or correct";
+
+"status.certified" = "Halal certified";
+"status.reviewed" = "Halal — reviewed";
+"status.notHalal" = "Not halal";
+"status.questionable" = "Questionable";
+"status.unknown" = "Unknown";
+
+"assessment.needsReview" = "Needs review";
+"assessment.recordedFormer" = "Recorded earlier result: %@";
+"assessment.recordedSummary" = "Recorded assessment summary";
+"assessment.notCurrent.detail" = "The recorded positive assessment is not presented as current because newer, stale, conflicting, missing, or unverified evidence requires review.";
+"assessment.certified.detail" = "Current certification evidence is linked to this exact product and supports the recorded result.";
+"assessment.reviewed.detail" = "This is an ingredient and evidence review under the stated methodology. It is not product certification.";
+"assessment.notHalal.detail" = "The recorded evidence contains a prohibitive reason. Review the evidence and reasons below.";
+"assessment.questionable.detail" = "One or more ingredients or evidence points remain unresolved. The reasons below describe what still needs clarification.";
+"assessment.unknown.detail" = "The available evidence does not support a more specific current result.";
+"assessment.unknown.missingIngredients" = "No current reviewed ingredient formulation is available, so the catalog does not infer a halal result.";
+"assessment.unknown.pendingReview" = "Product evidence is present, but no approved halal review is available for the current evidence.";
+
+"warning.conflict.title" = "Conflicting product evidence";
+"warning.conflict.detail" = "The current selection contains unresolved evidence conflicts. A former positive result is not treated as current until the conflict is reviewed.";
+"warning.missing.title" = "Ingredient evidence is unavailable";
+"warning.missing.detail" = "The catalog has no current ingredient formulation for this product. Check the current package before relying on any earlier assessment.";
+"warning.changed.title" = "Formulation change needs review";
+"warning.changed.detail" = "A newer formulation exists without sufficient review. Any former positive assessment is not current for this formulation.";
+"warning.stale.title" = "Ingredient evidence is stale";
+"warning.stale.detail" = "The stored formulation is outside the accepted freshness window. Check the current package before relying on a positive result.";
+"warning.dateUnknown.title" = "Ingredient evidence date is unknown";
+"warning.dateUnknown.detail" = "The catalog cannot establish when this formulation was observed. A positive result is not treated as current without that evidence.";
+"warning.refresh.title" = "Ingredient refresh recommended";
+"warning.refresh.detail" = "The formulation is approaching the freshness limit. The recorded result remains visible, but checking current packaging is recommended.";
+"warning.unverified.title" = "Ingredient text still needs human verification";
+"warning.unverified.detail" = "The current ingredient text is machine-assisted or unverified. A former positive result is not treated as current until a human verifies the source text.";
+
+"field.name" = "Name";
+"field.brand" = "Brand";
+"field.brandOwner" = "Brand owner";
+"field.quantity" = "Quantity";
+"field.gtin" = "GTIN";
+"field.market" = "Market";
+"field.catalog" = "Catalog";
+"field.language" = "Language";
+"field.observed" = "Observed";
+"field.retrieved" = "Retrieved";
+"field.verification" = "Verification";
+"field.allergens" = "Allergens";
+"field.traces" = "Traces";
+"field.freshness" = "Freshness";
+"field.source" = "Source";
+"field.sourceType" = "Evidence type";
+"field.attribution" = "Attribution";
+"field.license" = "Data license";
+"field.reference" = "Reference";
+"field.certificateReference" = "Certificate reference";
+"field.scheme" = "Scheme";
+"field.scope" = "Scope";
+"field.effective" = "Effective";
+"field.expires" = "Expires";
+"field.lastChecked" = "Last checked";
+"field.assessed" = "Assessed";
+"field.reviewed" = "Reviewed";
+"field.methodology" = "Methodology";
+"field.approvedReviewers" = "Approved reviewers";
+"field.recheck" = "Recheck by";
+
+"value.dateUnavailable" = "Date unavailable";
+"value.notReviewed" = "Not reviewed";
+"verification.human" = "Human verified";
+"verification.machine" = "Machine assisted — human review required";
+"verification.unverified" = "Unverified";
+"freshness.current" = "Current";
+"freshness.refresh" = "Refresh recommended";
+"freshness.stale" = "Stale";
+"freshness.dateUnknown" = "Date unknown";
+"freshness.changed" = "Changed — unreviewed";
+
+"ingredients.exactSourceText" = "Exact source ingredient text";
+"ingredients.sourceTextFooter" = "The ingredient text above is the exact stored source observation. Derived translations, when added in the future, must never replace it.";
+"ingredients.none" = "No reviewed ingredient formulation is available for this product in the current offline catalog.";
+"reason.evidence" = "Evidence: %@";
+
+"retailer.feed.dated" = "Listed in the approved %@ feed dated %@";
+"retailer.feed.undated" = "Listed in an approved %@ feed; the feed date is unavailable";
+"retailer.observation.dated" = "Observed at a %@ store on %@";
+"retailer.observation.undated" = "Observed at a %@ store; the observation date is unavailable";
+"retailer.community.dated" = "Community data reports %@ on %@";
+"retailer.community.undated" = "Community data reports %@; the observation date is unavailable";
+"retailer.scope" = "Scope: %@";
+"retailer.source" = "Source: %@ — %@";
+"retailer.none" = "No retailer evidence in this catalog.";
+"retailer.footer" = "Retailer evidence describes the stored source observation only. It does not imply current stock, nationwide availability, or a complete assortment.";
+
+"source.licenseOnly" = "Licensed as %@";
+"action.openSource" = "Open source";
+"certification.footer" = "Certification supports a result only when the recorded scope applies to this exact product and the evidence remains current.";
+
+"action.addIngredients" = "Add missing ingredient evidence";
+"action.reportIngredients" = "Report ingredient evidence";
+"action.correctProduct" = "Correct product details";
+"action.reportCertification" = "Report certification or result concern";
+"report.footer" = "A report stays on this device until you explicitly review an email, share the package, or copy its details. Submissions are untrusted evidence until human review.";
+
+"accessibility.assessment" = "Assessment: %@.";
+"accessibility.recordedSummary" = "Recorded assessment summary: %@.";

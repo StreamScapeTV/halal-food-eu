@@ -69,8 +69,10 @@ final class ScannerViewModel {
             } catch is CancellationError {
                 return
             } catch let error as Barcode.ValidationError {
+                guard !Task.isCancelled else { return }
                 self?.lookupState = .invalidInput(error.localizedDescription)
             } catch {
+                guard !Task.isCancelled else { return }
                 self?.lookupState = .failed(error.localizedDescription)
             }
         }

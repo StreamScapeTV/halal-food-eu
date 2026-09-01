@@ -58,6 +58,8 @@ targets:
       - path: HalalFoodEU
       - path: Data/config/public-project-configuration-v1.json
         buildPhase: resources
+      - path: Data/methodology/additive-identities-v1.json
+        buildPhase: resources
     dependencies:
       - sdk: libsqlite3.tbd
     settings:

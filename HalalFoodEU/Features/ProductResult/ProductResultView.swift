@@ -108,7 +108,7 @@ struct ProductResultView: View {
     @ViewBuilder
     private var ingredientSections: some View {
         if let observation = product.observation {
-            Section(text.string("section.ingredients")) {
+            Section {
                 Text(observation.text)
                     .textSelection(.enabled)
                     .accessibilityLabel(text.string("ingredients.exactSourceText"))
@@ -133,6 +133,8 @@ struct ProductResultView: View {
                     }
                 }
                 LabeledContent(text.string("field.freshness"), value: freshnessTitle(observation.freshness))
+            } header: {
+                Text(text.string("section.ingredients"))
             } footer: {
                 Text(text.string("ingredients.sourceTextFooter"))
             }
@@ -158,7 +160,7 @@ struct ProductResultView: View {
     }
 
     private var retailerSection: some View {
-        Section(text.string("section.retailers")) {
+        Section {
             let evidence = product.details?.retailerEvidence ?? []
             if evidence.isEmpty {
                 Text(text.string("retailer.none"))
@@ -192,6 +194,8 @@ struct ProductResultView: View {
                     .accessibilityElement(children: .combine)
                 }
             }
+        } header: {
+            Text(text.string("section.retailers"))
         } footer: {
             Text(text.string("retailer.footer"))
         }
@@ -200,7 +204,7 @@ struct ProductResultView: View {
     @ViewBuilder
     private var certificationSection: some View {
         if !product.assessment.certifications.isEmpty {
-            Section(text.string("section.certification")) {
+            Section {
                 ForEach(product.assessment.certifications) { certification in
                     VStack(alignment: .leading, spacing: 6) {
                         Label(certification.certifyingBody, systemImage: "checkmark.seal")
@@ -231,6 +235,8 @@ struct ProductResultView: View {
                     }
                     .accessibilityElement(children: .combine)
                 }
+            } header: {
+                Text(text.string("section.certification"))
             } footer: {
                 Text(text.string("certification.footer"))
             }

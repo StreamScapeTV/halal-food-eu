@@ -34,10 +34,12 @@ struct ProductEvidenceSubmissionView: View {
                     )
                 }
 
-                Section("Optional retailer context") {
+                Section {
                     TextField("Retailer", text: $viewModel.draft.retailer)
                     TextField("City", text: $viewModel.draft.city)
                     TextField("Store", text: $viewModel.draft.store)
+                } header: {
+                    Text("Optional retailer context")
                 } footer: {
                     Text("Location is optional and typed by you. The app does not request device location permission.")
                 }

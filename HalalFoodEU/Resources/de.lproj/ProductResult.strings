@@ -90,7 +90,7 @@
 
 "retailer.feed.dated" = "Im freigegebenen %@-Feed vom %@ gelistet";
 "retailer.feed.undated" = "In einem freigegebenen %@-Feed gelistet; das Feed-Datum ist nicht verfügbar";
-"retailer.observation.dated" = "Am %@ in einer %@-Filiale beobachtet";
+"retailer.observation.dated" = "Am %2$@ in einer %1$@-Filiale beobachtet";
 "retailer.observation.undated" = "In einer %@-Filiale beobachtet; das Beobachtungsdatum ist nicht verfügbar";
 "retailer.community.dated" = "Community-Daten melden %@ am %@";
 "retailer.community.undated" = "Community-Daten melden %@; das Beobachtungsdatum ist nicht verfügbar";

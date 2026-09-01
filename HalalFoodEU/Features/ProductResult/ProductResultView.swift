@@ -109,7 +109,7 @@ struct ProductResultView: View {
             }
         }
 
-        Section("Report or correct") {
+        Section {
             Button {
                 submissionCoordinator.startCorrection(
                     product: product,
@@ -139,6 +139,8 @@ struct ProductResultView: View {
             } label: {
                 Label("Report certification or result concern", systemImage: "checkmark.seal.text.page")
             }
+        } header: {
+            Text("Report or correct")
         } footer: {
             Text("A report stays on this device until you explicitly review an email, share the package, or copy its details. Submissions are untrusted evidence until human review.")
         }

@@ -6,6 +6,7 @@ on:
       - "**"
     paths:
       - ".github/workflows/product-evidence-intake*.yml"
+      - ".github/workflows/ios-ci.yml"
       - "Data/submissions/**"
       - "Tools/product_evidence_intake.py"
       - "Tools/product_evidence_ocr.swift"
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - ".github/workflows/product-evidence-intake*.yml"
+      - ".github/workflows/ios-ci.yml"
       - "Data/submissions/**"
       - "Tools/product_evidence_intake.py"
       - "Tools/product_evidence_ocr.swift"

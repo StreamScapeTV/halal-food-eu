@@ -32,6 +32,30 @@ struct CertificationEvidence: Codable, Equatable, Sendable, Identifiable {
     let validFrom: Date?
     let validUntil: Date?
     let source: ProductSource
+    let scheme: String?
+    let lastCheckedAt: Date?
+
+    init(
+        id: Int64,
+        certifyingBody: String,
+        certificateReference: String,
+        scope: String,
+        validFrom: Date?,
+        validUntil: Date?,
+        source: ProductSource,
+        scheme: String? = nil,
+        lastCheckedAt: Date? = nil
+    ) {
+        self.id = id
+        self.certifyingBody = certifyingBody
+        self.certificateReference = certificateReference
+        self.scope = scope
+        self.validFrom = validFrom
+        self.validUntil = validUntil
+        self.source = source
+        self.scheme = scheme
+        self.lastCheckedAt = lastCheckedAt
+    }
 }
 
 struct HalalAssessment: Codable, Equatable, Sendable {
@@ -43,6 +67,31 @@ struct HalalAssessment: Codable, Equatable, Sendable {
     let reviewedAt: Date?
     let reasons: [AssessmentReason]
     let certifications: [CertificationEvidence]
+    let assessedAt: Date?
+    let recheckAt: Date?
+    let approvedReviewerCount: Int?
+
+    init(
+        status: HalalStatus,
+        summary: String,
+        methodologyVersion: String?,
+        reviewedAt: Date?,
+        reasons: [AssessmentReason],
+        certifications: [CertificationEvidence],
+        assessedAt: Date? = nil,
+        recheckAt: Date? = nil,
+        approvedReviewerCount: Int? = nil
+    ) {
+        self.status = status
+        self.summary = summary
+        self.methodologyVersion = methodologyVersion
+        self.reviewedAt = reviewedAt
+        self.reasons = reasons
+        self.certifications = certifications
+        self.assessedAt = assessedAt
+        self.recheckAt = recheckAt
+        self.approvedReviewerCount = approvedReviewerCount
+    }
 
     static var unreviewedUnknown: HalalAssessment {
         HalalAssessment(
@@ -60,7 +109,10 @@ struct HalalAssessment: Codable, Equatable, Sendable {
                     severity: .informational
                 )
             ],
-            certifications: []
+            certifications: [],
+            assessedAt: nil,
+            recheckAt: nil,
+            approvedReviewerCount: nil
         )
     }
 }

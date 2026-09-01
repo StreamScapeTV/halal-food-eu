@@ -77,6 +77,9 @@ actor SQLiteProductCatalog: ProductCatalog {
         self.manifestURL = manifestURL
     }
 
+    /// Loads one immutable product-detail projection. The repository performs a fixed,
+    /// bounded set of statements for the product row and its ordered evidence collections;
+    /// SwiftUI never issues per-row/N+1 queries.
     func product(for barcode: Barcode) async throws -> ProductRecord? {
         try Task.checkCancellation()
         let (connection, catalogVersion) = try openIfNeeded()
@@ -87,23 +90,34 @@ actor SQLiteProductCatalog: ProductCatalog {
                 p.market,
                 p.name,
                 p.brand,
+                p.brand_owner,
+                p.quantity,
+                p.conflict_flags_json,
                 o.id,
                 o.ingredients_text,
                 o.language_code,
+                o.allergens_text,
+                o.traces_text,
                 o.observed_at,
+                o.retrieved_at,
                 o.ingredients_hash,
+                o.verification_state,
                 o.freshness_state,
                 s.operator,
                 s.source_class,
                 s.reference,
                 s.license,
+                s.attribution,
                 s.retrieved_at,
                 a.id,
                 a.observation_id,
                 a.status,
                 a.summary,
                 a.methodology_version,
-                a.reviewed_at
+                a.assessed_at,
+                a.reviewed_at,
+                a.approved_reviewer_count,
+                a.recheck_at
             FROM products AS p
             LEFT JOIN product_assessments AS a ON a.id = p.current_assessment_id
             LEFT JOIN product_observations AS o ON o.id = p.current_observation_id
@@ -114,16 +128,11 @@ actor SQLiteProductCatalog: ProductCatalog {
 
         let statement = try prepare(productSQL, connection: connection)
         defer { sqlite3_finalize(statement) }
-
         try bind(barcode.rawValue, at: 1, to: statement, connection: connection)
 
         let stepResult = sqlite3_step(statement)
-        if stepResult == SQLITE_DONE {
-            return nil
-        }
-        guard stepResult == SQLITE_ROW else {
-            throw queryError(connection: connection)
-        }
+        if stepResult == SQLITE_DONE { return nil }
+        guard stepResult == SQLITE_ROW else { throw queryError(connection: connection) }
 
         let storedBarcode = try Barcode(validating: requiredText(statement, column: 0))
         let market = requiredText(statement, column: 1)
@@ -132,29 +141,48 @@ actor SQLiteProductCatalog: ProductCatalog {
         }
         let name = requiredText(statement, column: 2)
         let brand = optionalText(statement, column: 3)
-        let observationID = optionalInt64(statement, column: 4)
+        let brandOwner = optionalText(statement, column: 4)
+        let quantity = optionalText(statement, column: 5)
+        let conflictFlags = try decodeStringArray(
+            requiredText(statement, column: 6),
+            field: "products.conflict_flags_json"
+        )
+        let observationID = optionalInt64(statement, column: 7)
 
         let observation: IngredientObservation?
         if observationID == nil {
             observation = nil
         } else {
-            let ingredientsText = requiredText(statement, column: 5)
-            let languageCode = requiredText(statement, column: 6)
-            let observedAt = try optionalDate(statement, column: 7, field: "observed_at")
-            let ingredientsHash = requiredText(statement, column: 8)
-            let rawFreshness = requiredText(statement, column: 9)
+            let ingredientsText = requiredText(statement, column: 8)
+            let languageCode = requiredText(statement, column: 9)
+            let allergensText = optionalText(statement, column: 10)
+            let tracesText = optionalText(statement, column: 11)
+            let observedAt = try optionalDate(statement, column: 12, field: "observed_at")
+            let observationRetrievedAt = try parseDate(
+                requiredText(statement, column: 13),
+                field: "product_observations.retrieved_at"
+            )
+            let ingredientsHash = requiredText(statement, column: 14)
+            let rawVerification = requiredText(statement, column: 15)
+            guard let verificationState = EvidenceVerificationState(rawValue: rawVerification) else {
+                throw ProductCatalogError.invalidRecord(
+                    "unsupported ingredient verification state \(rawVerification)"
+                )
+            }
+            let rawFreshness = requiredText(statement, column: 16)
             guard let freshness = EvidenceFreshness(rawValue: rawFreshness) else {
                 throw ProductCatalogError.invalidRecord(
                     "unsupported formulation freshness \(rawFreshness)"
                 )
             }
-            let sourceName = requiredText(statement, column: 10)
-            let sourceKind = requiredText(statement, column: 11)
-            let sourceReference = requiredText(statement, column: 12)
-            let sourceLicense = requiredText(statement, column: 13)
-            let retrievedAt = try parseDate(
-                requiredText(statement, column: 14),
-                field: "retrieved_at"
+            let sourceName = requiredText(statement, column: 17)
+            let sourceKind = requiredText(statement, column: 18)
+            let sourceReference = requiredText(statement, column: 19)
+            let sourceLicense = requiredText(statement, column: 20)
+            let sourceAttribution = requiredText(statement, column: 21)
+            let sourceRetrievedAt = try parseDate(
+                requiredText(statement, column: 22),
+                field: "sources.retrieved_at"
             )
             guard !ingredientsText.isEmpty,
                   !languageCode.isEmpty,
@@ -162,7 +190,8 @@ actor SQLiteProductCatalog: ProductCatalog {
                   !sourceName.isEmpty,
                   !sourceKind.isEmpty,
                   !sourceReference.isEmpty,
-                  !sourceLicense.isEmpty else {
+                  !sourceLicense.isEmpty,
+                  !sourceAttribution.isEmpty else {
                 throw ProductCatalogError.invalidRecord("ingredient evidence is incomplete")
             }
             observation = IngredientObservation(
@@ -176,24 +205,39 @@ actor SQLiteProductCatalog: ProductCatalog {
                     kind: sourceKind,
                     reference: sourceReference,
                     license: sourceLicense,
-                    retrievedAt: retrievedAt
+                    retrievedAt: sourceRetrievedAt,
+                    attribution: sourceAttribution
+                ),
+                details: IngredientObservationDetails(
+                    allergensText: allergensText,
+                    tracesText: tracesText,
+                    retrievedAt: observationRetrievedAt,
+                    verificationState: verificationState
                 )
             )
         }
 
         let assessment: HalalAssessment
-        if let assessmentID = optionalInt64(statement, column: 15) {
-            let assessmentObservationID = optionalInt64(statement, column: 16)
-            let rawStatus = requiredText(statement, column: 17)
-            let summary = requiredText(statement, column: 18)
-            let methodologyVersion = requiredText(statement, column: 19)
-            let reviewedAt = try parseDate(requiredText(statement, column: 20), field: "reviewed_at")
+        if let assessmentID = optionalInt64(statement, column: 23) {
+            let assessmentObservationID = optionalInt64(statement, column: 24)
+            let rawStatus = requiredText(statement, column: 25)
+            let summary = requiredText(statement, column: 26)
+            let methodologyVersion = requiredText(statement, column: 27)
+            let assessedAt = try parseDate(requiredText(statement, column: 28), field: "assessed_at")
+            let reviewedAt = try parseDate(requiredText(statement, column: 29), field: "reviewed_at")
+            let approvedReviewerCount = Int(sqlite3_column_int(statement, 30))
+            let recheckAt = try optionalDate(statement, column: 31, field: "recheck_at")
 
             guard let status = HalalStatus(rawValue: rawStatus) else {
                 throw ProductCatalogError.invalidRecord("unsupported halal status \(rawStatus)")
             }
+            guard approvedReviewerCount >= 1 else {
+                throw ProductCatalogError.invalidRecord("current assessment has no approved reviewer")
+            }
             guard assessmentObservationID == observationID else {
-                throw ProductCatalogError.invalidRecord("current assessment is not bound to the current formulation")
+                throw ProductCatalogError.invalidRecord(
+                    "current assessment is not bound to the current formulation"
+                )
             }
             if observationID == nil, status != .unknown {
                 throw ProductCatalogError.invalidRecord(
@@ -205,7 +249,6 @@ actor SQLiteProductCatalog: ProductCatalog {
             guard !reasons.isEmpty else {
                 throw ProductCatalogError.invalidRecord("assessment \(assessmentID) has no reasons")
             }
-
             let certifications = try certifications(for: assessmentID, connection: connection)
             if status == .halalCertified, certifications.isEmpty {
                 throw ProductCatalogError.invalidRecord(
@@ -224,14 +267,13 @@ actor SQLiteProductCatalog: ProductCatalog {
                 methodologyVersion: methodologyVersion,
                 reviewedAt: reviewedAt,
                 reasons: reasons,
-                certifications: certifications
+                certifications: certifications,
+                assessedAt: assessedAt,
+                recheckAt: recheckAt,
+                approvedReviewerCount: approvedReviewerCount
             )
         } else {
-            guard sqlite3_column_type(statement, 16) == SQLITE_NULL,
-                  sqlite3_column_type(statement, 17) == SQLITE_NULL,
-                  sqlite3_column_type(statement, 18) == SQLITE_NULL,
-                  sqlite3_column_type(statement, 19) == SQLITE_NULL,
-                  sqlite3_column_type(statement, 20) == SQLITE_NULL else {
+            for column in 24...31 where sqlite3_column_type(statement, Int32(column)) != SQLITE_NULL {
                 throw ProductCatalogError.invalidRecord(
                     "unreviewed product unexpectedly exposes assessment columns"
                 )
@@ -239,20 +281,36 @@ actor SQLiteProductCatalog: ProductCatalog {
             assessment = .unreviewedUnknown
         }
 
+        let retailerEvidence = try retailerEvidence(
+            for: storedBarcode.rawValue,
+            connection: connection
+        )
+        let remoteImages = try remoteImages(
+            for: storedBarcode.rawValue,
+            connection: connection
+        )
+        try Task.checkCancellation()
+
         return ProductRecord(
             barcode: storedBarcode,
             name: name,
             brand: brand,
             observation: observation,
             assessment: assessment,
-            catalogVersion: catalogVersion
+            catalogVersion: catalogVersion,
+            details: ProductRecordDetails(
+                market: market,
+                brandOwner: brandOwner,
+                quantity: quantity,
+                conflictFlags: conflictFlags,
+                retailerEvidence: retailerEvidence,
+                remoteImages: remoteImages
+            )
         )
     }
 
     private func openIfNeeded() throws -> (SQLiteConnection, String) {
-        if let connection, let catalogVersion {
-            return (connection, catalogVersion)
-        }
+        if let connection, let catalogVersion { return (connection, catalogVersion) }
 
         let manifest = try Self.loadAndValidateManifest(
             manifestURL: manifestURL,
@@ -262,12 +320,9 @@ actor SQLiteProductCatalog: ProductCatalog {
         var openedDatabase: OpaquePointer?
         let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         let openResult = sqlite3_open_v2(databaseURL.path, &openedDatabase, flags, nil)
-
         guard openResult == SQLITE_OK, let openedDatabase else {
             let message = String(cString: sqlite3_errstr(openResult))
-            if let openedDatabase {
-                sqlite3_close(openedDatabase)
-            }
+            if let openedDatabase { sqlite3_close(openedDatabase) }
             throw ProductCatalogError.unavailable(message)
         }
 
@@ -279,14 +334,12 @@ actor SQLiteProductCatalog: ProductCatalog {
         guard queryOnly == 1 else {
             throw ProductCatalogError.invalidRecord("SQLite query-only mode was not enabled")
         }
-
         let applicationID = try Self.readIntegerPragma("application_id", database: openedDatabase)
         guard applicationID == Self.expectedApplicationID else {
             throw ProductCatalogError.invalidRecord(
                 "unexpected SQLite application identifier \(applicationID)"
             )
         }
-
         let schemaVersion = try Self.readIntegerPragma("user_version", database: openedDatabase)
         guard schemaVersion == Self.supportedSchemaVersion else {
             throw ProductCatalogError.incompatibleSchema(
@@ -304,10 +357,7 @@ actor SQLiteProductCatalog: ProductCatalog {
         try Self.validateSourcePolicies(manifest: manifest, database: openedDatabase)
 
         let openedCatalogVersion = try Self.readMetadata("catalogVersion", database: openedDatabase)
-        let productCount = try Self.readCount(
-            "SELECT COUNT(*) FROM products;",
-            database: openedDatabase
-        )
+        let productCount = try Self.readCount("SELECT COUNT(*) FROM products;", database: openedDatabase)
         guard productCount == manifest.recordCount else {
             throw ProductCatalogError.invalidRecord("catalog manifest record count differs from SQLite")
         }
@@ -357,14 +407,13 @@ actor SQLiteProductCatalog: ProductCatalog {
         for assessmentID: Int64,
         connection: SQLiteConnection
     ) throws -> [AssessmentReason] {
-        let reasonSQL = """
+        let sql = """
             SELECT id, code, title, detail, ingredient, severity
             FROM assessment_reasons
             WHERE assessment_id = ?1
             ORDER BY position ASC, id ASC;
             """
-
-        let statement = try prepare(reasonSQL, connection: connection)
+        let statement = try prepare(sql, connection: connection)
         defer { sqlite3_finalize(statement) }
         guard sqlite3_bind_int64(statement, 1, assessmentID) == SQLITE_OK else {
             throw queryError(connection: connection)
@@ -403,26 +452,28 @@ actor SQLiteProductCatalog: ProductCatalog {
         for assessmentID: Int64,
         connection: SQLiteConnection
     ) throws -> [CertificationEvidence] {
-        let certificationSQL = """
+        let sql = """
             SELECT
                 c.id,
                 c.certifying_body,
+                c.scheme,
                 c.certificate_reference,
                 c.scope,
                 c.valid_from,
                 c.valid_until,
+                c.last_checked_at,
                 s.operator,
                 s.source_class,
                 s.reference,
                 s.license,
+                s.attribution,
                 s.retrieved_at
             FROM certification_evidence AS c
             JOIN sources AS s ON s.id = c.source_id
             WHERE c.assessment_id = ?1
             ORDER BY c.position ASC, c.id ASC;
             """
-
-        let statement = try prepare(certificationSQL, connection: connection)
+        let statement = try prepare(sql, connection: connection)
         defer { sqlite3_finalize(statement) }
         guard sqlite3_bind_int64(statement, 1, assessmentID) == SQLITE_OK else {
             throw queryError(connection: connection)
@@ -433,25 +484,29 @@ actor SQLiteProductCatalog: ProductCatalog {
             try Task.checkCancellation()
             switch sqlite3_step(statement) {
             case SQLITE_ROW:
-                let validFrom = try optionalDate(statement, column: 4, field: "valid_from")
-                let validUntil = try optionalDate(statement, column: 5, field: "valid_until")
                 result.append(
                     CertificationEvidence(
                         id: sqlite3_column_int64(statement, 0),
                         certifyingBody: requiredText(statement, column: 1),
-                        certificateReference: requiredText(statement, column: 2),
-                        scope: requiredText(statement, column: 3),
-                        validFrom: validFrom,
-                        validUntil: validUntil,
+                        certificateReference: requiredText(statement, column: 3),
+                        scope: requiredText(statement, column: 4),
+                        validFrom: try optionalDate(statement, column: 5, field: "valid_from"),
+                        validUntil: try optionalDate(statement, column: 6, field: "valid_until"),
                         source: ProductSource(
-                            name: requiredText(statement, column: 6),
-                            kind: requiredText(statement, column: 7),
-                            reference: requiredText(statement, column: 8),
-                            license: requiredText(statement, column: 9),
+                            name: requiredText(statement, column: 8),
+                            kind: requiredText(statement, column: 9),
+                            reference: requiredText(statement, column: 10),
+                            license: requiredText(statement, column: 11),
                             retrievedAt: try parseDate(
-                                requiredText(statement, column: 10),
+                                requiredText(statement, column: 13),
                                 field: "certification_source.retrieved_at"
-                            )
+                            ),
+                            attribution: requiredText(statement, column: 12)
+                        ),
+                        scheme: requiredText(statement, column: 2),
+                        lastCheckedAt: try parseDate(
+                            requiredText(statement, column: 7),
+                            field: "certification.last_checked_at"
                         )
                     )
                 )
@@ -463,10 +518,153 @@ actor SQLiteProductCatalog: ProductCatalog {
         }
     }
 
-    private func prepare(
-        _ sql: String,
+    private func retailerEvidence(
+        for gtin: String,
         connection: SQLiteConnection
-    ) throws -> OpaquePointer {
+    ) throws -> [RetailerEvidence] {
+        let sql = """
+            SELECT
+                r.id,
+                r.kind,
+                r.retailer_key,
+                r.observed_at,
+                r.snapshot_at,
+                r.scope,
+                r.location_id,
+                r.limitations,
+                s.operator,
+                s.source_class,
+                s.reference,
+                s.license,
+                s.attribution,
+                s.retrieved_at
+            FROM retailer_evidence AS r
+            JOIN sources AS s ON s.id = r.source_id
+            WHERE r.gtin = ?1
+            ORDER BY r.position ASC, r.id ASC;
+            """
+        let statement = try prepare(sql, connection: connection)
+        defer { sqlite3_finalize(statement) }
+        try bind(gtin, at: 1, to: statement, connection: connection)
+
+        var result: [RetailerEvidence] = []
+        while true {
+            try Task.checkCancellation()
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let rawKind = requiredText(statement, column: 1)
+                guard let kind = RetailerEvidenceKind(rawValue: rawKind) else {
+                    throw ProductCatalogError.invalidRecord(
+                        "unsupported retailer evidence kind \(rawKind)"
+                    )
+                }
+                let limitations = requiredText(statement, column: 7)
+                guard !limitations.isEmpty else {
+                    throw ProductCatalogError.invalidRecord("retailer evidence lacks limitations")
+                }
+                result.append(
+                    RetailerEvidence(
+                        id: sqlite3_column_int64(statement, 0),
+                        kind: kind,
+                        retailerKey: requiredText(statement, column: 2),
+                        observedAt: try optionalDate(statement, column: 3, field: "retailer.observed_at"),
+                        snapshotAt: try optionalDate(statement, column: 4, field: "retailer.snapshot_at"),
+                        scope: optionalText(statement, column: 5),
+                        locationID: optionalText(statement, column: 6),
+                        limitations: limitations,
+                        source: ProductSource(
+                            name: requiredText(statement, column: 8),
+                            kind: requiredText(statement, column: 9),
+                            reference: requiredText(statement, column: 10),
+                            license: requiredText(statement, column: 11),
+                            retrievedAt: try parseDate(
+                                requiredText(statement, column: 13),
+                                field: "retailer_source.retrieved_at"
+                            ),
+                            attribution: requiredText(statement, column: 12)
+                        )
+                    )
+                )
+            case SQLITE_DONE:
+                return result
+            default:
+                throw queryError(connection: connection)
+            }
+        }
+    }
+
+    private func remoteImages(
+        for gtin: String,
+        connection: SQLiteConnection
+    ) throws -> [RemoteProductImage] {
+        let sql = """
+            SELECT
+                r.id,
+                r.purpose,
+                r.url,
+                r.image_id,
+                r.revision,
+                s.operator,
+                s.source_class,
+                s.reference,
+                s.license,
+                s.attribution,
+                s.retrieved_at
+            FROM remote_image_references AS r
+            JOIN sources AS s ON s.id = r.source_id
+            WHERE r.gtin = ?1
+            ORDER BY r.position ASC, r.id ASC;
+            """
+        let statement = try prepare(sql, connection: connection)
+        defer { sqlite3_finalize(statement) }
+        try bind(gtin, at: 1, to: statement, connection: connection)
+
+        var result: [RemoteProductImage] = []
+        while true {
+            try Task.checkCancellation()
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let rawPurpose = requiredText(statement, column: 1)
+                guard let purpose = RemoteImagePurpose(rawValue: rawPurpose) else {
+                    throw ProductCatalogError.invalidRecord(
+                        "unsupported remote image purpose \(rawPurpose)"
+                    )
+                }
+                let rawURL = requiredText(statement, column: 2)
+                guard let url = URL(string: rawURL),
+                      url.scheme?.lowercased() == "https",
+                      url.host != nil else {
+                    throw ProductCatalogError.invalidRecord("remote image URL is not HTTPS")
+                }
+                result.append(
+                    RemoteProductImage(
+                        id: sqlite3_column_int64(statement, 0),
+                        purpose: purpose,
+                        url: url,
+                        imageID: requiredText(statement, column: 3),
+                        revision: optionalText(statement, column: 4),
+                        source: ProductSource(
+                            name: requiredText(statement, column: 5),
+                            kind: requiredText(statement, column: 6),
+                            reference: requiredText(statement, column: 7),
+                            license: requiredText(statement, column: 8),
+                            retrievedAt: try parseDate(
+                                requiredText(statement, column: 10),
+                                field: "remote_image_source.retrieved_at"
+                            ),
+                            attribution: requiredText(statement, column: 9)
+                        )
+                    )
+                )
+            case SQLITE_DONE:
+                return result
+            default:
+                throw queryError(connection: connection)
+            }
+        }
+    }
+
+    private func prepare(_ sql: String, connection: SQLiteConnection) throws -> OpaquePointer {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(connection.handle, sql, -1, &statement, nil) == SQLITE_OK,
               let statement else {
@@ -490,9 +688,7 @@ actor SQLiteProductCatalog: ProductCatalog {
                 unsafeBitCast(-1, to: sqlite3_destructor_type.self)
             )
         }
-        guard result == SQLITE_OK else {
-            throw queryError(connection: connection)
-        }
+        guard result == SQLITE_OK else { throw queryError(connection: connection) }
     }
 
     private func requiredText(_ statement: OpaquePointer, column: Int32) -> String {
@@ -502,16 +698,12 @@ actor SQLiteProductCatalog: ProductCatalog {
 
     private func optionalText(_ statement: OpaquePointer, column: Int32) -> String? {
         guard sqlite3_column_type(statement, column) != SQLITE_NULL,
-              let value = sqlite3_column_text(statement, column) else {
-            return nil
-        }
+              let value = sqlite3_column_text(statement, column) else { return nil }
         return String(cString: value)
     }
 
     private func optionalInt64(_ statement: OpaquePointer, column: Int32) -> Int64? {
-        guard sqlite3_column_type(statement, column) != SQLITE_NULL else {
-            return nil
-        }
+        guard sqlite3_column_type(statement, column) != SQLITE_NULL else { return nil }
         return sqlite3_column_int64(statement, column)
     }
 
@@ -520,9 +712,7 @@ actor SQLiteProductCatalog: ProductCatalog {
         column: Int32,
         field: String
     ) throws -> Date? {
-        guard let value = optionalText(statement, column: column) else {
-            return nil
-        }
+        guard let value = optionalText(statement, column: column) else { return nil }
         return try parseDate(value, field: field)
     }
 
@@ -533,6 +723,15 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.invalidRecord("\(field) is not ISO-8601: \(value)")
         }
         return date
+    }
+
+    private func decodeStringArray(_ value: String, field: String) throws -> [String] {
+        guard let data = value.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data),
+              decoded.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw ProductCatalogError.invalidRecord("\(field) is not a valid string array")
+        }
+        return decoded
     }
 
     private func queryError(connection: SQLiteConnection) -> ProductCatalogError {
@@ -635,9 +834,7 @@ actor SQLiteProductCatalog: ProductCatalog {
         ]
         for (key, value) in expected {
             guard try readMetadata(key, database: database) == value else {
-                throw ProductCatalogError.invalidRecord(
-                    "catalog metadata mismatch for \(key)"
-                )
+                throw ProductCatalogError.invalidRecord("catalog metadata mismatch for \(key)")
             }
         }
     }
@@ -698,7 +895,6 @@ actor SQLiteProductCatalog: ProductCatalog {
     private static func sha256(of url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-
         var hasher = SHA256()
         while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
             hasher.update(data: data)
@@ -719,7 +915,6 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
         }
         defer { sqlite3_finalize(statement) }
-
         guard sqlite3_step(statement) == SQLITE_ROW,
               let text = sqlite3_column_text(statement, 0),
               String(cString: text) == "ok",
@@ -738,7 +933,6 @@ actor SQLiteProductCatalog: ProductCatalog {
             throw ProductCatalogError.queryFailed(String(cString: sqlite3_errmsg(database)))
         }
         defer { sqlite3_finalize(foreignKeyStatement) }
-
         guard sqlite3_step(foreignKeyStatement) == SQLITE_DONE else {
             throw ProductCatalogError.invalidRecord("SQLite foreign-key check failed")
         }

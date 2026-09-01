@@ -35,7 +35,10 @@ jobs:
           python3 -m json.tool Data/sources/eu-additives/source-policy-v1.json >/dev/null
           python3 -m json.tool Data/quality/source-review-policy-v1.json >/dev/null
           python3 -m json.tool Data/workflows/catalog-workflow-contract-v1.json >/dev/null
-          python3 -m py_compile Tools/halal_methodology_reference.py Tools/tests/test_halal_methodology_reference.py
+          python3 -m py_compile \
+            Tools/halal_methodology_reference.py \
+            Tools/tests/test_halal_methodology_reference.py \
+            Tools/tests/test_eu_additive_review_timestamps.py
           python3 Tools/catalog_workflow.py validate-contract >/dev/null
           python3 Tools/catalog_workflow.py validate-source \
             --source-key eu-additives \
@@ -46,7 +49,10 @@ jobs:
       - name: Run additive reference tests
         run: |
           set -euo pipefail
-          PYTHONPATH=Tools python3 -m unittest Tools.tests.test_halal_methodology_reference -v
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_halal_methodology_reference \
+            Tools.tests.test_eu_additive_review_timestamps \
+            -v
 
       - name: Build and inspect compact SQLite reference
         run: |

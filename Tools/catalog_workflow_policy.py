@@ -9,6 +9,7 @@ from catalog_workflow_common import ContractError
 
 ALLOWED_WRITE_PERMISSIONS = {
     "catalog-release.yml": {"attestations", "id-token"},
+    "configuration-health.yml": {"issues"},
     "label-sync.yml": {"issues"},
     "propose-catalog-update.yml": {"contents", "pull-requests"},
     "scheduled-catalog-refresh.yml": {"contents", "pull-requests"},
@@ -19,12 +20,14 @@ TRUSTED_ONLY_WORKFLOWS = {
     "propose-catalog-update.yml",
     "catalog-release.yml",
     "catalog-health.yml",
+    "configuration-health.yml",
 }
 DEFAULT_BRANCH_ONLY_WORKFLOWS = {
     "scheduled-catalog-refresh.yml",
     "propose-catalog-update.yml",
     "catalog-release.yml",
     "catalog-health.yml",
+    "configuration-health.yml",
 }
 PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.*)?$")
 USES_LINE = re.compile(r"^-?\s*uses\s*:\s*(?P<target>.+?)\s*$")

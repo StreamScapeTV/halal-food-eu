@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/public-project-configuration-v1.schema.json",
+  "title": "Halal Food EU public project configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "publicValues"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "publicValues": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "PRODUCT_SUBMISSION_EMAIL",
+        "OPEN_FOOD_FACTS_CONTACT_EMAIL",
+        "OPEN_FOOD_FACTS_USER_AGENT"
+      ],
+      "properties": {
+        "PRODUCT_SUBMISSION_EMAIL": {"type": "string", "minLength": 3, "maxLength": 254},
+        "OPEN_FOOD_FACTS_CONTACT_EMAIL": {"type": "string", "minLength": 3, "maxLength": 254},
+        "OPEN_FOOD_FACTS_USER_AGENT": {"type": "string", "minLength": 8, "maxLength": 200}
+      }
+    }
+  }
+}

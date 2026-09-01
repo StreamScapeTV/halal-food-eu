@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-submission-v1.schema.json",
+  "title": "Halal Food EU user product evidence submission v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceType",
+    "submissionID",
+    "appVersion",
+    "catalogVersion",
+    "gtin",
+    "issueType",
+    "market",
+    "product",
+    "retailer",
+    "observedAt",
+    "attachments",
+    "consent"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "sourceType": {"const": "user-package-evidence"},
+    "submissionID": {
+      "type": "string",
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "appVersion": {"type": "string", "minLength": 1, "maxLength": 80},
+    "catalogVersion": {"type": "string", "minLength": 1, "maxLength": 80},
+    "gtin": {"type": "string", "pattern": "^[0-9]{14}$"},
+    "issueType": {
+      "enum": [
+        "missing-product",
+        "ingredients-correction",
+        "identity-correction",
+        "status-certification-correction"
+      ]
+    },
+    "market": {"type": "string", "pattern": "^[A-Z]{2}$"},
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "brand": {"type": "string", "minLength": 1, "maxLength": 160},
+        "quantity": {"type": "string", "minLength": 1, "maxLength": 80}
+      }
+    },
+    "retailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "retailer": {"type": "string", "minLength": 1, "maxLength": 120},
+        "city": {"type": "string", "minLength": 1, "maxLength": 120},
+        "store": {"type": "string", "minLength": 1, "maxLength": 160}
+      }
+    },
+    "observedAt": {"type": "string", "format": "date-time"},
+    "currentCatalogEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalogVersion"],
+      "properties": {
+        "catalogVersion": {"type": "string", "minLength": 1, "maxLength": 80},
+        "sourceName": {"type": "string", "minLength": 1, "maxLength": 200},
+        "sourceKind": {"type": "string", "minLength": 1, "maxLength": 120},
+        "sourceReference": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "observedAt": {"type": "string", "format": "date-time"},
+        "retrievedAt": {"type": "string", "format": "date-time"},
+        "contentHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fileName",
+          "purpose",
+          "mimeType",
+          "pixelWidth",
+          "pixelHeight",
+          "byteSize",
+          "sha256",
+          "ownershipState",
+          "privacyState",
+          "metadataState"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "pattern": "^(barcode|front|ingredients|certification|nutrition)-[1-9][0-9]*\\.jpg$"
+          },
+          "purpose": {"enum": ["barcode", "front", "ingredients", "certification", "nutrition"]},
+          "mimeType": {"const": "image/jpeg"},
+          "pixelWidth": {"type": "integer", "minimum": 1, "maximum": 2400},
+          "pixelHeight": {"type": "integer", "minimum": 1, "maximum": 2400},
+          "byteSize": {"type": "integer", "minimum": 1, "maximum": 4000000},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "ownershipState": {"const": "user-owned-or-authorized"},
+          "privacyState": {"const": "user-confirmed-package-evidence-only"},
+          "metadataState": {"const": "reencoded-metadata-stripped"}
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "acceptedAt",
+        "ownsOrMaySubmitPhotos",
+        "packageEvidenceOnly",
+        "projectMayReviewAndRedact",
+        "redistributionRequiresReview",
+        "noGuaranteedCatalogOrHalalOutcome"
+      ],
+      "properties": {
+        "version": {"const": "product-evidence-consent-v1"},
+        "acceptedAt": {"type": "string", "format": "date-time"},
+        "ownsOrMaySubmitPhotos": {"const": true},
+        "packageEvidenceOnly": {"const": true},
+        "projectMayReviewAndRedact": {"const": true},
+        "redistributionRequiresReview": {"const": true},
+        "noGuaranteedCatalogOrHalalOutcome": {"const": true}
+      }
+    },
+    "notes": {"type": "string", "minLength": 1, "maxLength": 2000}
+  }
+}

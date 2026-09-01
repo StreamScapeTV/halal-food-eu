@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var viewModel: ScannerViewModel
+    @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
 
     var body: some View {
         NavigationStack {
@@ -31,7 +32,10 @@ struct HomeView: View {
                     Text("Scanning and lookup use the catalog bundled with the app and work without a network connection.")
                 }
 
-                LookupStateContent(viewModel: viewModel)
+                LookupStateContent(
+                    viewModel: viewModel,
+                    submissionCoordinator: submissionCoordinator
+                )
 
                 Section("Synthetic demonstration data") {
                     Button("Reviewed-halal oat drink — 0200000000004") {
@@ -57,12 +61,37 @@ struct HomeView: View {
             .sheet(isPresented: $viewModel.isScannerPresented) {
                 ScannerSheet(onScan: viewModel.acceptScan)
             }
+            .sheet(
+                isPresented: Binding(
+                    get: { submissionCoordinator.activeViewModel != nil },
+                    set: { isPresented in
+                        if !isPresented { submissionCoordinator.dismissSubmission() }
+                    }
+                ),
+                onDismiss: submissionCoordinator.dismissSubmission
+            ) {
+                if let submissionViewModel = submissionCoordinator.activeViewModel {
+                    ProductEvidenceSubmissionView(viewModel: submissionViewModel)
+                }
+            }
+            .alert(
+                "Submission unavailable",
+                isPresented: Binding(
+                    get: { submissionCoordinator.alertMessage != nil },
+                    set: { if !$0 { submissionCoordinator.alertMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { submissionCoordinator.alertMessage = nil }
+            } message: {
+                Text(submissionCoordinator.alertMessage ?? "Product evidence submission is unavailable.")
+            }
         }
     }
 }
 
 private struct LookupStateContent: View {
     let viewModel: ScannerViewModel
+    let submissionCoordinator: ProductEvidenceSubmissionCoordinator
 
     var body: some View {
         switch viewModel.lookupState {
@@ -84,7 +113,10 @@ private struct LookupStateContent: View {
                 .accessibilityLabel("Looking up the offline product catalog")
             }
         case let .found(product):
-            ProductResultView(product: product)
+            ProductResultView(
+                product: product,
+                submissionCoordinator: submissionCoordinator
+            )
         case let .notFound(barcode):
             Section {
                 ContentUnavailableView(
@@ -92,6 +124,12 @@ private struct LookupStateContent: View {
                     systemImage: "questionmark.folder",
                     description: Text("GTIN \(barcode.rawValue) is not present in this catalog version. This does not mean the product is halal or not halal.")
                 )
+                Button {
+                    submissionCoordinator.startMissingProduct(barcode: barcode)
+                } label: {
+                    Label("Submit product evidence", systemImage: "envelope.badge")
+                }
+                .accessibilityHint("Prepares a private local evidence package that you can review before sending or sharing.")
             }
         case let .invalidInput(message):
             Section {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProductResultView: View {
     let product: ProductRecord
+    let submissionCoordinator: ProductEvidenceSubmissionCoordinator
 
     var body: some View {
         Section("Assessment") {
@@ -106,6 +107,42 @@ struct ProductResultView: View {
             if let methodologyVersion = product.assessment.methodologyVersion {
                 LabeledContent("Methodology", value: methodologyVersion)
             }
+        }
+
+        Section {
+            Button {
+                submissionCoordinator.startCorrection(
+                    product: product,
+                    issueType: .ingredientsCorrection
+                )
+            } label: {
+                Label(
+                    product.observation == nil ? "Add missing ingredient evidence" : "Report ingredient evidence",
+                    systemImage: "text.page.badge.magnifyingglass"
+                )
+            }
+
+            Button {
+                submissionCoordinator.startCorrection(
+                    product: product,
+                    issueType: .identityCorrection
+                )
+            } label: {
+                Label("Correct product details", systemImage: "pencil.and.list.clipboard")
+            }
+
+            Button {
+                submissionCoordinator.startCorrection(
+                    product: product,
+                    issueType: .statusCertificationCorrection
+                )
+            } label: {
+                Label("Report certification or result concern", systemImage: "checkmark.seal.text.page")
+            }
+        } header: {
+            Text("Report or correct")
+        } footer: {
+            Text("A report stays on this device until you explicitly review an email, share the package, or copy its details. Submissions are untrusted evidence until human review.")
         }
     }
 }

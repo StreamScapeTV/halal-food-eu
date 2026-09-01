@@ -1,7 +1,7 @@
 # 006 — Search, history, and feedback
 
 **Status:** Accepted for behavior; delivery may follow the initial scanner slice.  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-01
 
 ## Product search
 
@@ -21,9 +21,10 @@
 
 ## Not-found and correction feedback
 
-Without a backend, the initial app may offer a structured export/share action that creates a report containing the GTIN, optional user-entered product name, current catalog version, and fields the user elects to include.
+Without a backend, the app may prepare the explicit user-directed product evidence package defined by specification 018. The report can include the GTIN, catalog version, user-entered product/retailer context, dated package evidence, consent, and only the photos the user deliberately selected or captured for the submission.
 
-- **HF-FEEDBACK-001:** A not-found report must never automatically attach a photo, location, account identity, or scan history.
-- **HF-FEEDBACK-002:** User corrections are untrusted submissions until a reviewer verifies source rights, package evidence, dates, and methodology.
-- **HF-FEEDBACK-003:** A correction must create a new observation rather than silently mutating historical evidence.
-- **HF-FEEDBACK-004:** The app must explain that submitting a barcode does not guarantee inclusion or a particular assessment.
+- **HF-FEEDBACK-001:** A not-found/correction report must never automatically attach a photo, device location, account identity, scan history, or camera scanner frame. Package photos are included only after explicit user selection/capture under specification 018.
+- **HF-FEEDBACK-002:** User corrections are untrusted submissions until a reviewer verifies source rights, package evidence, dates, privacy, identity and methodology.
+- **HF-FEEDBACK-003:** A correction must create a new observation through the reviewed intake path rather than silently mutating historical evidence or the bundled read-only catalog.
+- **HF-FEEDBACK-004:** The app must explain that submitting evidence does not guarantee inclusion or a particular assessment.
+- **HF-FEEDBACK-005:** Mail/share/copy is an explicit transport boundary. Composer completion does not mean the project received or accepted the evidence.

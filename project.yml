@@ -56,6 +56,8 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: HalalFoodEU
+      - path: Data/config/public-project-configuration-v1.json
+        buildPhase: resources
     dependencies:
       - sdk: libsqlite3.tbd
     settings:
@@ -64,7 +66,7 @@ targets:
         PRODUCT_NAME: HalalFoodEU
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Halal Food EU
-        INFOPLIST_KEY_NSCameraUsageDescription: Scan a packaged-food barcode to look it up in the offline Halal Food EU catalog.
+        INFOPLIST_KEY_NSCameraUsageDescription: Scan packaged-food barcodes and, only when you choose, capture package photos for an evidence submission.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:
@@ -89,6 +91,10 @@ targets:
       - path: HalalFoodEU/Resources/catalog-manifest.json
         buildPhase: resources
       - path: Data/evidence/sample-evidence-v1.json
+        buildPhase: resources
+      - path: Data/config/public-project-configuration-v1.json
+        buildPhase: resources
+      - path: Data/submissions/product-evidence-submission-v1.schema.json
         buildPhase: resources
     dependencies:
       - target: HalalFoodEU

@@ -17,7 +17,7 @@ The canonical v1 public configuration is `Data/config/public-project-configurati
 
 - **HF-CONFIG-001:** The three public values above are committed once in the canonical configuration and validated in CI. Workflows and app features consume that source of truth instead of depending on manually created repository variables.
 - **HF-CONFIG-002:** The Open Food Facts User-Agent must identify `HalalFoodEU/<major>.<minor>` and contain exactly the configured public Open Food Facts contact email.
-- **HF-CONFIG-003:** `PRODUCT_SUBMISSION_EMAIL` is the public recipient consumed by the backend-free product-submission flow owned by the relevant iOS specification/issue. Its presence does not introduce an account, backend, or mandatory network dependency.
+- **HF-CONFIG-003:** `PRODUCT_SUBMISSION_EMAIL` is the public recipient consumed by the backend-free product-submission flow in specification 018. Its presence does not introduce an account, project backend, secret, or mandatory network dependency; the app bundles this public configuration for the user-directed composer.
 - **HF-CONFIG-004:** A public value may be overridden later only for a documented operational reason. The checked-in configuration remains the default and must stay valid independently of repository/environment variables.
 
 ## Optional credential contracts
@@ -44,4 +44,4 @@ The canonical v1 public configuration is `Data/config/public-project-configurati
 
 ## Acceptance tests
 
-The repository tests cover exact public values, email/User-Agent binding, zero-secret free sources, disabled optional sources, enabled missing-credential failure, source-specific credential-policy requirements, mutually-exclusive authentication shape, `GITHUB_TOKEN` exclusion, unknown secret-state rejection, metadata-only health output, deduplicated issue creation/update/closure, PR secret isolation, trusted-main health isolation, and Open Food Facts acquisition use of the committed User-Agent.
+The repository tests cover exact public values, email/User-Agent binding, zero-secret free sources, disabled optional sources, enabled missing-credential failure, source-specific credential-policy requirements, mutually-exclusive authentication shape, `GITHUB_TOKEN` exclusion, unknown secret-state rejection, metadata-only health output, deduplicated issue creation/update/closure, PR secret isolation, trusted-main health isolation, Open Food Facts acquisition use of the committed User-Agent, and specification 018 consumption of `PRODUCT_SUBMISSION_EMAIL` as public app configuration without embedding any secret.

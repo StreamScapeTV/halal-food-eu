@@ -1,16 +1,16 @@
 # 008 — Privacy, security, and safety
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-01
 
 ## Privacy
 
-- **HF-PRIVACY-001:** Core app operation requires no account, advertising identifier, analytics SDK, tracking permission, contacts, location, microphone, photo-library, or health access.
-- **HF-PRIVACY-002:** Camera access is requested only for barcode scanning.
-- **HF-PRIVACY-003:** Camera frames are processed on device and are not saved or transmitted.
-- **HF-PRIVACY-004:** Manual barcodes, scan results, and errors are not sent to a server by the core app.
-- **HF-PRIVACY-005:** Any future network, diagnostics, feedback, or sync capability requires a specification identifying data fields, purpose, retention, legal basis, consent, deletion, and failure behavior.
-- **HF-PRIVACY-006:** The privacy manifest must truthfully declare tracking, collected data, and required-reason API use.
+- **HF-PRIVACY-001:** Core app operation requires no account, advertising identifier, analytics SDK, tracking permission, contacts, location, microphone, broad photo-library permission, or health access. User-selected library photos may be accessed through the system Photos picker for the explicit evidence flow in specification 018.
+- **HF-PRIVACY-002:** Camera access is requested only for barcode scanning and explicit user-initiated package-evidence capture under specification 018. The camera is never used for background collection or analytics.
+- **HF-PRIVACY-003:** Barcode-scanner camera frames are processed on device and are not saved or transmitted. A package photo is retained only when the user explicitly captures/selects it for a submission; it is sanitized locally and remains local until the user deliberately invokes Mail/share/copy.
+- **HF-PRIVACY-004:** Manual barcodes, scan results, and errors are not sent to a server by the core app. Specification 018 permits only explicit user-directed package transport through system Mail/share surfaces; the project still operates no intake backend.
+- **HF-PRIVACY-005:** Any network, diagnostics, feedback, or sync capability requires an accepted specification identifying data fields, purpose, retention, consent/deletion boundaries, and failure behavior. Specification 018 is the accepted contract for backend-free product evidence submission.
+- **HF-PRIVACY-006:** The privacy manifest must truthfully declare tracking, collected data, and required-reason API use. User-directed transport in another system app must not be misrepresented as project analytics/tracking collection.
 
 ## Catalog and application security
 

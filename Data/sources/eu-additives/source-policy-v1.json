@@ -44,8 +44,8 @@
       "ELI"
     ],
     "reviewCadenceDays": 30,
-    "lastReviewedAt": "2026-09-02T00:00:00Z",
-    "nextReviewAt": "2026-10-02T00:00:00Z",
+    "lastReviewedAt": "2026-09-01T23:00:33Z",
+    "nextReviewAt": "2026-10-01T23:00:33Z",
     "missingSourceBehavior": "Do not manufacture a refresh date; keep the previous reviewed revision and raise a source-health finding."
   }
 }

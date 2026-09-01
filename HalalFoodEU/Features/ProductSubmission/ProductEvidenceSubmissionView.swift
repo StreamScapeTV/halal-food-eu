@@ -44,7 +44,7 @@ struct ProductEvidenceSubmissionView: View {
                     Text("Location is optional and typed by you. The app does not request device location permission.")
                 }
 
-                Section("Package photos") {
+                Section {
                     ForEach(ProductEvidencePhotoPurpose.allCases) { purpose in
                         ProductEvidencePhotoPurposeRow(
                             purpose: purpose,
@@ -59,15 +59,17 @@ struct ProductEvidenceSubmissionView: View {
                     Text("Choose only package evidence you own or may submit. Crop or redact personal information before choosing it when needed. Every selected image is re-encoded locally; location and other image metadata are not copied into the prepared attachment.")
                 }
 
-                Section("Notes") {
+                Section {
                     TextEditor(text: $viewModel.draft.notes)
                         .frame(minHeight: 96)
                         .accessibilityLabel("Optional notes")
+                } header: {
+                    Text("Notes")
                 } footer: {
                     Text("Do not include credentials, receipts, payment data, faces, addresses, account details, or unrelated personal information.")
                 }
 
-                Section("Consent and rights") {
+                Section {
                     Toggle(
                         "I took these photos or have permission to submit them.",
                         isOn: $viewModel.draft.ownsOrMaySubmitPhotos
@@ -88,6 +90,8 @@ struct ProductEvidenceSubmissionView: View {
                         "I understand submission does not guarantee inclusion or any halal result.",
                         isOn: $viewModel.draft.noGuaranteedCatalogOrHalalOutcome
                     )
+                } header: {
+                    Text("Consent and rights")
                 } footer: {
                     Text("Nothing is uploaded silently. You review the final email or share sheet before any data leaves the device. Email transport is outside the app's end-to-end control.")
                 }
@@ -102,7 +106,7 @@ struct ProductEvidenceSubmissionView: View {
                     }
                 }
 
-                Section("Send or share") {
+                Section {
                     Button {
                         viewModel.prepareEmail()
                     } label: {
@@ -127,6 +131,8 @@ struct ProductEvidenceSubmissionView: View {
                         Label("Copy submission details and address", systemImage: "doc.on.doc")
                     }
                     .disabled(viewModel.isWorking)
+                } header: {
+                    Text("Send or share")
                 } footer: {
                     Text("The app can report only the Mail composer's sent, cancelled, or failed result. A share sheet or copied package does not prove delivery or acceptance.")
                 }

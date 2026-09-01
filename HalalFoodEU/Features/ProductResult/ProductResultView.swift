@@ -190,6 +190,14 @@ struct ProductResultView: View {
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        LabeledContent(text.string("field.sourceType"), value: item.source.kind)
+                            .font(.caption)
+                        LabeledContent(text.string("field.license"), value: item.source.license)
+                            .font(.caption)
+                        LabeledContent(text.string("field.retrieved"), value: text.date(item.source.retrievedAt))
+                            .font(.caption)
+                        sourceReference(item.source)
+                            .font(.caption)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -227,9 +235,15 @@ struct ProductResultView: View {
                             LabeledContent(text.string("field.lastChecked"), value: text.date(checked))
                         }
                         LabeledContent(text.string("field.source"), value: certification.source.name)
+                        LabeledContent(text.string("field.sourceType"), value: certification.source.kind)
                         LabeledContent(
                             text.string("field.attribution"),
                             value: ProductResultPresentation.sourceAttribution(certification.source, text: text)
+                        )
+                        LabeledContent(text.string("field.license"), value: certification.source.license)
+                        LabeledContent(
+                            text.string("field.retrieved"),
+                            value: text.date(certification.source.retrievedAt)
                         )
                         sourceReference(certification.source)
                     }

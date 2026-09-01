@@ -1,0 +1,240 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-proposal-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "assessmentImpact": {
+      "additionalProperties": false,
+      "properties": {
+        "automaticHalalDecisionForbidden": {
+          "const": true
+        },
+        "conflictState": {
+          "enum": [
+            "none",
+            "conflicts-current-formulation",
+            "current-formulation-unknown"
+          ]
+        },
+        "currentCatalogEvidence": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "mustInvalidateCurrentAssessment": {
+          "type": "boolean"
+        },
+        "mustRouteToMethodologyReview": {
+          "type": "boolean"
+        },
+        "reasonCode": {
+          "enum": [
+            "USER_PACKAGE_EVIDENCE_CORRECTION",
+            "USER_PACKAGE_EVIDENCE_NEW_PRODUCT"
+          ]
+        }
+      },
+      "required": [
+        "mustInvalidateCurrentAssessment",
+        "mustRouteToMethodologyReview",
+        "reasonCode",
+        "conflictState",
+        "automaticHalalDecisionForbidden"
+      ],
+      "type": "object"
+    },
+    "generatedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ocr": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "const": "apple-vision-local"
+        },
+        "engineVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reportSha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "verificationState": {
+          "const": "unverified-machine-output-human-reviewed-separately"
+        }
+      },
+      "required": [
+        "engine",
+        "engineVersion",
+        "verificationState",
+        "reportSha256"
+      ],
+      "type": "object"
+    },
+    "proposalDigest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "proposalType": {
+      "const": "owner-admitted-user-package-evidence"
+    },
+    "records": {
+      "additionalProperties": false,
+      "properties": {
+        "identities": {
+          "items": {
+            "$ref": "../evidence/evidence-envelope-v1.schema.json#/$defs/identity"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "ingredients": {
+          "items": {
+            "$ref": "../evidence/evidence-envelope-v1.schema.json#/$defs/ingredient"
+          },
+          "maxItems": 1,
+          "type": "array"
+        },
+        "packageEvidence": {
+          "items": {
+            "$ref": "../evidence/evidence-envelope-v1.schema.json#/$defs/packageEvidence"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "reviews": {
+          "items": {
+            "$ref": "../evidence/evidence-envelope-v1.schema.json#/$defs/review"
+          },
+          "maxItems": 10,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "identities",
+        "ingredients",
+        "packageEvidence",
+        "reviews"
+      ],
+      "type": "object"
+    },
+    "registryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "admissionID": {
+          "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "admittedAttachmentHashes": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "inputAttachmentHashes": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "proposalDigest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "reviewedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "submissionID": {
+          "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "submissionID",
+        "admissionID",
+        "reviewedAt",
+        "inputAttachmentHashes",
+        "admittedAttachmentHashes",
+        "proposalDigest"
+      ],
+      "type": "object"
+    },
+    "retention": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogStoresImageBytes": {
+          "const": false
+        },
+        "rawEmailStored": {
+          "const": false
+        },
+        "rejectedRawRetentionDays": {
+          "const": 0
+        },
+        "workflowArtifactRetentionDays": {
+          "const": 7
+        }
+      },
+      "required": [
+        "catalogStoresImageBytes",
+        "rawEmailStored",
+        "workflowArtifactRetentionDays",
+        "rejectedRawRetentionDays"
+      ],
+      "type": "object"
+    },
+    "sanitizedSubmitterNotes": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "source": {
+      "$ref": "../evidence/evidence-envelope-v1.schema.json#/$defs/source"
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "proposalType",
+    "submissionID",
+    "admissionID",
+    "generatedAt",
+    "source",
+    "records",
+    "assessmentImpact",
+    "retention",
+    "ocr",
+    "proposalDigest",
+    "registryEntry"
+  ],
+  "title": "Owner-admitted product evidence proposal v1",
+  "type": "object"
+}

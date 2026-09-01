@@ -1,0 +1,113 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-admission-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "admittedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "privacyReview": {
+      "additionalProperties": false,
+      "properties": {
+        "locationMetadataRemoved": {
+          "const": true
+        },
+        "personalInformationRemoved": {
+          "const": true
+        },
+        "rawEmailExcluded": {
+          "const": true
+        },
+        "state": {
+          "enum": [
+            "screened",
+            "redacted"
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "personalInformationRemoved",
+        "locationMetadataRemoved",
+        "rawEmailExcluded"
+      ],
+      "type": "object"
+    },
+    "reviewerID": {
+      "pattern": "^github:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$",
+      "type": "string"
+    },
+    "rightsReview": {
+      "additionalProperties": false,
+      "properties": {
+        "ownershipOrPermissionConfirmed": {
+          "const": true
+        },
+        "projectReviewUseConfirmed": {
+          "const": true
+        },
+        "publicRepositoryStagingApproved": {
+          "description": "Must be true for the trusted public GitHub workflow. May be false only when image bytes remain outside public Git and the same intake tooling runs locally.",
+          "type": "boolean"
+        },
+        "redistributionStatus": {
+          "enum": [
+            "review-required",
+            "approved"
+          ]
+        }
+      },
+      "required": [
+        "ownershipOrPermissionConfirmed",
+        "projectReviewUseConfirmed",
+        "publicRepositoryStagingApproved",
+        "redistributionStatus"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "securityReview": {
+      "additionalProperties": false,
+      "properties": {
+        "mailboxArtifactsExcluded": {
+          "const": true
+        },
+        "state": {
+          "const": "screened"
+        },
+        "unexpectedFilesExcluded": {
+          "const": true
+        }
+      },
+      "required": [
+        "state",
+        "mailboxArtifactsExcluded",
+        "unexpectedFilesExcluded"
+      ],
+      "type": "object"
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "submissionID",
+    "admissionID",
+    "admittedAt",
+    "reviewerID",
+    "privacyReview",
+    "rightsReview",
+    "securityReview"
+  ],
+  "title": "Halal Food EU owner admission for product evidence v1",
+  "type": "object"
+}

@@ -1,0 +1,173 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-ocr-report-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "attachments": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "pattern": "^(barcode|front|ingredients|certification|nutrition)-[1-9][0-9]*\\.jpg$",
+            "type": "string"
+          },
+          "inputSha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "boundingBox": {
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "prefixItems": [
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "confidence": {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "text": {
+                  "maxLength": 2000,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text",
+                "confidence",
+                "boundingBox"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "ocrState": {
+            "enum": [
+              "not-requested",
+              "recognized",
+              "unreadable"
+            ]
+          },
+          "pixelHeight": {
+            "maximum": 2400,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pixelWidth": {
+            "maximum": 2400,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "purpose": {
+            "enum": [
+              "barcode",
+              "front",
+              "ingredients",
+              "certification",
+              "nutrition"
+            ]
+          },
+          "recognitionLanguages": {
+            "items": {
+              "enum": [
+                "de-DE",
+                "en-US"
+              ]
+            },
+            "maxItems": 2,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "sanitizedByteSize": {
+            "maximum": 4000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sanitizedSha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "purpose",
+          "inputSha256",
+          "sanitizedSha256",
+          "sanitizedByteSize",
+          "pixelWidth",
+          "pixelHeight",
+          "ocrState",
+          "recognitionLanguages",
+          "lines"
+        ],
+        "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+    },
+    "engine": {
+      "const": "apple-vision-local"
+    },
+    "engineVersion": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "generatedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "verificationState": {
+      "const": "unverified"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "submissionID",
+    "admissionID",
+    "engine",
+    "engineVersion",
+    "generatedAt",
+    "verificationState",
+    "attachments"
+  ],
+  "title": "Apple Vision local OCR report v1",
+  "type": "object"
+}

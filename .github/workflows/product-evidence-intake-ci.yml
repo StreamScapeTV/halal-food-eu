@@ -1,0 +1,92 @@
+name: Product evidence intake CI
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - ".github/workflows/product-evidence-intake*.yml"
+      - ".github/workflows/ios-ci.yml"
+      - "Data/submissions/**"
+      - "Tools/product_evidence_intake.py"
+      - "Tools/product_evidence_ocr.swift"
+      - "Tools/tests/test_product_evidence_intake.py"
+      - "Tools/tests/product_evidence_ocr_smoke.swift"
+      - "docs/feature-specs/019-product-evidence-intake.md"
+      - "docs/feature-specs/README.md"
+      - "docs/architecture/ADR-0010-owner-admitted-local-vision-product-evidence-intake.md"
+      - "docs/architecture/README.md"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/product-evidence-intake*.yml"
+      - ".github/workflows/ios-ci.yml"
+      - "Data/submissions/**"
+      - "Tools/product_evidence_intake.py"
+      - "Tools/product_evidence_ocr.swift"
+      - "Tools/tests/test_product_evidence_intake.py"
+      - "Tools/tests/product_evidence_ocr_smoke.swift"
+      - "docs/feature-specs/019-product-evidence-intake.md"
+      - "docs/feature-specs/README.md"
+      - "docs/architecture/ADR-0010-owner-admitted-local-vision-product-evidence-intake.md"
+      - "docs/architecture/README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-evidence-intake-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Intake contracts and hostile-input tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate schemas, registry, and Python intake boundary
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/product_evidence_intake.py \
+            Tools/tests/test_product_evidence_intake.py
+          for file in \
+            Data/submissions/product-evidence-submission-v1.schema.json \
+            Data/submissions/product-evidence-admission-v1.schema.json \
+            Data/submissions/product-evidence-ocr-request-v1.schema.json \
+            Data/submissions/product-evidence-ocr-report-v1.schema.json \
+            Data/submissions/product-evidence-human-review-v1.schema.json \
+            Data/submissions/product-evidence-proposal-v1.schema.json \
+            Data/submissions/product-evidence-rejection-v1.schema.json \
+            Data/submissions/product-evidence-patch-manifest-v1.schema.json \
+            Data/submissions/admitted-submission-registry-v1.schema.json \
+            Data/submissions/admitted-submission-registry-v1.json; do
+            python3 -m json.tool "$file" >/dev/null
+          done
+          python3 -m unittest Tools.tests.test_product_evidence_intake -v
+
+  vision:
+    name: Apple Vision re-encode and OCR smoke
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Compile local Vision tool and smoke test
+        run: |
+          set -euo pipefail
+          xcrun swiftc Tools/product_evidence_ocr.swift \
+            -o "$RUNNER_TEMP/product-evidence-ocr"
+          xcrun swiftc -parse-as-library Tools/tests/product_evidence_ocr_smoke.swift \
+            -o "$RUNNER_TEMP/product-evidence-ocr-smoke"
+          "$RUNNER_TEMP/product-evidence-ocr-smoke" "$RUNNER_TEMP/product-evidence-ocr"

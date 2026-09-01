@@ -1,0 +1,57 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-rejection-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "catalogEvidenceCreated": {
+      "const": false
+    },
+    "gitPatchCreated": {
+      "const": false
+    },
+    "rawRepositoryRetentionDays": {
+      "const": 0
+    },
+    "resultType": {
+      "const": "rejected-product-evidence"
+    },
+    "reviewReason": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "reviewedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "reviewerID": {
+      "pattern": "^github:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "resultType",
+    "submissionID",
+    "admissionID",
+    "reviewedAt",
+    "reviewerID",
+    "reviewReason",
+    "catalogEvidenceCreated",
+    "gitPatchCreated",
+    "rawRepositoryRetentionDays"
+  ],
+  "title": "Rejected product evidence review result v1",
+  "type": "object"
+}

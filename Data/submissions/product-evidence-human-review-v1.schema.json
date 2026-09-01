@@ -1,0 +1,165 @@
+{
+  "$id": "https://streamscape.tv/halal-food-eu/product-evidence-human-review-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "propose-observation"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "then": {
+        "required": [
+          "verifiedProduct"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "admissionID": {
+      "pattern": "^hfeu-admission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "confirmations": {
+      "additionalProperties": false,
+      "properties": {
+        "barcodeMatchesGTIN": {
+          "type": "boolean"
+        },
+        "ingredientsReviewedWhenPresent": {
+          "type": "boolean"
+        },
+        "marketReviewed": {
+          "type": "boolean"
+        },
+        "packageIdentityReviewed": {
+          "type": "boolean"
+        },
+        "privacyRechecked": {
+          "type": "boolean"
+        },
+        "rightsRechecked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "barcodeMatchesGTIN",
+        "packageIdentityReviewed",
+        "marketReviewed",
+        "ingredientsReviewedWhenPresent",
+        "privacyRechecked",
+        "rightsRechecked"
+      ],
+      "type": "object"
+    },
+    "conflictState": {
+      "enum": [
+        "none",
+        "conflicts-current-formulation",
+        "current-formulation-unknown"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "propose-observation",
+        "reject"
+      ]
+    },
+    "ingredientTranscription": {
+      "additionalProperties": false,
+      "properties": {
+        "attachmentFiles": {
+          "items": {
+            "pattern": "^ingredients-[1-9][0-9]*\\.jpg$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "languageCode": {
+          "pattern": "^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "languageCode",
+        "attachmentFiles"
+      ],
+      "type": "object"
+    },
+    "reviewReason": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "reviewedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "reviewerID": {
+      "pattern": "^github:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$",
+      "type": "string"
+    },
+    "sanitizedSubmitterNotes": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "submissionID": {
+      "pattern": "^hfeu-submission-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "verifiedProduct": {
+      "additionalProperties": false,
+      "properties": {
+        "brand": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "quantity": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "submissionID",
+    "admissionID",
+    "reviewedAt",
+    "reviewerID",
+    "decision",
+    "confirmations",
+    "reviewReason"
+  ],
+  "title": "Halal Food EU human product-evidence review v1",
+  "type": "object"
+}

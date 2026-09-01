@@ -1,28 +1,393 @@
 {
   "schemaVersion": 1,
-  "datasetVersion": "1.0.0",
-  "reviewedAt": "2026-08-30T00:00:00Z",
+  "datasetVersion": "2.0.0",
+  "referenceRevision": "eu-additives-2026-08-18",
+  "reviewedAt": "2026-09-02T00:00:00Z",
+  "nextReviewAt": "2026-10-02T00:00:00Z",
   "identityOnly": true,
+  "languages": [
+    "de",
+    "en"
+  ],
+  "source": {
+    "sourceKey": "eu-additives",
+    "jurisdiction": "EU",
+    "acquisitionMethod": "reviewed-deterministic-curation",
+    "unionListCELEX": "02008R1333-20260818",
+    "unionListELI": "https://data.europa.eu/eli/reg/2008/1333/2026-08-18",
+    "specificationsCELEX": "02012R0231-20260818",
+    "specificationsELI": "https://data.europa.eu/eli/reg/2012/231/2026-08-18",
+    "commissionReference": "https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en",
+    "efsaReference": "https://www.efsa.europa.eu/en/topics/topic/food-additives",
+    "licenseIdentifier": "CC-BY-4.0",
+    "attribution": "European Union, EUR-Lex; European Commission; EFSA where explicitly cited.",
+    "legalEffectLimitation": "The compact reference is explanatory data. The legislation published through EUR-Lex remains authoritative."
+  },
   "entries": [
     {
-      "id": "E422",
-      "names": {
-        "de": ["Glycerin", "Glycerol"],
-        "en": ["Glycerol", "Glycerin"]
+      "id": "E120",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Echtes Karmin"
+        ],
+        "en": [
+          "Carminic acid, Carmine"
+        ]
       },
-      "originConclusion": "unknown-without-evidence",
-      "halalConclusion": null,
-      "references": ["https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"]
+      "aliases": {
+        "de": [
+          "Karmin",
+          "Karminsäure"
+        ],
+        "en": [
+          "Carmine",
+          "Carminic acid"
+        ]
+      },
+      "technologicalFunctions": [
+        "colour"
+      ],
+      "originPossibilities": [
+        {
+          "kind": "insect-derived",
+          "statement": "The EU specification describes carmine as obtained from extracts of dried female Dactylopius coccus Costa and notes that commercial products may contain protein material from that insect.",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818"
+        }
+      ],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E160a(i)",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Beta-Carotin"
+        ],
+        "en": [
+          "Beta-carotene"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "β-Carotin"
+        ],
+        "en": [
+          "β-Carotene"
+        ]
+      },
+      "technologicalFunctions": [
+        "colour"
+      ],
+      "originPossibilities": [],
+      "legalReferences": [
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E322",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Lecithine"
+        ],
+        "en": [
+          "Lecithins"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "Lecithin",
+          "Phosphatide",
+          "Phospholipide"
+        ],
+        "en": [
+          "Lecithin",
+          "Phosphatides",
+          "Phospholipids"
+        ]
+      },
+      "technologicalFunctions": [
+        "carrier",
+        "emulsifier"
+      ],
+      "originPossibilities": [
+        {
+          "kind": "animal-derived",
+          "statement": "The EU specification states that lecithins may be obtained by physical procedures from animal foodstuffs.",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818"
+        },
+        {
+          "kind": "plant-derived",
+          "statement": "The EU specification states that lecithins may be obtained by physical procedures from vegetable foodstuffs.",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818"
+        }
+      ],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E422",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Glycerin"
+        ],
+        "en": [
+          "Glycerol"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "Glycerol",
+          "Glyzerin"
+        ],
+        "en": [
+          "Glycerin"
+        ]
+      },
+      "technologicalFunctions": [
+        "carrier",
+        "humectant",
+        "solvent"
+      ],
+      "originPossibilities": [],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
     },
     {
       "id": "E471",
-      "names": {
-        "de": ["Mono- und Diglyceride von Speisefettsäuren", "Mono- und Diglyceride"],
-        "en": ["Mono- and diglycerides of fatty acids", "Mono- and diglycerides"]
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Mono- und Diglyceride von Speisefettsäuren"
+        ],
+        "en": [
+          "Mono- and diglycerides of fatty acids"
+        ]
       },
-      "originConclusion": "unknown-without-evidence",
-      "halalConclusion": null,
-      "references": ["https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en"]
+      "aliases": {
+        "de": [
+          "Mono- und Diglyceride"
+        ],
+        "en": [
+          "Mono- and diglycerides"
+        ]
+      },
+      "technologicalFunctions": [
+        "emulsifier",
+        "glazing agent"
+      ],
+      "originPossibilities": [],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E472a",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Essigsäureester von Mono- und Diglyceriden von Speisefettsäuren"
+        ],
+        "en": [
+          "Acetic acid esters of mono- and diglycerides of fatty acids"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "Acetoglyceride",
+          "Acetylierte Mono- und Diglyceride"
+        ],
+        "en": [
+          "Acetoglycerides",
+          "Acetylated mono- and diglycerides"
+        ]
+      },
+      "technologicalFunctions": [
+        "emulsifier"
+      ],
+      "originPossibilities": [],
+      "legalReferences": [
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E901",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Bienenwachs, weiß und gelb"
+        ],
+        "en": [
+          "Beeswax, white and yellow"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "Bienenwachs"
+        ],
+        "en": [
+          "Beeswax"
+        ]
+      },
+      "technologicalFunctions": [
+        "glazing agent"
+      ],
+      "originPossibilities": [
+        {
+          "kind": "insect-derived",
+          "statement": "The EU specification describes yellow beeswax as wax obtained by melting honeybee Apis mellifera honeycombs; white beeswax is produced by bleaching yellow beeswax.",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818"
+        }
+      ],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E904",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "Schellack"
+        ],
+        "en": [
+          "Shellac"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "Schellackharz"
+        ],
+        "en": [
+          "Shellac resin"
+        ]
+      },
+      "technologicalFunctions": [
+        "glazing agent"
+      ],
+      "originPossibilities": [
+        {
+          "kind": "insect-derived",
+          "statement": "The current EU specification describes shellac as the purified and bleached resinous secretion of the insect Laccifer (Tachardia) lacca.",
+          "reference": "https://eur-lex.europa.eu/eli/reg/2026/189/oj"
+        }
+      ],
+      "legalReferences": [
+        {
+          "kind": "union-list",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02008R1333-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        },
+        {
+          "kind": "amendment",
+          "reference": "https://eur-lex.europa.eu/eli/reg/2026/189/oj",
+          "revision": "2026-01-28"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
+    },
+    {
+      "id": "E920",
+      "status": "active",
+      "officialNames": {
+        "de": [
+          "L-Cystein"
+        ],
+        "en": [
+          "L-cysteine"
+        ]
+      },
+      "aliases": {
+        "de": [
+          "L Cystein"
+        ],
+        "en": [
+          "L cysteine"
+        ]
+      },
+      "technologicalFunctions": [
+        "flour treatment agent"
+      ],
+      "originPossibilities": [],
+      "legalReferences": [
+        {
+          "kind": "specification",
+          "reference": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02012R0231-20260818",
+          "revision": "2026-08-18"
+        }
+      ],
+      "reviewedAt": "2026-09-02T00:00:00Z"
     }
   ]
 }

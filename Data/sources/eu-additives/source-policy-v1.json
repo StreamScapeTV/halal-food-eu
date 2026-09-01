@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "sourceKey": "eu-additives",
+  "operator": "European Union / European Commission / EFSA",
+  "sourceClass": "reference",
+  "accessMethod": "manual-admission",
+  "allowedAcquisitionHosts": [
+    "data.europa.eu",
+    "eur-lex.europa.eu",
+    "food.ec.europa.eu",
+    "www.efsa.europa.eu"
+  ],
+  "allowedReferenceHosts": [
+    "data.europa.eu",
+    "eur-lex.europa.eu",
+    "food.ec.europa.eu",
+    "www.efsa.europa.eu"
+  ],
+  "databaseLicense": {
+    "name": "Creative Commons Attribution 4.0 International",
+    "identifier": "CC-BY-4.0",
+    "attributionRequired": true,
+    "shareAlikeRequired": false
+  },
+  "attribution": "European Union, EUR-Lex; European Commission; EFSA where explicitly cited. Reuse is subject to the applicable EU/EFSA legal notices and third-party rights stated on a source document.",
+  "completenessClaimAllowed": false,
+  "credentialsRequired": false,
+  "authoritativeLegalSource": "https://eur-lex.europa.eu/",
+  "legalEffectLimitation": "The compact dataset is explanatory reference data. The legislation and official documents published through EUR-Lex remain authoritative.",
+  "reviewedReferenceDocuments": {
+    "unionList": "https://data.europa.eu/eli/reg/2008/1333/2026-08-18",
+    "specifications": "https://data.europa.eu/eli/reg/2012/231/2026-08-18",
+    "commissionAdditives": "https://food.ec.europa.eu/food-safety/food-improvement-agents/additives_en",
+    "efsaAdditives": "https://www.efsa.europa.eu/en/topics/topic/food-additives"
+  },
+  "reuseDocumentation": {
+    "eurLex": "https://eur-lex.europa.eu/content/legal-notice/legal-notice.html",
+    "commission": "https://commission.europa.eu/legal-notice_en",
+    "efsa": "https://www.efsa.europa.eu/en/legal-notice"
+  },
+  "updateDetection": {
+    "stableIdentifiers": [
+      "CELEX",
+      "ELI"
+    ],
+    "reviewCadenceDays": 30,
+    "lastReviewedAt": "2026-09-02T00:00:00Z",
+    "nextReviewAt": "2026-10-02T00:00:00Z",
+    "missingSourceBehavior": "Do not manufacture a refresh date; keep the previous reviewed revision and raise a source-health finding."
+  }
+}

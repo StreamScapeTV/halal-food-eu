@@ -1,38 +1,132 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://streamscapetv.github.io/halal-food-eu/schema/additive-identities-v1.json",
-  "title": "Halal Food EU additive identities v1",
+  "title": "Halal Food EU EU additive identities v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "datasetVersion", "reviewedAt", "identityOnly", "entries"],
+  "required": [
+    "schemaVersion",
+    "datasetVersion",
+    "referenceRevision",
+    "reviewedAt",
+    "nextReviewAt",
+    "identityOnly",
+    "languages",
+    "source",
+    "entries"
+  ],
   "properties": {
     "schemaVersion": {"const": 1},
     "datasetVersion": {"type": "string", "minLength": 1},
+    "referenceRevision": {"type": "string", "minLength": 1},
     "reviewedAt": {"type": "string", "format": "date-time"},
+    "nextReviewAt": {"type": "string", "format": "date-time"},
     "identityOnly": {"const": true},
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 2}
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceKey",
+        "jurisdiction",
+        "acquisitionMethod",
+        "unionListCELEX",
+        "unionListELI",
+        "specificationsCELEX",
+        "specificationsELI",
+        "commissionReference",
+        "efsaReference",
+        "licenseIdentifier",
+        "attribution",
+        "legalEffectLimitation"
+      ],
+      "properties": {
+        "sourceKey": {"const": "eu-additives"},
+        "jurisdiction": {"const": "EU"},
+        "acquisitionMethod": {"type": "string", "minLength": 1},
+        "unionListCELEX": {"type": "string", "minLength": 1},
+        "unionListELI": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "specificationsCELEX": {"type": "string", "minLength": 1},
+        "specificationsELI": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "commissionReference": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "efsaReference": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "licenseIdentifier": {"type": "string", "minLength": 1},
+        "attribution": {"type": "string", "minLength": 1},
+        "legalEffectLimitation": {"type": "string", "minLength": 1}
+      }
+    },
     "entries": {
       "type": "array",
       "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "names", "originConclusion", "halalConclusion", "references"],
-        "properties": {
-          "id": {"type": "string", "pattern": "^E[0-9]{3,4}[a-z]?$"},
-          "names": {
+      "items": {"$ref": "#/$defs/entry"}
+    }
+  },
+  "$defs": {
+    "languageMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {"type": "string", "minLength": 1}
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "officialNames",
+        "aliases",
+        "technologicalFunctions",
+        "originPossibilities",
+        "legalReferences",
+        "reviewedAt"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^E[0-9]{3,4}[a-z]?(\\([ivx]+\\))?$"},
+        "status": {"enum": ["active", "changed", "removed"]},
+        "officialNames": {"allOf": [{"$ref": "#/$defs/languageMap"}, {"minProperties": 1}]},
+        "aliases": {"$ref": "#/$defs/languageMap"},
+        "technologicalFunctions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "originPossibilities": {
+          "type": "array",
+          "items": {
             "type": "object",
-            "minProperties": 1,
-            "additionalProperties": {
-              "type": "array",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": {"type": "string", "minLength": 1}
+            "additionalProperties": false,
+            "required": ["kind", "statement", "reference"],
+            "properties": {
+              "kind": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1},
+              "reference": {"type": "string", "format": "uri", "pattern": "^https://"}
             }
-          },
-          "originConclusion": {"const": "unknown-without-evidence"},
-          "halalConclusion": {"type": "null"},
-          "references": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
-        }
+          }
+        },
+        "legalReferences": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "reference", "revision"],
+            "properties": {
+              "kind": {"enum": ["union-list", "specification", "amendment", "scientific-context"]},
+              "reference": {"type": "string", "format": "uri", "pattern": "^https://"},
+              "revision": {"type": "string", "format": "date"}
+            }
+          }
+        },
+        "reviewedAt": {"type": "string", "format": "date-time"}
       }
     }
   }

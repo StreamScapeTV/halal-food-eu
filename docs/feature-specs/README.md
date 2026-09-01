@@ -13,7 +13,7 @@ Specifications use requirement identifiers so code, tests, catalog validators, i
 - **Future** — intentionally outside the current release boundary.
 - **Rejected** — considered and deliberately excluded, with rationale retained.
 
-Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 020 are **Accepted**. Document 012 is **Future**.
+Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 021 are **Accepted**. Document 012 is **Future**.
 
 ## Product invariant
 
@@ -45,6 +45,7 @@ It must not turn missing information into a positive ruling. A product can be `h
 | [018 Product evidence submission](018-product-evidence-submission.md) | backend-free iOS package-evidence preparation, consent and Mail/share/copy delivery |
 | [019 Product evidence intake](019-product-evidence-intake.md) | owner admission, hostile-image validation, local OCR, human verification and non-image Git proposal |
 | [020 Offline product evidence presentation](020-offline-product-evidence-presentation.md) | offline SQLite detail projection, evidence precedence, retailer wording, assessment explanations and accessibility |
+| [021 EU additive reference](021-eu-additive-reference.md) | reviewed E-number identity/reference data, conservative EN/DE matching, change impact and offline explanation boundaries |
 
 ## Conflict resolution
 

@@ -7,7 +7,7 @@ private final class ProductEvidenceLocalizationBundleToken: NSObject {}
 struct ProductEvidenceLocalizationTests {
     @Test("English and German submission resources are present")
     func localizedResources() throws {
-        let bundle = Bundle(for: ProductEvidenceLocalizationBundleToken.self)
+        let bundle = Bundle.main
         let english = try #require(bundle.path(forResource: "en", ofType: "lproj"))
         let german = try #require(bundle.path(forResource: "de", ofType: "lproj"))
         let englishBundle = try #require(Bundle(path: english))

@@ -64,7 +64,7 @@ struct ProductEvidenceMailComposerView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: MFMailComposeViewController, context: Context) {}
 
     @MainActor
-    final class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+    final class Coordinator: NSObject, @MainActor MFMailComposeViewControllerDelegate {
         let onCompletion: @MainActor (ProductEvidenceMailOutcome) -> Void
 
         init(onCompletion: @escaping @MainActor (ProductEvidenceMailOutcome) -> Void) {

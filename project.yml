@@ -96,10 +96,6 @@ targets:
         buildPhase: resources
       - path: Data/submissions/product-evidence-submission-v1.schema.json
         buildPhase: resources
-      - path: HalalFoodEU/Resources/en.lproj/Localizable.strings
-        buildPhase: resources
-      - path: HalalFoodEU/Resources/de.lproj/Localizable.strings
-        buildPhase: resources
     dependencies:
       - target: HalalFoodEU
     settings:

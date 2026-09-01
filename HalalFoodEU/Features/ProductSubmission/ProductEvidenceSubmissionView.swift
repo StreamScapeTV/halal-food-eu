@@ -285,7 +285,7 @@ private struct ProductEvidenceCameraPicker: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
 
     @MainActor
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+    final class Coordinator: NSObject, @MainActor UINavigationControllerDelegate, @MainActor UIImagePickerControllerDelegate {
         let onImage: @MainActor (UIImage) -> Void
         let onCancel: @MainActor () -> Void
 

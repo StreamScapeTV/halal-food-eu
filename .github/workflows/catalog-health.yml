@@ -2,10 +2,11 @@ name: Catalog health
 
 on:
   schedule:
-    - cron: "23 4 * * 3"
+    - cron: "23 4 * * *"
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   catalog-health:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Require reviewed default-branch workflow code
         env:
@@ -30,24 +31,158 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate health contracts and tests
+      - name: Validate health and refresh contracts and tests
         run: |
           set -euo pipefail
           python3 -m json.tool Data/health/catalog-health-v1.schema.json >/dev/null
+          python3 -m json.tool Data/health/catalog-health-v2.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/catalog-refresh-policy-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/source-refresh-state-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/refresh-report-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/refresh-queue-v1.schema.json >/dev/null
           python3 Tools/catalog_workflow.py validate-contract
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 Tools/catalog_quality.py validate-policy \
             --policy Data/quality/catalog-quality-policy-v1.json \
             --source-reviews Data/quality/source-review-policy-v1.json
+          python3 Tools/catalog_refresh.py validate-policy \
+            --policy Data/refresh/catalog-refresh-policy-v1.json
           python3 Tools/tests/test_catalog_health.py
           python3 Tools/tests/test_catalog_health_incident.py
+          python3 Tools/tests/test_catalog_refresh.py
+          python3 Tools/tests/test_catalog_refresh_plan.py
+          python3 Tools/tests/test_catalog_refresh_health.py
+          python3 Tools/tests/test_catalog_refresh_workflow_status.py
+          python3 Tools/tests/test_catalog_refresh_artifact_locator.py
+          python3 Tools/tests/test_github_refresh_state_proposal.py
 
-      - name: Build exact-revision scheduled health report
+      - name: Locate latest durable Open Food Facts refresh lineage
+        id: lineage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/health"
+          python3 Tools/catalog_refresh_artifact_locator.py \
+            --repository "$REPOSITORY" \
+            --workflow scheduled-catalog-refresh.yml \
+            --source-key open-food-facts \
+            --output "$RUNNER_TEMP/health/refresh-artifacts.json"
+          python3 Tools/catalog_refresh_workflow_status.py \
+            --repository "$REPOSITORY" \
+            --workflow scheduled-catalog-refresh.yml \
+            --output "$RUNNER_TEMP/health/scheduled-refresh-status.json"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+          raw = json.loads(Path(os.environ['RUNNER_TEMP'] + '/health/refresh-artifacts.json').read_text(encoding='utf-8'))
+          available = raw.get('available') is True
+          print('available=' + ('true' if available else 'false'))
+          if available:
+              print('run_id=' + raw['runId'])
+              for key, value in sorted(raw['artifacts'].items()):
+                  print(f'{key}={value}')
+          PY
+
+      - name: Download latest normalized OFF evidence
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.normalized }}
+          path: ${{ runner.temp }}/normalized
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download latest OFF change report
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.change }}
+          path: ${{ runner.temp }}/change
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download latest OFF quality report
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.quality }}
+          path: ${{ runner.temp }}/quality
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download latest OFF refresh state
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.refreshState }}
+          path: ${{ runner.temp }}/refresh-state
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download latest OFF refresh report
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.refreshReport }}
+          path: ${{ runner.temp }}/refresh-report
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download latest OFF refresh queue
+        if: steps.lineage.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.lineage.outputs.refreshQueue }}
+          path: ${{ runner.temp }}/refresh-queue
+          run-id: ${{ steps.lineage.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Build exact-revision daily catalog and refresh health
+        env:
+          REFRESH_AVAILABLE: ${{ steps.lineage.outputs.available }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/health/payload"
           EVALUATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          cat > "$RUNNER_TEMP/health/change-report.json" <<'JSON'
+
+          if [[ "$REFRESH_AVAILABLE" == "true" ]]; then
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/normalized/handoff.json" \
+              --consumer-stage build \
+              --payload-root "$RUNNER_TEMP/normalized"
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/change/handoff.json" \
+              --consumer-stage quality \
+              --payload-root "$RUNNER_TEMP/change"
+            for artifact in quality refresh-state refresh-report refresh-queue; do
+              python3 Tools/catalog_workflow.py validate-handoff \
+                --input "$RUNNER_TEMP/${artifact}/handoff.json" \
+                --consumer-stage health \
+                --payload-root "$RUNNER_TEMP/${artifact}"
+            done
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          handoffs = {
+              name: json.loads((root / name / 'handoff.json').read_text(encoding='utf-8'))
+              for name in ('normalized', 'change', 'quality', 'refresh-state', 'refresh-report', 'refresh-queue')
+          }
+          run_ids = {item.get('producer', {}).get('runId') for item in handoffs.values()}
+          commits = {item.get('producer', {}).get('commitSha') for item in handoffs.values()}
+          sources = {item.get('sourceKey') for item in handoffs.values()}
+          snapshots = {item.get('snapshotId') for item in handoffs.values()}
+          if len(run_ids) != 1 or len(commits) != 1 or sources != {'open-food-facts'} or len(snapshots) != 1:
+              raise SystemExit('daily health refresh artifacts do not share one immutable OFF lineage')
+          PY
+            EVIDENCE="$RUNNER_TEMP/normalized/payload/evidence.json"
+            QUALITY="$RUNNER_TEMP/quality/payload/quality-report.json"
+            CHANGE="$RUNNER_TEMP/change/payload/change-report.json"
+            REFRESH_REPORT="$RUNNER_TEMP/refresh-report/payload/refresh-report.json"
+          else
+            cat > "$RUNNER_TEMP/health/change-report.json" <<'JSON'
           {
             "schemaVersion": 1,
             "sourceKey": "synthetic-fixture",
@@ -61,28 +196,103 @@ jobs:
             "noCompletenessClaim": true
           }
           JSON
-          python3 Tools/catalog_quality.py evaluate \
-            --policy Data/quality/catalog-quality-policy-v1.json \
-            --source-reviews Data/quality/source-review-policy-v1.json \
-            --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
-            --evidence Data/evidence/sample-evidence-v1.json \
-            --change-report "$RUNNER_TEMP/health/change-report.json" \
-            --source-key synthetic-fixture \
-            --snapshot-id committed-runtime-fixture \
-            --as-of "$EVALUATED_AT" \
-            --commit-sha "$GITHUB_SHA" \
-            --output "$RUNNER_TEMP/health/quality-report.json" \
-            --summary-output "$RUNNER_TEMP/health/quality-summary.md" \
-            --defer-blocker-exit
+            python3 Tools/catalog_quality.py evaluate \
+              --policy Data/quality/catalog-quality-policy-v1.json \
+              --source-reviews Data/quality/source-review-policy-v1.json \
+              --workflow-contract Data/workflows/catalog-workflow-contract-v1.json \
+              --evidence Data/evidence/sample-evidence-v1.json \
+              --change-report "$RUNNER_TEMP/health/change-report.json" \
+              --source-key synthetic-fixture \
+              --snapshot-id committed-runtime-fixture \
+              --as-of "$EVALUATED_AT" \
+              --commit-sha "$GITHUB_SHA" \
+              --output "$RUNNER_TEMP/health/quality-report.json" \
+              --summary-output "$RUNNER_TEMP/health/quality-summary.md" \
+              --defer-blocker-exit
+            EVIDENCE="Data/evidence/sample-evidence-v1.json"
+            QUALITY="$RUNNER_TEMP/health/quality-report.json"
+            CHANGE="$RUNNER_TEMP/health/change-report.json"
+            REFRESH_REPORT=""
+          fi
+
           python3 Tools/catalog_health.py build \
-            --evidence Data/evidence/sample-evidence-v1.json \
-            --quality-report "$RUNNER_TEMP/health/quality-report.json" \
-            --change-report "$RUNNER_TEMP/health/change-report.json" \
+            --evidence "$EVIDENCE" \
+            --quality-report "$QUALITY" \
+            --change-report "$CHANGE" \
             --evaluated-at "$EVALUATED_AT" \
             --commit-sha "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/health/base-catalog-health.json" \
+            --markdown-output "$RUNNER_TEMP/health/base-catalog-health.md"
+          python3 Tools/catalog_health.py validate \
+            --input "$RUNNER_TEMP/health/base-catalog-health.json"
+
+          if [[ "$REFRESH_AVAILABLE" == "true" ]]; then
+            python3 Tools/catalog_refresh.py queues \
+              --policy Data/refresh/catalog-refresh-policy-v1.json \
+              --quality-policy Data/quality/catalog-quality-policy-v1.json \
+              --evidence "$EVIDENCE" \
+              --quality-report "$QUALITY" \
+              --change-report "$CHANGE" \
+              --evaluated-at "$EVALUATED_AT" \
+              --output "$RUNNER_TEMP/health/daily-refresh-queue.json"
+          else
+            EVALUATED_AT="$EVALUATED_AT" python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          queue = {
+              'schemaVersion': 1,
+              'market': 'DE',
+              'evaluatedAt': os.environ['EVALUATED_AT'],
+              'entries': [],
+              'targetedExecution': {
+                  'sourceKey': 'open-food-facts',
+                  'enabled': True,
+                  'endpointReference': 'https://world.openfoodfacts.org/api/v2/search',
+                  'gtinCount': 0,
+                  'batchSize': 40,
+                  'batches': [],
+                  'maxRequestsPerMinute': 10,
+                  'minimumRequestIntervalSeconds': 7,
+                  'minimumExecutionSeconds': 0,
+                  'fields': ['code', 'product_name', 'brands', 'quantity', 'ingredients_text', 'ingredients_text_de', 'ingredients_text_en', 'last_modified_t'],
+                  'networkExecutionPerformed': False,
+              },
+          }
+          payload = json.dumps(queue, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+          queue['queueSha256'] = hashlib.sha256(payload).hexdigest()
+          Path(os.environ['RUNNER_TEMP'] + '/health/daily-refresh-queue.json').write_text(
+              json.dumps(queue, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          fi
+
+          PREVIOUS_STATE="Data/refresh/accepted-open-food-facts-v1.json"
+          if [[ "$REFRESH_AVAILABLE" == "true" ]]; then
+            PREVIOUS_STATE="$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json"
+          fi
+          python3 Tools/catalog_refresh_plan.py plan \
+            --policy Data/refresh/catalog-refresh-policy-v1.json \
+            --source-policy Data/sources/open-food-facts/source-policy-v1.json \
+            --source-key open-food-facts \
+            --lane targeted \
+            --evaluated-at "$EVALUATED_AT" \
+            --previous-state "$PREVIOUS_STATE" \
+            --refresh-queue "$RUNNER_TEMP/health/daily-refresh-queue.json" \
+            --output "$RUNNER_TEMP/health/refresh-plan.json"
+
+          REFRESH_ARGS=()
+          if [[ -n "$REFRESH_REPORT" ]]; then
+            REFRESH_ARGS+=(--refresh-report "$REFRESH_REPORT")
+          fi
+          python3 Tools/catalog_refresh_health.py enrich \
+            --base-health "$RUNNER_TEMP/health/base-catalog-health.json" \
+            --refresh-queue "$RUNNER_TEMP/health/daily-refresh-queue.json" \
+            --refresh-plan "$RUNNER_TEMP/health/refresh-plan.json" \
+            "${REFRESH_ARGS[@]}" \
+            --workflow-status "$RUNNER_TEMP/health/scheduled-refresh-status.json" \
             --output "$RUNNER_TEMP/health/payload/catalog-health.json" \
             --markdown-output "$RUNNER_TEMP/health/catalog-health.md"
-          python3 Tools/catalog_health.py validate \
+          python3 Tools/catalog_refresh_health.py validate \
             --input "$RUNNER_TEMP/health/payload/catalog-health.json"
           python3 Tools/catalog_health_incident.py plan \
             --report "$RUNNER_TEMP/health/payload/catalog-health.json" \
@@ -113,7 +323,7 @@ jobs:
             --record-count 1 \
             --completeness complete \
             --redistribution-class metadata-only \
-            --content-schema-version health-report-v1 \
+            --content-schema-version health-report-v2 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --output "$RUNNER_TEMP/health/handoff.json"
 

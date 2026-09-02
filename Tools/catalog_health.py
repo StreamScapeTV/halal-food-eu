@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build deterministic, evidence-labelled catalog health reports.
 
-This module is a reporting layer. It does not make halal decisions, source-rights
-approvals, or retailer completeness claims. Those remain owned by the accepted
-quality/evidence contracts and must be supplied explicitly.
+This is a reporting layer. It does not make halal decisions, approve sources,
+admit certifiers, or infer retailer completeness. Strong retailer completeness
+claims require a separate reviewed coverage gate supplied by the quality layer.
 """
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 CLAIM_STATES = {
     "no-evidence",
     "community-only",
@@ -25,12 +24,7 @@ CLAIM_STATES = {
     "degraded",
 }
 ASSESSMENT_STATUSES = {
-    "halal-certified",
-    "halal-reviewed",
-    "not-halal",
-    "questionable",
-    "unknown",
-    "unassessed",
+    "halal-certified", "halal-reviewed", "not-halal", "questionable", "unknown", "unassessed",
 }
 DEFAULT_RETAILERS = ("rewe", "lidl")
 
@@ -84,10 +78,6 @@ def _map(envelope: dict[str, Any], name: str) -> dict[str, dict[str, Any]]:
     }
 
 
-def _count(values: list[str]) -> dict[str, int]:
-    return dict(sorted(Counter(values).items()))
-
-
 def _retailer_bucket(record: dict[str, Any]) -> str:
     kind = str(record.get("kind", "")).strip().lower()
     evidence_class = str(record.get("evidenceClass", "")).strip().lower()
@@ -100,32 +90,45 @@ def _retailer_bucket(record: dict[str, Any]) -> str:
     return "other"
 
 
-def _explicit_complete(record: dict[str, Any]) -> bool:
-    return (
-        record.get("coverageClaim") == "official-complete-snapshot"
-        and record.get("denominatorReconciled") is True
-        and isinstance(record.get("denominator"), int)
-        and not isinstance(record.get("denominator"), bool)
-        and record["denominator"] >= 0
-    )
+def _coverage_gate(quality: dict[str, Any] | None, retailer: str) -> dict[str, Any] | None:
+    gates = (quality or {}).get("retailerCoverageGates")
+    if not isinstance(gates, dict):
+        return None
+    gate = gates.get(retailer)
+    if not isinstance(gate, dict):
+        return None
+    denominator = gate.get("denominator")
+    valid_denominator = isinstance(denominator, int) and not isinstance(denominator, bool) and denominator >= 0
+    if (
+        gate.get("state") == "pass"
+        and gate.get("claimState") == "official-complete-snapshot"
+        and gate.get("denominatorReconciled") is True
+        and valid_denominator
+        and isinstance(gate.get("snapshotID"), str)
+        and bool(gate["snapshotID"].strip())
+    ):
+        return gate
+    return None
 
 
-def _retailer_claim(records: list[dict[str, Any]], *, degraded: bool) -> tuple[str, int | None]:
-    if degraded and records:
-        return "degraded", None
+def _retailer_claim(
+    records: list[dict[str, Any]],
+    *,
+    degraded: bool,
+    coverage_gate: dict[str, Any] | None,
+) -> tuple[str, int | None, str | None]:
     buckets = Counter(_retailer_bucket(item) for item in records)
-    complete = [item for item in records if _retailer_bucket(item) == "official" and _explicit_complete(item)]
-    if complete:
-        denominators = {item["denominator"] for item in complete}
-        if len(denominators) == 1:
-            return "official-complete-snapshot", denominators.pop()
+    if degraded and records:
+        return "degraded", None, None
+    if buckets["official"] and coverage_gate is not None:
+        return "official-complete-snapshot", int(coverage_gate["denominator"]), str(coverage_gate["snapshotID"])
     if buckets["official"]:
-        return "official-partial", None
+        return "official-partial", None, None
     if buckets["observational"]:
-        return "observational-partial", None
+        return "observational-partial", None, None
     if buckets["community"]:
-        return "community-only", None
-    return "no-evidence", None
+        return "community-only", None, None
+    return "no-evidence", None, None
 
 
 def _certificate_state(cert: dict[str, Any], evaluated_at: datetime) -> str:
@@ -182,8 +185,7 @@ def build_health_report(
     statuses: Counter[str] = Counter()
     linked_retailer_ids: set[str] = set()
     linked_certificate_ids: set[str] = set()
-    conflicts = 0
-    current_ingredients = 0
+    conflicts = current_ingredients = 0
 
     for selection in selections:
         gtin = str(selection.get("gtin", ""))
@@ -206,26 +208,20 @@ def build_health_report(
         statuses[status if status in ASSESSMENT_STATUSES else "unknown"] += 1
         if selection.get("conflictFlags"):
             conflicts += 1
-        linked_retailer_ids.update(
-            item for item in selection.get("retailerEvidenceIDs", []) if isinstance(item, str)
-        )
-        linked_certificate_ids.update(
-            item for item in selection.get("certificationIDs", []) if isinstance(item, str)
-        )
+        linked_retailer_ids.update(item for item in selection.get("retailerEvidenceIDs", []) if isinstance(item, str))
+        linked_certificate_ids.update(item for item in selection.get("certificationIDs", []) if isinstance(item, str))
 
     retailer_records: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for evidence_id in sorted(linked_retailer_ids):
         item = retailer_evidence.get(evidence_id)
-        if not item:
-            continue
-        retailer = str(item.get("retailerKey", "unknown")).strip().lower() or "unknown"
-        retailer_records[retailer].append(item)
+        if item:
+            retailer = str(item.get("retailerKey", "unknown")).strip().lower() or "unknown"
+            retailer_records[retailer].append(item)
 
-    known_retailers = sorted(set(DEFAULT_RETAILERS) | set(retailer_records))
     quality_metrics = (quality or {}).get("metrics", {}) if isinstance((quality or {}).get("metrics", {}), dict) else {}
     quality_retailer_freshness = quality_metrics.get("retailerFreshnessByRetailerAndKind", {})
     retailer_health: dict[str, Any] = {}
-    for retailer in known_retailers:
+    for retailer in sorted(set(DEFAULT_RETAILERS) | set(retailer_records)):
         records = retailer_records.get(retailer, [])
         degraded = False
         if isinstance(quality_retailer_freshness, dict):
@@ -233,11 +229,17 @@ def build_health_report(
                 if isinstance(key, str) and key.split("|", 1)[0].lower() == retailer and isinstance(states, dict):
                     if states.get("stale", 0) or states.get("date-unknown", 0):
                         degraded = any(_retailer_bucket(item) == "official" for item in records)
-        claim, denominator = _retailer_claim(records, degraded=degraded)
+        claim, denominator, snapshot_id = _retailer_claim(
+            records,
+            degraded=degraded,
+            coverage_gate=_coverage_gate(quality, retailer),
+        )
         buckets = Counter(_retailer_bucket(item) for item in records)
         retailer_health[retailer] = {
             "claimState": claim,
             "denominator": denominator,
+            "completeSnapshotID": snapshot_id,
+            "coverageGatePresent": _coverage_gate(quality, retailer) is not None,
             "evidenceCounts": {key: buckets[key] for key in ("official", "observational", "community", "other")},
             "latestEvidenceAt": max(
                 (value for item in records for value in (item.get("observedAt"), item.get("retrievedAt")) if isinstance(value, str)),
@@ -267,13 +269,17 @@ def build_health_report(
             "attributionPresent": bool(source.get("attribution") or source.get("attributionText")),
         })
 
+    quality_changes = (quality or {}).get("changes", {}) if isinstance((quality or {}).get("changes"), dict) else {}
     change_summary = {
         "available": change is not None,
+        "baseline": (change or {}).get("baseline"),
         "additions": int((change or {}).get("additions", 0) or 0),
         "formulationChanges": int((change or {}).get("formulationChanges", 0) or 0),
         "removals": int((change or {}).get("removals", 0) or 0),
         "reviewQueueCount": len((change or {}).get("reviewQueue", []) or []),
         "noCompletenessClaim": (change or {}).get("noCompletenessClaim") is True if change is not None else True,
+        "previousSourceRecordCount": quality_changes.get("previousSourceRecordCount"),
+        "currentSourceRecordCount": quality_changes.get("currentSourceRecordCount"),
     }
 
     runtime = {
@@ -284,7 +290,6 @@ def build_health_report(
         "manifestDigest": None,
     }
     if benchmark:
-        # Accept only explicit scalar summaries; never embed raw benchmark/source payloads.
         runtime["sqliteBytes"] = benchmark.get("sqliteBytes") or benchmark.get("databaseBytes")
         latency = benchmark.get("queryLatencyMs")
         if isinstance(latency, dict):
@@ -292,19 +297,13 @@ def build_health_report(
         runtime["buildDurationSeconds"] = benchmark.get("buildDurationSeconds")
         runtime["manifestDigest"] = benchmark.get("manifestDigest") or benchmark.get("manifestSha256")
 
-    freshness = {
-        "formulation": quality_metrics.get("formulationFreshness", {}),
-        "retailer": quality_metrics.get("retailerFreshness", {}),
-        "certification": quality_metrics.get("certificationFreshness", {}),
-    }
-
     report: dict[str, Any] = {
         "schemaVersion": 1,
         "evaluatedAt": evaluated_at,
         "commitSha": commit_sha,
         "scope": {
             "markets": sorted(markets),
-            "retailerCompletenessRule": "explicit-denominator-reconciliation-only",
+            "retailerCompletenessRule": "reviewed-coverage-gate-and-denominator-reconciliation",
             "claimsAreEvidenceLabels": True,
         },
         "products": {
@@ -318,7 +317,11 @@ def build_health_report(
             "ingredientLanguages": dict(sorted(languages.items())),
             "conflictedSelections": conflicts,
         },
-        "freshness": freshness,
+        "freshness": {
+            "formulation": quality_metrics.get("formulationFreshness", {}),
+            "retailer": quality_metrics.get("retailerFreshness", {}),
+            "certification": quality_metrics.get("certificationFreshness", {}),
+        },
         "assessments": {
             "currentStatusCounts": dict(sorted(statuses.items())),
             "methodologyVersions": quality_metrics.get("assessmentMethodologyVersions", {}),
@@ -365,8 +368,9 @@ def validate_health_report(report: dict[str, Any]) -> None:
     for retailer, value in retailers.items():
         if not isinstance(retailer, str) or not isinstance(value, dict) or value.get("claimState") not in CLAIM_STATES:
             raise CatalogHealthError("retailer health contains an invalid claim state")
-        if value.get("claimState") == "official-complete-snapshot" and value.get("denominator") is None:
-            raise CatalogHealthError("complete retailer coverage requires an explicit denominator")
+        if value.get("claimState") == "official-complete-snapshot":
+            if value.get("denominator") is None or value.get("coverageGatePresent") is not True or not value.get("completeSnapshotID"):
+                raise CatalogHealthError("complete retailer coverage requires a passing reviewed coverage gate")
 
 
 def human_summary(report: dict[str, Any]) -> str:
@@ -396,7 +400,7 @@ def human_summary(report: dict[str, Any]) -> str:
         )
     lines += [
         "",
-        "Retailer claim states describe the evidence corpus only. They do not imply nationwide/current stock unless an explicit official complete snapshot with reconciled denominator is present.",
+        "Retailer claim states describe the evidence corpus only. They do not imply nationwide/current stock unless a separate reviewed official coverage gate passes with a reconciled denominator.",
         "",
         "## Change and runtime health",
         f"- Change summary: `{json.dumps(report['changes'], sort_keys=True)}`",

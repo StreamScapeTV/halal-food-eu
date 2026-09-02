@@ -429,19 +429,24 @@ def certification_status_report(
             )
             results.append({"certificateID": cert_id, "eligible": result["eligible"], "reasons": result["reasons"]})
         eligible_ids = sorted(item["certificateID"] for item in results if item["eligible"])
-        reasons = sorted({reason for item in results for reason in item["reasons"]})
+        certificate_reasons = sorted({reason for item in results for reason in item["reasons"]})
+        blocking_reasons: list[str] = []
         if sorted(cert_ids) != sorted(selection.get("certificationIDs", [])):
-            reasons.append("certification-selection-changed")
+            blocking_reasons.append("certification-selection-changed")
         if selection.get("conflictFlags"):
-            reasons.append("current-formulation-conflict")
-        action = "carry-forward" if eligible_ids and not reasons else "invalidate"
+            blocking_reasons.append("current-formulation-conflict")
+        if not eligible_ids:
+            blocking_reasons.extend(certificate_reasons)
+            if not certificate_reasons:
+                blocking_reasons.append("no-eligible-certification")
+        action = "carry-forward" if eligible_ids and not blocking_reasons else "invalidate"
         decisions.append({
             "gtin": selection.get("gtin"),
             "market": selection.get("market"),
             "assessmentID": assessment_id,
             "action": action,
             "eligibleCertificationIDs": eligible_ids,
-            "reasons": sorted(set(reasons)),
+            "reasons": sorted(set(certificate_reasons + blocking_reasons)),
         })
     report = {
         "schemaVersion": 1,

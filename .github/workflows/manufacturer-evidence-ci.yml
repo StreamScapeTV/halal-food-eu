@@ -1,0 +1,87 @@
+name: Manufacturer evidence CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manufacturer-evidence-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manufacturer-evidence:
+    name: Validate producer-origin formulation provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate schemas and Python tooling
+        run: |
+          set -euo pipefail
+          python3 -m json.tool Data/manufacturers/producer-provenance-v1.schema.json >/dev/null
+          python3 -m json.tool Data/manufacturers/manufacturer-target-queue-v1.schema.json >/dev/null
+          python3 -m py_compile \
+            Tools/manufacturer_evidence.py \
+            Tools/open_food_facts_acquire.py \
+            Tools/open_food_facts.py \
+            Tools/tests/test_manufacturer_evidence.py
+
+      - name: Run producer provenance and OFF regression tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_manufacturer_evidence \
+            Tools.tests.test_open_food_facts \
+            -v
+
+      - name: Prove fixture acquisition and normalized sidecars end to end
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/manufacturer-evidence"
+          mkdir -p "$ROOT/source" "$ROOT/normalized/payload" "$ROOT/change"
+          python3 Tools/open_food_facts.py acquire \
+            --output "$ROOT/source/source-records.jsonl" \
+            --metadata-output "$ROOT/source/acquisition-metadata.json" \
+            --snapshot-id manufacturer-fixture-v1 \
+            --mode fixture \
+            --retrieved-at 2026-09-02T00:00:00Z
+          python3 Tools/open_food_facts.py normalize \
+            --snapshot "$ROOT/source/source-records.jsonl" \
+            --evidence-output "$ROOT/normalized/payload/evidence.json" \
+            --selection-output "$ROOT/normalized/selection-report.json" \
+            --quality-output "$ROOT/normalized/source-quality.json" \
+            --change-output "$ROOT/change/change-report.json"
+          test -s "$ROOT/normalized/producer-provenance.json"
+          test -s "$ROOT/normalized/manufacturer-target-queue.json"
+          python3 Tools/manufacturer_evidence.py validate \
+            --provenance "$ROOT/normalized/producer-provenance.json" \
+            --target "$ROOT/normalized/manufacturer-target-queue.json"
+          ROOT="$ROOT" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["ROOT"])
+          evidence = json.loads((root / "normalized/payload/evidence.json").read_text(encoding="utf-8"))
+          provenance = json.loads((root / "normalized/producer-provenance.json").read_text(encoding="utf-8"))
+          targets = json.loads((root / "normalized/manufacturer-target-queue.json").read_text(encoding="utf-8"))
+          assert provenance["sourceKey"] == "open-food-facts"
+          assert provenance["metrics"]["confirmedProducerFormulations"] == 1
+          assert provenance["metrics"]["freshnessEvidenceGain"] == 0
+          assert evidence["assessments"] == []
+          assert evidence["reviews"] == []
+          assert all(source["sourceKey"] != "fixture-producer-org" for source in evidence["sources"])
+          reasons = {item["reason"] for item in targets["items"]}
+          assert {"producer-formulation-confirmed", "producer-provenance-candidate", "ingredients-missing"} <= reasons
+          PY

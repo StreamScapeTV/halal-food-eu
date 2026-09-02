@@ -135,21 +135,32 @@ def _full_due(
     return stamp(due), "full-cadence-due" if now >= due else "full-cadence-not-due"
 
 
-def _conditional_headers(source: dict[str, Any], accepted: dict[str, Any] | None) -> dict[str, str]:
+def _conditional_headers(
+    source: dict[str, Any],
+    source_policy: dict[str, Any],
+    accepted: dict[str, Any] | None,
+) -> dict[str, str]:
     if accepted is None:
         return {}
-    declared = source.get("conditionalMetadata", [])
-    if not isinstance(declared, list) or any(not isinstance(item, str) for item in declared):
-        raise RefreshPlanError("conditionalMetadata must be a string array")
+    requested = source.get("conditionalMetadata", [])
+    admitted = source_policy.get("conditionalRequestMetadata", [])
+    for label, values in (("conditionalMetadata", requested), ("conditionalRequestMetadata", admitted)):
+        if (
+            not isinstance(values, list)
+            or any(not isinstance(item, str) or not item for item in values)
+            or len(set(values)) != len(values)
+        ):
+            raise RefreshPlanError(f"{label} must be a unique string array")
+    supported = set(requested) & set(admitted)
     upstream = accepted.get("upstream")
     if not isinstance(upstream, dict):
         return {}
     result: dict[str, str] = {}
-    if "etag" in declared:
+    if "etag" in supported:
         value = upstream.get("etag")
         if isinstance(value, str) and value.strip():
             result["If-None-Match"] = value.strip()
-    if "last-modified" in declared or "lastModified" in declared:
+    if {"last-modified", "lastModified"} & supported:
         value = upstream.get("lastModified")
         if isinstance(value, str) and value.strip():
             result["If-Modified-Since"] = value.strip()
@@ -294,7 +305,11 @@ def build_plan(
         "fallbackReason": fallback_reason,
         "fullDueAt": due_at,
         "fullDueReason": due_reason,
-        "conditionalRequestHeaders": _conditional_headers(source, accepted) if requested_mode == "full" else {},
+        "conditionalRequestHeaders": (
+            _conditional_headers(source, source_policy, accepted)
+            if requested_mode == "full"
+            else {}
+        ),
         "deltaPredecessor": delta_predecessor,
         "targetedExecution": _targeted_plan(source, source_policy, refresh_queue) if lane == "targeted" else None,
         "acceptedSnapshotID": accepted.get("snapshotID") if accepted else None,

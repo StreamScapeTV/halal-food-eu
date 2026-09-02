@@ -11,7 +11,6 @@ import argparse
 import json
 import os
 import urllib.error
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,29 +89,41 @@ def _request(method: str, url: str, token: str, payload: dict[str, Any] | None =
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
+            raw = response.read().decode("utf-8")
+            return json.loads(raw) if raw else None
     except (urllib.error.URLError, urllib.error.HTTPError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HealthIncidentError(f"GitHub issue synchronization failed: {exc}") from exc
 
 
+def _marker_key(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    prefix = f"<!-- {MARKER_PREFIX}"
+    for line in body.splitlines():
+        if line.startswith(prefix) and line.endswith(" -->"):
+            key = line[len(prefix):-4]
+            return key or None
+    return None
+
+
 def _existing_health_issues(repository: str, token: str) -> dict[str, dict[str, Any]]:
-    query = urllib.parse.quote(f'repo:{repository} is:issue in:body "{MARKER_PREFIX}"')
-    result = _request("GET", f"https://api.github.com/search/issues?q={query}&per_page=100", token)
-    items = result.get("items", []) if isinstance(result, dict) else []
+    """List issues directly so deduplication is not subject to search-index delay."""
     existing: dict[str, dict[str, Any]] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        body = item.get("body")
-        if not isinstance(body, str):
-            continue
-        for line in body.splitlines():
-            prefix = f"<!-- {MARKER_PREFIX}"
-            if line.startswith(prefix) and line.endswith(" -->"):
-                key = line[len(prefix):-4]
-                if key:
-                    existing[key] = item
-                break
+    base = f"https://api.github.com/repos/{repository}/issues"
+    for page in range(1, 11):
+        result = _request("GET", f"{base}?state=all&per_page=100&page={page}", token)
+        if not isinstance(result, list):
+            raise HealthIncidentError("GitHub issue listing returned an unexpected payload")
+        if not result:
+            break
+        for item in result:
+            if not isinstance(item, dict) or "pull_request" in item:
+                continue
+            key = _marker_key(item.get("body"))
+            if key:
+                existing[key] = item
+        if len(result) < 100:
+            break
     return existing
 
 

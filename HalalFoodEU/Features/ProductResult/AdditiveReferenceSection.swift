@@ -66,7 +66,6 @@ struct AdditiveReferenceSection: View {
                                 .font(.caption)
                         }
                     }
-                    .accessibilityElement(children: .combine)
                 }
             } header: {
                 Text(text.string("section.additives"))

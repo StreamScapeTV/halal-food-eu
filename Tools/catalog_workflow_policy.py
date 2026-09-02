@@ -9,6 +9,7 @@ from catalog_workflow_common import ContractError
 
 ALLOWED_WRITE_PERMISSIONS = {
     "catalog-release.yml": {"attestations", "id-token"},
+    "catalog-health.yml": {"issues"},
     "configuration-health.yml": {"issues"},
     "label-sync.yml": {"issues"},
     "propose-catalog-update.yml": {"contents", "pull-requests"},

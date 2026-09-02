@@ -24,17 +24,17 @@ The initial production registry contains no accepted real certifier. Adding a re
 Certification records remain immutable evidence under specification 014. The registry does not rewrite them.
 
 - **HF-CERT-006:** `halal-certified` requires an immutable certificate ID whose `certifier`, `scheme`, `sourceKey`, GTIN, and market exactly match an accepted registry entry and the product under review.
-- **HF-CERT-007:** Automatic certified eligibility accepts only explicit exact match kinds: `exact-gtin`, `explicit-product-list`, or `exact-batch`. `name-only`, `brand-only`, `facility-only`, `logo-only`, missing, free-form, or unknown match kinds are review-only and cannot create `halal-certified`.
-- **HF-CERT-008:** A certificate supporting `halal-certified` must bind `ingredientObservationID` to the exact current formulation. Certification does not refresh or replace ingredient evidence.
-- **HF-CERT-009:** A certificate supporting `halal-certified` must declare `status=active`. Not-yet-effective, expired, revoked, suspended, `unknown`, or stale-recheck evidence cannot support a current certified assessment.
+- **HF-CERT-007:** Automatic certified eligibility accepts only explicit exact `matchBasis` values: `exact-gtin`, `explicit-product-list`, or `exact-batch`. `name-only`, `brand-only`, `facility-only`, `logo-only`, missing, free-form, or unknown match kinds are review-only and cannot create `halal-certified`.
+- **HF-CERT-008:** The approved certified-review artifact records the binding between each accepted certificate ID and the exact current `ingredientObservationID`. The resulting assessment binds that same formulation. A later selected-formulation change invalidates the assessment; certification does not refresh or replace ingredient evidence.
+- **HF-CERT-009:** Certificate activity is derived from its effective/expiry/revocation/suspension fields at the review/check instant. Not-yet-effective, expired, revoked, suspended, or otherwise ineligible evidence cannot support a current certified assessment.
 - **HF-CERT-010:** `lastCheckedAt` ages independently from formulation evidence. The accepted registry entry defines the maximum allowed recheck age for its scheme/source.
 - **HF-CERT-011:** Facility, brand, logo, and name-only evidence may remain stored for review/audit when lawful, but it must not be projected to unrelated products or used as certified status evidence.
-- **HF-CERT-012:** Certificate limitations are preserved separately from scope and are displayable offline. Limitations never broaden certified scope.
+- **HF-CERT-012:** Registry and human-review limitations remain preserved in their review artifacts. Offline certification presentation must state the scope limitation explicitly even when a source does not provide a separate certificate-limitations field; limitations never broaden certified scope.
 
 ## Invalidation and review
 
 - **HF-CERT-013:** A current `halal-certified` assessment is invalidated when none of its linked certificates remains eligible under the current registry and selected formulation.
-- **HF-CERT-014:** Deterministic invalidation reasons include registry state/review expiry, source disallowance, GTIN/market/formulation mismatch, non-exact scope, not-yet-effective/expired/revoked/suspended/unknown status, and stale recheck.
+- **HF-CERT-014:** Deterministic invalidation reasons include registry state/review expiry, source disallowance, GTIN/market/formulation mismatch, non-exact scope, not-yet-effective/expired/revoked/suspended state, and stale recheck.
 - **HF-CERT-015:** Registry/certificate invalidation emits normal immutable assessment validity events. Historical certification and assessment rows are retained.
 - **HF-CERT-016:** Certification additions, reinstatement, or a transition to a positive status still require the independent review required by HF-REVIEW-003; deterministic validation never grants a positive religious conclusion by itself.
 - **HF-CERT-017:** Current formulation conflicts continue to block positive status even when certificate evidence is otherwise eligible.
@@ -43,7 +43,7 @@ Certification records remain immutable evidence under specification 014. The reg
 
 The iOS app remains offline-first and uses the bundled catalog. It performs no certificate-network lookup during product viewing.
 
-- **HF-CERT-018:** For linked certification evidence the result UI can show certifier, scheme, certificate reference, scope, effective/expiry dates, last-checked date, source provenance, and limitations.
+- **HF-CERT-018:** For linked certification evidence the result UI shows certifier, scheme, certificate reference, scope, effective/expiry dates when available, last-checked date, source provenance, and an explicit scope/limitations notice.
 - **HF-CERT-019:** Certification presentation is subordinate to the current assessment validity state and must not imply nationwide availability, universal scholarly agreement, or broader certificate scope.
 
 ## Source and credentials boundary
@@ -53,4 +53,4 @@ The iOS app remains offline-first and uses the bundled catalog. It performs no c
 
 ## Acceptance tests
 
-Tests must cover accepted exact GTIN/formulation scope; similar-name, brand, facility and logo rejection; market/formulation mismatch; effective/expiry/revocation/suspension/unknown status; stale recheck; registry blocked/revoked/review-expired state; source disallowance; deterministic invalidation events; no hidden positive inference; and offline presentation of certificate limitations.
+Tests must cover accepted exact GTIN/formulation scope; similar-name, brand, facility and logo rejection; market/formulation mismatch; effective/expiry/revocation/suspension state; stale recheck; registry blocked/revoked/review-expired state; source disallowance; deterministic invalidation events; no hidden positive inference; and offline presentation of certificate scope limitations.

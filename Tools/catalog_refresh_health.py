@@ -70,6 +70,7 @@ def _queue_projection(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]
         "stale-ingredients",
         "changed-unreviewed",
         "certification-expiry",
+        "certification-invalidated",
         "source-or-quality-blocker",
     }
     blockers = sorted(reason for reason in reasons if reason in incident_reasons)
@@ -85,8 +86,11 @@ def _queue_projection(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]
 
 
 def _workflow_projection(status: dict[str, Any] | None) -> tuple[dict[str, Any], str | None]:
-    if status is None:
+    if status is None or status.get("available") is False:
         return {"available": False, "conclusion": None, "runId": None, "event": None, "updatedAt": None}, None
+    available = status.get("available")
+    if available not in {None, True}:
+        raise RefreshHealthError("workflow status available flag is invalid")
     conclusion = status.get("conclusion")
     if conclusion is not None and not isinstance(conclusion, str):
         raise RefreshHealthError("workflow status conclusion is invalid")

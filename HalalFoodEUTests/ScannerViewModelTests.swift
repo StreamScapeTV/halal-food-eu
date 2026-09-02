@@ -24,6 +24,7 @@ struct ScannerViewModelTests {
             }
             return false
         }
+        try await waitUntilLookupCancelled(first.rawValue, in: catalog)
 
         #expect(viewModel.lookupState == .notFound(second))
         let cancelled = await catalog.cancelledLookups
@@ -64,6 +65,18 @@ struct ScannerViewModelTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for lookup to start")
+    }
+
+    private func waitUntilLookupCancelled(
+        _ barcode: String,
+        in catalog: DelayedCatalog,
+        attempts: Int = 100
+    ) async throws {
+        for _ in 0..<attempts {
+            if await catalog.cancelledLookups.contains(barcode) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for lookup cancellation cleanup")
     }
 
     private func waitUntil(

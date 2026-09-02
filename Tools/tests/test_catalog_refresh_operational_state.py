@@ -11,6 +11,7 @@ from catalog_refresh import evaluate, promote_state
 from catalog_refresh_operational_state import (
     OperationalRefreshError,
     apply_operational_clock,
+    merge_previous_state,
     validate_operational_report,
     validate_operational_state,
 )
@@ -49,6 +50,16 @@ def evaluated(meta, *, quality=QUALITY, previous=None, at=None):
         evaluated_at=at,
     )
     return state, report
+
+
+def applied(meta, *, previous=None, quality=QUALITY):
+    state, report = evaluated(meta, previous=previous, quality=quality)
+    return apply_operational_clock(
+        state=state,
+        report=report,
+        policy=copy.deepcopy(POLICY),
+        previous=previous,
+    )
 
 
 class OperationalRefreshStateTests(unittest.TestCase):
@@ -93,6 +104,97 @@ class OperationalRefreshStateTests(unittest.TestCase):
         self.assertEqual(second_state["lastSuccessfulFullSnapshotID"], "off-2")
         self.assertEqual(second_state["nextFullDueAt"], "2026-09-16T00:00:00Z")
         self.assertTrue(second_report["noFalseFreshness"])
+
+    def test_merge_previous_uses_protected_accepted_lineage_and_newer_operational_clock(self):
+        first_state, first_report = applied(metadata())
+        accepted_first = promote_state(copy.deepcopy(POLICY), first_state)
+
+        changed_state, changed_report = applied(
+            metadata(snapshot="off-changed", retrieved="2026-09-05T00:00:00Z", digest="b" * 64),
+            previous=accepted_first,
+        )
+        accepted_changed = promote_state(copy.deepcopy(POLICY), changed_state)
+        self.assertEqual(accepted_changed["acceptedComplete"]["snapshotID"], "off-changed")
+
+        # A later successful check sees the same accepted formulation bytes and therefore
+        # advances only the operational clock. Its artifact still embeds the older
+        # accepted lineage from the run in which it was produced.
+        operational_state, _ = applied(
+            metadata(snapshot="off-unchanged", retrieved="2026-09-09T00:00:00Z", digest="b" * 64),
+            previous=accepted_changed,
+        )
+        stale_lineage_artifact = copy.deepcopy(operational_state)
+        stale_lineage_artifact["acceptedComplete"] = copy.deepcopy(accepted_first["acceptedComplete"])
+        stale_lineage_artifact["stateSha256"] = (
+            __import__("catalog_refresh_operational_state").digest_without(
+                stale_lineage_artifact,
+                "stateSha256",
+            )
+        )
+
+        merged = merge_previous_state(
+            accepted=accepted_changed,
+            operational=stale_lineage_artifact,
+        )
+        self.assertEqual(merged["acceptedComplete"]["snapshotID"], "off-changed")
+        self.assertEqual(merged["lastSuccessfulFullAcquisitionAt"], "2026-09-09T00:00:00Z")
+        self.assertEqual(merged["lastSuccessfulFullSnapshotID"], "off-unchanged")
+        self.assertEqual(merged["nextFullDueAt"], "2026-09-16T00:00:00Z")
+        self.assertIsNone(merged["candidateComplete"])
+        validate_operational_state(merged)
+
+    def test_failed_run_after_unchanged_success_preserves_latest_operational_clock(self):
+        first_state, _ = applied(metadata())
+        accepted = promote_state(copy.deepcopy(POLICY), first_state)
+        unchanged, _ = applied(
+            metadata(snapshot="off-2", retrieved="2026-09-09T00:00:00Z", digest="a" * 64),
+            previous=accepted,
+        )
+        merged = merge_previous_state(accepted=accepted, operational=unchanged)
+        partial_state, partial_report = evaluated(
+            metadata(snapshot="off-partial", retrieved="2026-09-16T00:00:00Z", digest="c" * 64, complete=False, mode="sample"),
+            previous=merged,
+        )
+        partial_state, partial_report = apply_operational_clock(
+            state=partial_state,
+            report=partial_report,
+            policy=copy.deepcopy(POLICY),
+            previous=merged,
+        )
+        self.assertEqual(partial_state["lastSuccessfulFullAcquisitionAt"], "2026-09-09T00:00:00Z")
+        self.assertEqual(partial_state["lastSuccessfulFullSnapshotID"], "off-2")
+        self.assertEqual(partial_state["nextFullDueAt"], "2026-09-16T00:00:00Z")
+        self.assertEqual(partial_report["attemptStatus"], "partial")
+
+    def test_merge_previous_keeps_newer_protected_operational_clock(self):
+        first_state, _ = applied(metadata())
+        accepted = promote_state(copy.deepcopy(POLICY), first_state)
+        newer, _ = applied(
+            metadata(snapshot="off-new", retrieved="2026-09-10T00:00:00Z", digest="b" * 64),
+            previous=accepted,
+        )
+        accepted_newer = promote_state(copy.deepcopy(POLICY), newer)
+        older_operational = copy.deepcopy(accepted)
+        merged = merge_previous_state(
+            accepted=accepted_newer,
+            operational=older_operational,
+        )
+        self.assertEqual(merged["lastSuccessfulFullAcquisitionAt"], "2026-09-10T00:00:00Z")
+        self.assertEqual(merged["lastSuccessfulFullSnapshotID"], "off-new")
+
+    def test_equal_operational_timestamp_with_different_snapshot_fails_closed(self):
+        first_state, _ = applied(metadata())
+        accepted = promote_state(copy.deepcopy(POLICY), first_state)
+        conflicting = copy.deepcopy(accepted)
+        conflicting["lastSuccessfulFullSnapshotID"] = "off-conflict"
+        conflicting["stateSha256"] = (
+            __import__("catalog_refresh_operational_state").digest_without(
+                conflicting,
+                "stateSha256",
+            )
+        )
+        with self.assertRaisesRegex(OperationalRefreshError, "different snapshots"):
+            merge_previous_state(accepted=accepted, operational=conflicting)
 
     def test_partial_attempt_preserves_previous_operational_clock(self):
         first_state, first_report = evaluated(metadata())

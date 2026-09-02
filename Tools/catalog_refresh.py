@@ -80,67 +80,114 @@ def validate_policy(policy: dict[str, Any]) -> dict[str, Any]:
         raise RefreshError("unsupported refresh policy identity")
     if not isinstance(policy["policyVersion"], str) or not SEMVER.fullmatch(policy["policyVersion"]):
         raise RefreshError("policyVersion must be semver")
+
     queue = policy["queue"]
-    if not isinstance(queue, dict) or set(queue) != {"maxEntries", "certificationDueDays", "assessmentDueDays"}:
+    expected_queue = {"maxEntries", "certificationDueDays", "assessmentDueDays"}
+    if not isinstance(queue, dict) or set(queue) != expected_queue:
         raise RefreshError("queue policy is invalid")
-    for key in queue:
-        if not isinstance(queue[key], int) or isinstance(queue[key], bool) or queue[key] < 1:
+    for key, value in queue.items():
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise RefreshError(f"queue.{key} must be positive")
+
     sources = policy["sources"]
-    if not isinstance(sources, dict) or set(sources) != {"open-food-facts", "open-prices"}:
-        raise RefreshError("v1 refresh policy must define OFF and Open Prices")
+    if not isinstance(sources, dict) or not sources:
+        raise RefreshError("refresh policy must define at least one source")
+    if not {"open-food-facts", "open-prices"}.issubset(sources):
+        raise RefreshError("v1 refresh policy must retain OFF and Open Prices")
+
+    expected_source = {
+        "adapterVersion",
+        "fullCadenceDays",
+        "targetedCadenceHours",
+        "supportedAcquisitionModes",
+        "conditionalMetadata",
+        "targetedQueue",
+    }
+    expected_target = {
+        "enabled",
+        "endpointReference",
+        "maxGtinsPerRun",
+        "batchSize",
+        "maxRequestsPerMinute",
+        "minimumRequestIntervalSeconds",
+        "fields",
+    }
     for key, source in sources.items():
-        if not isinstance(source, dict):
-            raise RefreshError(f"sources.{key} must be object")
-        expected = {
-            "adapterVersion",
-            "fullCadenceDays",
-            "targetedCadenceHours",
-            "supportedAcquisitionModes",
-            "conditionalMetadata",
-            "targetedQueue",
-        }
-        if set(source) != expected:
+        if not isinstance(source, dict) or set(source) != expected_source:
             raise RefreshError(f"sources.{key} keys mismatch")
         if not isinstance(source["adapterVersion"], str) or not SEMVER.fullmatch(source["adapterVersion"]):
             raise RefreshError(f"sources.{key}.adapterVersion invalid")
-        if not isinstance(source["fullCadenceDays"], int) or source["fullCadenceDays"] < 1:
+        if not isinstance(source["fullCadenceDays"], int) or isinstance(source["fullCadenceDays"], bool) or source["fullCadenceDays"] < 1:
             raise RefreshError(f"sources.{key}.fullCadenceDays invalid")
-        if source["supportedAcquisitionModes"] != ["full"]:
-            raise RefreshError(f"sources.{key} supports only reviewed full acquisition in v1")
+        targeted_cadence = source["targetedCadenceHours"]
+        if targeted_cadence is not None and (
+            not isinstance(targeted_cadence, int)
+            or isinstance(targeted_cadence, bool)
+            or targeted_cadence < 1
+        ):
+            raise RefreshError(f"sources.{key}.targetedCadenceHours invalid")
+        modes = source["supportedAcquisitionModes"]
+        if (
+            not isinstance(modes, list)
+            or not modes
+            or "full" not in modes
+            or any(item not in {"full", "delta"} for item in modes)
+            or len(set(modes)) != len(modes)
+        ):
+            raise RefreshError(f"sources.{key}.supportedAcquisitionModes invalid")
+        conditional = source["conditionalMetadata"]
+        if (
+            not isinstance(conditional, list)
+            or any(not isinstance(item, str) or not item for item in conditional)
+            or len(set(conditional)) != len(conditional)
+        ):
+            raise RefreshError(f"sources.{key}.conditionalMetadata invalid")
+
         target = source["targetedQueue"]
-        required_target = {
-            "enabled",
-            "endpointReference",
-            "maxGtinsPerRun",
-            "batchSize",
-            "maxRequestsPerMinute",
-            "minimumRequestIntervalSeconds",
-            "fields",
-        }
-        if not isinstance(target, dict) or set(target) != required_target:
+        if not isinstance(target, dict) or set(target) != expected_target:
             raise RefreshError(f"sources.{key}.targetedQueue invalid")
+        if not isinstance(target["enabled"], bool):
+            raise RefreshError(f"sources.{key}.targetedQueue.enabled invalid")
+        endpoint = target["endpointReference"]
+        if endpoint is not None and (not isinstance(endpoint, str) or not endpoint.startswith("https://")):
+            raise RefreshError(f"sources.{key}.targetedQueue.endpointReference invalid")
+        fields = target["fields"]
+        if (
+            not isinstance(fields, list)
+            or any(not isinstance(item, str) or not item for item in fields)
+            or len(set(fields)) != len(fields)
+        ):
+            raise RefreshError(f"sources.{key}.targetedQueue.fields invalid")
         if target["enabled"]:
+            if targeted_cadence is None:
+                raise RefreshError(f"sources.{key} targeted cadence is required when targeted queue is enabled")
+            if endpoint is None:
+                raise RefreshError(f"sources.{key} targeted endpoint reference is required")
             for field in ("maxGtinsPerRun", "batchSize", "maxRequestsPerMinute"):
-                if not isinstance(target[field], int) or target[field] < 1:
+                if not isinstance(target[field], int) or isinstance(target[field], bool) or target[field] < 1:
                     raise RefreshError(f"sources.{key}.targetedQueue.{field} invalid")
             interval = target["minimumRequestIntervalSeconds"]
-            if not isinstance(interval, (int, float)) or interval <= 0:
+            if not isinstance(interval, (int, float)) or isinstance(interval, bool) or interval <= 0:
                 raise RefreshError("targeted request interval invalid")
-            if 60.0 / interval > target["maxRequestsPerMinute"] + 1e-9:
+            if 60.0 / float(interval) > target["maxRequestsPerMinute"] + 1e-9:
                 raise RefreshError("targeted request interval exceeds declared rate limit")
             if target["batchSize"] > target["maxGtinsPerRun"]:
                 raise RefreshError("targeted batch exceeds run bound")
-        elif any(
-            target[field] != 0
-            for field in (
-                "maxGtinsPerRun",
-                "batchSize",
-                "maxRequestsPerMinute",
-                "minimumRequestIntervalSeconds",
-            )
-        ):
-            raise RefreshError(f"disabled targeted queue for {key} must have zero bounds")
+        else:
+            if endpoint is not None:
+                raise RefreshError(f"disabled targeted queue for {key} must not declare endpoint")
+            if fields:
+                raise RefreshError(f"disabled targeted queue for {key} must not declare fields")
+            if any(
+                target[field] != 0
+                for field in (
+                    "maxGtinsPerRun",
+                    "batchSize",
+                    "maxRequestsPerMinute",
+                    "minimumRequestIntervalSeconds",
+                )
+            ):
+                raise RefreshError(f"disabled targeted queue for {key} must have zero bounds")
     return policy
 
 
@@ -154,15 +201,18 @@ def _source_digest(meta: dict[str, Any]) -> str:
 def _upstream(meta: dict[str, Any]) -> dict[str, Any]:
     if isinstance(meta.get("httpMetadata"), dict):
         headers = meta["httpMetadata"]
-        return {"etag": headers.get("etag"), "lastModified": headers.get("last-modified")}
+        return {
+            "etag": headers.get("etag"),
+            "lastModified": headers.get("last-modified") or headers.get("lastModified"),
+        }
     if isinstance(meta.get("upstreamExports"), dict):
-        result = {}
+        result: dict[str, Any] = {}
         for key in sorted(meta["upstreamExports"]):
             item = meta["upstreamExports"][key]
             if isinstance(item, dict):
                 result[key] = {
                     "etag": item.get("etag"),
-                    "lastModified": item.get("lastModified"),
+                    "lastModified": item.get("lastModified") or item.get("last-modified"),
                     "sha256": item.get("sha256"),
                 }
         return result
@@ -174,6 +224,7 @@ def _attempt(
     source_key: str,
     source_policy_sha: str,
     adapter_version: str,
+    supported_modes: list[str],
     quality: dict[str, Any],
 ) -> dict[str, Any]:
     if meta.get("sourceKey") != source_key:
@@ -183,15 +234,18 @@ def _attempt(
     retrieved = meta.get("retrievedAt")
     if not isinstance(snapshot, str) or not snapshot or not isinstance(mode, str):
         raise RefreshError("acquisition identity invalid")
+    if mode not in set(supported_modes) | {"fixture", "sample"}:
+        raise RefreshError("acquisition mode is not admitted by refresh policy")
     parse_time(retrieved, "retrievedAt")
-    complete = meta.get("downloadComplete") is True and mode == "full"
     records = meta.get("recordsEmitted")
     if not isinstance(records, int) or isinstance(records, bool) or records < 0:
         raise RefreshError("recordsEmitted invalid")
     quality_status = quality.get("status")
     if not isinstance(quality_status, str):
         raise RefreshError("quality report status missing")
-    return {
+
+    complete = meta.get("downloadComplete") is True and mode in supported_modes
+    result: dict[str, Any] = {
         "snapshotID": snapshot,
         "mode": mode,
         "status": "complete" if complete else "partial",
@@ -203,27 +257,46 @@ def _attempt(
         "sourcePolicySha256": source_policy_sha,
         "qualityStatus": quality_status,
     }
+    cursor = meta.get("cursor")
+    if cursor is not None:
+        if not isinstance(cursor, str) or not cursor:
+            raise RefreshError("acquisition cursor is invalid")
+        result["cursor"] = cursor
+    cursor_expiry = meta.get("cursorExpiresAt")
+    if cursor_expiry is not None:
+        parse_time(cursor_expiry, "cursorExpiresAt")
+        result["cursorExpiresAt"] = cursor_expiry
+    predecessor = meta.get("predecessorSnapshotID")
+    if predecessor is not None:
+        if not isinstance(predecessor, str) or not predecessor:
+            raise RefreshError("predecessorSnapshotID is invalid")
+        result["predecessorSnapshotID"] = predecessor
+    return result
 
 
-def _valid_previous(
+def _validated_previous(
     previous: dict[str, Any] | None,
     source_key: str,
     market: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     if previous is None:
-        return None
+        return None, None
     if (
         previous.get("schemaVersion") != 1
         or previous.get("sourceKey") != source_key
         or previous.get("market") != market
     ):
         raise RefreshError("previous refresh state identity mismatch")
+    state_sha = previous.get("stateSha256")
+    if isinstance(state_sha, str) and SHA256.fullmatch(state_sha):
+        if state_sha != digest_without(previous, "stateSha256"):
+            raise RefreshError("previous refresh state digest mismatch")
     accepted = previous.get("acceptedComplete")
     if accepted is not None and (
         not isinstance(accepted, dict) or accepted.get("status") != "complete"
     ):
         raise RefreshError("previous acceptedComplete invalid")
-    return accepted
+    return previous, accepted
 
 
 def _queue_entries(
@@ -232,7 +305,8 @@ def _queue_entries(
     quality_policy: dict[str, Any],
     now: datetime,
     max_entries: int,
-    due_days: int,
+    assessment_due_days: int,
+    certification_due_days: int,
     change: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     selections = evidence.get("currentSelections", [])
@@ -241,6 +315,7 @@ def _queue_entries(
     certifications = evidence.get("certifications", [])
     if not all(isinstance(value, list) for value in (selections, ingredients, assessments, certifications)):
         raise RefreshError("evidence envelope refresh collections invalid")
+
     ingredient_by_id = {
         item.get("id"): item
         for item in ingredients
@@ -256,9 +331,15 @@ def _queue_entries(
         for item in certifications
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    formulation = quality_policy["freshness"]["formulation"]
-    refresh_months = formulation["refreshRecommendedMonths"]
-    stale_months = formulation["staleMonths"]
+    try:
+        formulation = quality_policy["freshness"]["formulation"]
+        refresh_months = formulation["refreshRecommendedMonths"]
+        stale_months = formulation["staleMonths"]
+    except (KeyError, TypeError) as exc:
+        raise RefreshError("quality formulation freshness policy is invalid") from exc
+    if not all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in (refresh_months, stale_months)):
+        raise RefreshError("quality formulation freshness thresholds are invalid")
+
     entries: dict[str, dict[str, Any]] = {}
 
     def add(
@@ -286,8 +367,8 @@ def _queue_entries(
         gtin = selection.get("gtin") if isinstance(selection.get("gtin"), str) else None
         market = selection.get("market") if isinstance(selection.get("market"), str) else None
         ingredient_id = selection.get("ingredientObservationID")
-        current = ingredient_by_id.get(ingredient_id) if isinstance(ingredient_id, str) else None
-        if current is None:
+        ingredient = ingredient_by_id.get(ingredient_id) if isinstance(ingredient_id, str) else None
+        if ingredient is None:
             add(
                 "missing-current-ingredients",
                 gtin,
@@ -296,7 +377,7 @@ def _queue_entries(
                 "Current product selection has no exact current ingredient observation.",
             )
         else:
-            observed = parse_time(current.get("observedAt"), "ingredient observedAt", allow_none=True)
+            observed = parse_time(ingredient.get("observedAt"), "ingredient observedAt", allow_none=True)
             if observed is None:
                 add(
                     "date-unknown-ingredients",
@@ -304,7 +385,7 @@ def _queue_entries(
                     market,
                     "high",
                     "Current ingredient formulation has no trustworthy observedAt date.",
-                    current.get("id"),
+                    ingredient.get("id"),
                 )
             elif now >= add_months(observed, stale_months):
                 add(
@@ -313,7 +394,7 @@ def _queue_entries(
                     market,
                     "high",
                     "Current ingredient formulation is beyond the accepted stale threshold.",
-                    current.get("id"),
+                    ingredient.get("id"),
                 )
             elif now >= add_months(observed, refresh_months):
                 add(
@@ -322,8 +403,9 @@ def _queue_entries(
                     market,
                     "medium",
                     "Current ingredient formulation reached the refresh-recommended threshold.",
-                    current.get("id"),
+                    ingredient.get("id"),
                 )
+
         flags = selection.get("conflictFlags")
         if isinstance(flags, list) and flags:
             add(
@@ -332,13 +414,14 @@ def _queue_entries(
                 market,
                 "high",
                 "Current selection contains unresolved conflict flags.",
-                selection.get("id"),
+                selection.get("id") if isinstance(selection.get("id"), str) else None,
             )
+
         assessment_id = selection.get("assessmentID")
         assessment = assessment_by_id.get(assessment_id) if isinstance(assessment_id, str) else None
         if assessment:
             recheck = parse_time(assessment.get("recheckAt"), "assessment recheckAt", allow_none=True)
-            if recheck is not None and recheck <= now + timedelta(days=due_days):
+            if recheck is not None and recheck <= now + timedelta(days=assessment_due_days):
                 add(
                     "assessment-recheck",
                     gtin,
@@ -356,23 +439,45 @@ def _queue_entries(
                     "Current assessment remains questionable or unknown.",
                     assessment_id,
                 )
-        certificate_ids = (
-            selection.get("certificationIDs", [])
-            if isinstance(selection.get("certificationIDs"), list)
-            else []
-        )
+
+        certificate_ids = selection.get("certificationIDs", [])
+        if not isinstance(certificate_ids, list):
+            certificate_ids = []
         for certificate_id in certificate_ids:
+            if not isinstance(certificate_id, str):
+                continue
             certificate = certificate_by_id.get(certificate_id)
             if not certificate:
                 continue
+            revoked = parse_time(certificate.get("revokedAt"), "certificate revokedAt", allow_none=True)
+            suspended = parse_time(certificate.get("suspendedAt"), "certificate suspendedAt", allow_none=True)
             expiry = parse_time(certificate.get("expiryAt"), "certificate expiryAt", allow_none=True)
-            if expiry is not None and expiry <= now + timedelta(days=due_days):
+            if (revoked is not None and revoked <= now) or (suspended is not None and suspended <= now) or (expiry is not None and expiry < now):
+                add(
+                    "certification-invalidated",
+                    gtin,
+                    market,
+                    "high",
+                    "Linked certificate is expired, revoked, or suspended and dependent assessment requires review.",
+                    certificate_id,
+                )
+            elif expiry is not None and expiry <= now + timedelta(days=certification_due_days):
                 add(
                     "certification-expiry",
                     gtin,
                     market,
                     "high",
-                    "Linked certificate is expired or approaching expiry.",
+                    "Linked certificate is approaching expiry and requires recheck.",
+                    certificate_id,
+                )
+            last_checked = parse_time(certificate.get("lastCheckedAt"), "certificate lastCheckedAt", allow_none=True)
+            if last_checked is not None and last_checked + timedelta(days=certification_due_days) <= now:
+                add(
+                    "certification-recheck",
+                    gtin,
+                    market,
+                    "medium",
+                    "Linked certificate has reached its configured recheck interval.",
                     certificate_id,
                 )
 
@@ -384,11 +489,7 @@ def _queue_entries(
                     gtin = item.get("gtin") if isinstance(item.get("gtin"), str) else None
                     market = item.get("market") if isinstance(item.get("market"), str) else None
                     evidence_id = item.get("id") if isinstance(item.get("id"), str) else None
-                    reason = (
-                        item.get("reason")
-                        if isinstance(item.get("reason"), str)
-                        else "changed evidence requires review"
-                    )
+                    reason = item.get("reason") if isinstance(item.get("reason"), str) else "changed evidence requires review"
                     add("changed-unreviewed", gtin, market, "high", reason, evidence_id)
                 elif isinstance(item, str) and item:
                     add(
@@ -421,10 +522,11 @@ def _queue_entries(
                     f"Quality blocker {item['code']} requires source/review attention.",
                     item["code"],
                 )
+
     ordered = sorted(
         entries.values(),
         key=lambda item: (
-            {"high": 0, "medium": 1, "low": 2}[item["priority"]],
+            {"high": 0, "medium": 1, "low": 2}.get(item["priority"], 3),
             item["reason"],
             item.get("market") or "",
             item.get("gtin") or "",
@@ -444,6 +546,7 @@ def _targeted(entries: list[dict[str, Any]], policy: dict[str, Any]) -> dict[str
         "identity-or-formulation-conflict",
         "ambiguous-review",
         "assessment-recheck",
+        "changed-unreviewed",
     }
     gtins = sorted(
         {
@@ -455,7 +558,7 @@ def _targeted(entries: list[dict[str, Any]], policy: dict[str, Any]) -> dict[str
         }
     )[: target["maxGtinsPerRun"]]
     size = target["batchSize"]
-    batches = [gtins[index : index + size] for index in range(0, len(gtins), size)] if size else []
+    batches = [gtins[index:index + size] for index in range(0, len(gtins), size)] if size else []
     return {
         "sourceKey": "open-food-facts",
         "enabled": target["enabled"],
@@ -473,6 +576,23 @@ def _targeted(entries: list[dict[str, Any]], policy: dict[str, Any]) -> dict[str
         "fields": target["fields"],
         "networkExecutionPerformed": False,
     }
+
+
+def _next_full_due(
+    previous_state: dict[str, Any] | None,
+    previous_accepted: dict[str, Any] | None,
+    cadence_days: int,
+    now: datetime,
+) -> datetime:
+    if previous_state is not None:
+        existing = parse_time(previous_state.get("nextFullDueAt"), "previous nextFullDueAt", allow_none=True)
+        if existing is not None:
+            return existing
+    if previous_accepted is not None and previous_accepted.get("mode") == "full":
+        retrieved = parse_time(previous_accepted.get("retrievedAt"), "accepted retrievedAt")
+        assert retrieved is not None
+        return retrieved + timedelta(days=cadence_days)
+    return now
 
 
 def evaluate(
@@ -493,6 +613,9 @@ def evaluate(
     source_key = acquisition.get("sourceKey")
     if source_key not in policy["sources"]:
         raise RefreshError("source is not admitted by refresh policy")
+    if source_policy.get("sourceKey") != source_key:
+        raise RefreshError("source policy identity mismatch")
+
     source_config = policy["sources"][source_key]
     source_policy_sha = hashlib.sha256(canonical(source_policy)).hexdigest()
     attempt = _attempt(
@@ -500,22 +623,29 @@ def evaluate(
         source_key,
         source_policy_sha,
         source_config["adapterVersion"],
+        source_config["supportedAcquisitionModes"],
         quality,
     )
-    previous_accepted = _valid_previous(previous, source_key, policy["market"])
-    eligible = attempt["status"] == "complete" and attempt["qualityStatus"] == "pass"
-    same = (
+    previous_state, previous_accepted = _validated_previous(previous, source_key, policy["market"])
+    blockers = quality.get("releaseBlockingFindings", [])
+    has_blockers = isinstance(blockers, list) and bool(blockers)
+    eligible = attempt["status"] == "complete" and attempt["qualityStatus"] == "pass" and not has_blockers
+    same = bool(
         previous_accepted is not None
-        and previous_accepted.get("snapshotID") == attempt["snapshotID"]
         and previous_accepted.get("contentSha256") == attempt["contentSha256"]
+        and previous_accepted.get("recordCount") == attempt["recordCount"]
+        and previous_accepted.get("adapterVersion") == attempt["adapterVersion"]
+        and previous_accepted.get("sourcePolicySha256") == attempt["sourcePolicySha256"]
     )
     advanced = bool(eligible and not same)
-    anchor = (
-        parse_time((attempt if eligible else previous_accepted)["retrievedAt"], "refresh anchor retrievedAt")
-        if (eligible or previous_accepted)
-        else now
+    candidate = attempt if advanced else None
+    next_due = _next_full_due(
+        previous_state,
+        previous_accepted,
+        source_config["fullCadenceDays"],
+        now,
     )
-    assert anchor is not None
+
     state = {
         "schemaVersion": 1,
         "sourceKey": source_key,
@@ -523,20 +653,22 @@ def evaluate(
         "policyVersion": policy["policyVersion"],
         "evaluatedAt": stamp(now),
         "acceptedComplete": previous_accepted,
-        "candidateComplete": attempt if eligible else None,
+        "candidateComplete": candidate,
         "lastAttempt": attempt,
-        "nextFullDueAt": stamp(anchor + timedelta(days=source_config["fullCadenceDays"])),
-        "candidateEligible": eligible,
+        "nextFullDueAt": stamp(next_due),
+        "candidateEligible": advanced,
         "candidateChangedFromAccepted": advanced,
     }
     state["stateSha256"] = digest_without(state, "stateSha256")
+
     entries = _queue_entries(
         evidence,
         quality,
         quality_policy,
         now,
         policy["queue"]["maxEntries"],
-        max(policy["queue"]["assessmentDueDays"], policy["queue"]["certificationDueDays"]),
+        policy["queue"]["assessmentDueDays"],
+        policy["queue"]["certificationDueDays"],
         change,
     )
     queue = {
@@ -547,6 +679,7 @@ def evaluate(
         "targetedExecution": _targeted(entries, policy),
     }
     queue["queueSha256"] = digest_without(queue, "queueSha256")
+
     report = {
         "schemaVersion": 1,
         "sourceKey": source_key,
@@ -555,25 +688,64 @@ def evaluate(
         "evaluatedAt": stamp(now),
         "attemptStatus": attempt["status"],
         "qualityStatus": attempt["qualityStatus"],
-        "candidateEligible": eligible,
+        "candidateEligible": advanced,
         "candidateChangedFromAccepted": advanced,
         "acceptedSnapshotID": previous_accepted.get("snapshotID") if previous_accepted else None,
-        "candidateSnapshotID": attempt.get("snapshotID") if eligible else None,
+        "candidateSnapshotID": candidate.get("snapshotID") if candidate else None,
         "queueCount": len(entries),
+        "nextFullDueAt": stamp(next_due),
+        "deletionReconciliationAllowed": bool(eligible and attempt["mode"] == "full"),
+        "noFalseFreshness": True,
     }
     report["reportSha256"] = digest_without(report, "reportSha256")
     return state, report, queue
 
 
+def promote_state(policy: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    validate_policy(policy)
+    if state.get("schemaVersion") != 1:
+        raise RefreshError("refresh state schemaVersion must be 1")
+    source_key = state.get("sourceKey")
+    if source_key not in policy["sources"] or state.get("market") != policy["market"]:
+        raise RefreshError("refresh state identity does not match policy")
+    state_sha = state.get("stateSha256")
+    if not isinstance(state_sha, str) or state_sha != digest_without(state, "stateSha256"):
+        raise RefreshError("refresh state digest mismatch")
+    candidate = state.get("candidateComplete")
+    if (
+        state.get("candidateEligible") is not True
+        or state.get("candidateChangedFromAccepted") is not True
+        or not isinstance(candidate, dict)
+        or candidate.get("status") != "complete"
+    ):
+        raise RefreshError("refresh state has no promotable complete candidate")
+
+    result = json.loads(json.dumps(state))
+    result["acceptedComplete"] = json.loads(json.dumps(candidate))
+    result["candidateComplete"] = None
+    result["candidateEligible"] = False
+    result["candidateChangedFromAccepted"] = False
+    if candidate.get("mode") == "full":
+        retrieved = parse_time(candidate.get("retrievedAt"), "candidate retrievedAt")
+        assert retrieved is not None
+        result["nextFullDueAt"] = stamp(
+            retrieved + timedelta(days=policy["sources"][source_key]["fullCadenceDays"])
+        )
+    result["stateSha256"] = digest_without(result, "stateSha256")
+    return result
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+
     validate = sub.add_parser("validate-policy")
     validate.add_argument(
         "--policy",
         type=Path,
         default=Path("Data/refresh/catalog-refresh-policy-v1.json"),
     )
+
     evaluate_parser = sub.add_parser("evaluate")
     for name in (
         "policy",
@@ -601,6 +773,7 @@ def parse_args() -> argparse.Namespace:
     evaluate_parser.add_argument("--state-output", type=Path, required=True)
     evaluate_parser.add_argument("--report-output", type=Path, required=True)
     evaluate_parser.add_argument("--queue-output", type=Path, required=True)
+
     queues = sub.add_parser("queues")
     queues.add_argument(
         "--policy",
@@ -617,6 +790,15 @@ def parse_args() -> argparse.Namespace:
     queues.add_argument("--change-report", type=Path)
     queues.add_argument("--evaluated-at", required=True)
     queues.add_argument("--output", type=Path, required=True)
+
+    promote = sub.add_parser("promote")
+    promote.add_argument(
+        "--policy",
+        type=Path,
+        default=Path("Data/refresh/catalog-refresh-policy-v1.json"),
+    )
+    promote.add_argument("--input", type=Path, required=True)
+    promote.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
 
@@ -628,6 +810,15 @@ def main() -> None:
         if args.command == "validate-policy":
             print(f"Validated catalog refresh policy {policy['policyVersion']}")
             return
+        if args.command == "promote":
+            promoted = promote_state(policy, load_json(args.input))
+            write_json(args.output, promoted)
+            print(
+                f"Promoted refresh state {promoted['sourceKey']} -> "
+                f"{promoted['acceptedComplete']['snapshotID']}"
+            )
+            return
+
         quality_policy = load_json(args.quality_policy)
         evidence = load_json(args.evidence)
         quality = load_json(args.quality_report)
@@ -640,10 +831,8 @@ def main() -> None:
                 quality_policy,
                 now,
                 policy["queue"]["maxEntries"],
-                max(
-                    policy["queue"]["assessmentDueDays"],
-                    policy["queue"]["certificationDueDays"],
-                ),
+                policy["queue"]["assessmentDueDays"],
+                policy["queue"]["certificationDueDays"],
                 load_json(args.change_report) if args.change_report else None,
             )
             output = {
@@ -657,6 +846,7 @@ def main() -> None:
             write_json(args.output, output)
             print(f"Refresh queue entries: {len(entries)}")
             return
+
         previous = load_json(args.previous_state) if args.previous_state else None
         state, report, queue = evaluate(
             policy=policy,

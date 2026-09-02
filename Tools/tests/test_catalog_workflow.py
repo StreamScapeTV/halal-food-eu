@@ -37,6 +37,7 @@ class WorkflowContractTests(unittest.TestCase):
                 "acquire",
                 "normalize-diff",
                 "quality",
+                "refresh",
                 "build",
                 "proposal",
                 "ios-validation",

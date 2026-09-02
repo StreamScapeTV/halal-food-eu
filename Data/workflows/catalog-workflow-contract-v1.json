@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.6.0",
+  "contractVersion": "1.7.0",
   "defaultMarket": "DE",
   "stages": [
     {"key":"source-policy","accepts":[],"produces":["policy-report"],"requiresCompleteInput":false,"mayWriteRepository":false},
@@ -9,10 +9,10 @@
     {"key":"quality","accepts":["normalized-evidence","change-report"],"produces":["quality-report"],"requiresCompleteInput":true,"mayWriteRepository":false},
     {"key":"refresh","accepts":["source-snapshot","normalized-evidence","change-report","quality-report"],"produces":["source-refresh-state","refresh-report","refresh-queue"],"requiresCompleteInput":false,"mayWriteRepository":false},
     {"key":"build","accepts":["normalized-evidence","quality-report","basic-exclusions"],"produces":["catalog-database","catalog-manifest","catalog-release-notes"],"requiresCompleteInput":true,"mayWriteRepository":false},
-    {"key":"proposal","accepts":["catalog-database","catalog-manifest","quality-report"],"produces":["proposal-report"],"requiresCompleteInput":true,"mayWriteRepository":true},
+    {"key":"proposal","accepts":["catalog-database","catalog-manifest","quality-report","source-refresh-state"],"produces":["proposal-report"],"requiresCompleteInput":true,"mayWriteRepository":true},
     {"key":"ios-validation","accepts":["catalog-database","catalog-manifest"],"produces":["ios-validation-report"],"requiresCompleteInput":true,"mayWriteRepository":false},
     {"key":"release","accepts":["catalog-database","catalog-manifest","quality-report","ios-validation-report"],"produces":["release-report"],"requiresCompleteInput":true,"mayWriteRepository":true},
-    {"key":"health","accepts":["quality-report","refresh-report","refresh-queue","release-report"],"produces":["health-report"],"requiresCompleteInput":false,"mayWriteRepository":true}
+    {"key":"health","accepts":["quality-report","source-refresh-state","refresh-report","refresh-queue","release-report"],"produces":["health-report"],"requiresCompleteInput":false,"mayWriteRepository":true}
   ],
   "artifactKinds": {
     "policy-report":{"maxBytes":1048576,"maxRecords":10000,"allowedRedistributionClasses":["metadata-only","redistributable"]},

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Iterator
 from urllib.parse import urlparse
 
+from manufacturer_evidence import METADATA_KEY, project_source_record
 from open_food_facts_common import (
     AdapterError,
     DEFAULT_FIXTURE,
@@ -25,7 +26,6 @@ from open_food_facts_common import (
     SOURCE_KEY,
     SourcePolicy,
     market_for_record,
-    project_source_record,
 )
 
 MAX_LINE_BYTES = 4 * 1024 * 1024
@@ -390,7 +390,7 @@ def acquire(
                 },
             }
             destination.write(
-                json.dumps({"_hfeu_open_food_facts_metadata": metadata}, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+                json.dumps({METADATA_KEY: metadata}, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
             )
         temp_output.replace(output)
         return metadata

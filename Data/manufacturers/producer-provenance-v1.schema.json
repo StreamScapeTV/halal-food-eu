@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscapetv.github.io/halal-food-eu/schema/producer-provenance-v1.json",
+  "title": "Halal Food EU producer provenance sidecar v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceKey", "snapshotID", "generatedAt", "metrics", "records", "limitations"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "sourceKey": {"const": "open-food-facts"},
+    "snapshotID": {"type": "string", "minLength": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectedProducts", "ingredientObservations", "confirmedProducerFormulations", "producerProvenanceCandidates", "uniqueProducerIDs", "confirmedWithSourceModifiedAt", "freshnessEvidenceGain"],
+      "properties": {
+        "selectedProducts": {"type": "integer", "minimum": 0},
+        "ingredientObservations": {"type": "integer", "minimum": 0},
+        "confirmedProducerFormulations": {"type": "integer", "minimum": 0},
+        "producerProvenanceCandidates": {"type": "integer", "minimum": 0},
+        "uniqueProducerIDs": {"type": "integer", "minimum": 0},
+        "confirmedWithSourceModifiedAt": {"type": "integer", "minimum": 0},
+        "freshnessEvidenceGain": {"const": 0}
+      }
+    },
+    "records": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/record"}
+    },
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "manufacturerSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceID", "fields"],
+      "properties": {
+        "sourceID": {"type": "string", "minLength": 1},
+        "sourceName": {"type": "string", "minLength": 1},
+        "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "importedAt": {"type": "string", "format": "date-time"},
+        "sourceLicence": {"type": "string", "minLength": 1},
+        "sourceLicenceURL": {"type": "string", "pattern": "^https://"}
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetEvidenceID", "targetType", "gtin", "market", "sourceRecordID", "fieldName", "fieldValueSha256", "producerID", "detectionBasis", "manufacturerSources", "limitations"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^hfeu:producer-provenance:sha256:[0-9a-f]{64}$"},
+        "targetEvidenceID": {"type": "string", "pattern": "^hfeu:[a-z0-9-]+:sha256:[0-9a-f]{64}$"},
+        "targetType": {"const": "ingredient"},
+        "gtin": {"type": "string", "pattern": "^[0-9]{14}$"},
+        "market": {"type": "string", "pattern": "^[A-Z]{2}$"},
+        "sourceRecordID": {"type": "string", "minLength": 1},
+        "sourceRevision": {"type": "string", "minLength": 1},
+        "fieldName": {"type": "string", "minLength": 1},
+        "fieldValueSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "producerID": {"type": "string", "minLength": 1},
+        "detectionBasis": {"const": "owner-field-exact"},
+        "sourceModifiedAt": {"type": "string", "format": "date-time"},
+        "manufacturerSources": {"type": "array", "items": {"$ref": "#/$defs/manufacturerSource"}},
+        "limitations": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

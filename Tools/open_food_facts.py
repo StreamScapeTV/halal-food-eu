@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 
+import manufacturer_evidence
 import open_food_facts_common as common
 from open_food_facts_acquire import (
     MAX_DEFAULT_COMPRESSED_BYTES,
@@ -129,6 +130,18 @@ def main() -> None:
     _write_json(args.selection_output, reports["selection"])
     _write_json(args.quality_output, reports["quality"])
     _write_json(args.change_output, changes)
+
+    # Producer provenance remains a workflow-side audit sidecar. The normalized
+    # evidence handoff stays digest-bound only to payload/evidence.json.
+    producer_provenance, manufacturer_targets = manufacturer_evidence.analyze(
+        snapshot_path=args.snapshot,
+        evidence_path=args.evidence_output,
+        change_report_path=args.change_output,
+    )
+    artifact_root = args.evidence_output.parent.parent
+    _write_json(artifact_root / "producer-provenance.json", producer_provenance)
+    _write_json(artifact_root / "manufacturer-target-queue.json", manufacturer_targets)
+
     print(
         json.dumps(
             {
@@ -138,6 +151,8 @@ def main() -> None:
                 "basicExcluded": reports["selection"]["report"]["excludedBasicProducts"],
                 "invalidExcluded": reports["selection"]["report"]["excludedInvalidRecords"],
                 "formulationChanges": changes["formulationChanges"],
+                "confirmedProducerFormulations": producer_provenance["metrics"]["confirmedProducerFormulations"],
+                "producerProvenanceCandidates": producer_provenance["metrics"]["producerProvenanceCandidates"],
             },
             sort_keys=True,
             separators=(",", ":"),

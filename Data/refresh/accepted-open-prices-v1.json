@@ -5,10 +5,12 @@
   "candidateEligible": false,
   "evaluatedAt": "2026-09-02T00:00:00Z",
   "lastAttempt": null,
+  "lastSuccessfulFullAcquisitionAt": null,
+  "lastSuccessfulFullSnapshotID": null,
   "market": "DE",
   "nextFullDueAt": "2026-09-02T00:00:00Z",
   "policyVersion": "1.0.0",
   "schemaVersion": 1,
   "sourceKey": "open-prices",
-  "stateSha256": "db6cb1ec4ec1317d06c9dc0f44354bc118d8452a751a3845bfd1f7fa5e36a841"
+  "stateSha256": "7eae22c283a2772bf2bc43e1629b6c82cbe905d72f667641e59bbcb03691d0a7"
 }

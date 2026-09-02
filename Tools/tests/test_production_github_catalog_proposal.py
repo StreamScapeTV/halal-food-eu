@@ -169,6 +169,8 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         serialized_writes = json.dumps(client.posts + client.puts, sort_keys=True)
         self.assertNotIn("catalog.sqlite3", serialized_writes)
         self.assertNotIn("HalalFoodEU/Resources", serialized_writes)
+        for path in proposal_module.REFRESH_STATE_PATHS:
+            self.assertNotIn(path, serialized_writes)
 
     def test_same_logical_catalog_as_accepted_main_creates_no_branch_or_pr(self) -> None:
         accepted = self._receipt()
@@ -236,6 +238,28 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertEqual(client.puts, [])
         self.assertEqual(client.posts, [])
 
+    def test_refresh_promoted_existing_branch_reuses_open_pr_without_write(self) -> None:
+        receipt = self._receipt()
+        promoted_paths = [proposal_module.RECEIPT_PATH, *sorted(proposal_module.REFRESH_STATE_PATHS)]
+        client = FakeClient(
+            branch_exists=True,
+            branch_receipt=self._bytes(receipt),
+            compare_files=promoted_paths,
+            pull=41,
+        )
+        result = proposal_module.materialize(
+            client=client,
+            repository="StreamScapeTV/halal-food-eu",
+            base_ref="main",
+            base_sha="a" * 40,
+            receipt=receipt,
+            proposal=self._proposal(),
+        )
+        self.assertEqual(result["pullRequest"], 41)
+        self.assertFalse(result["unchanged"])
+        self.assertEqual(client.puts, [])
+        self.assertEqual(client.posts, [])
+
     def test_existing_branch_with_different_receipt_fails_closed(self) -> None:
         client = FakeClient(branch_exists=True, branch_receipt=b"{}\n")
         with self.assertRaisesRegex(proposal_module.ProposalMutationError, "different release receipt"):
@@ -248,9 +272,21 @@ class GitHubCatalogProposalTests(unittest.TestCase):
                 proposal=self._proposal(),
             )
 
-    def test_branch_with_any_extra_path_fails_closed(self) -> None:
+    def test_branch_with_any_unadmitted_extra_path_fails_closed(self) -> None:
         client = FakeClient(compare_files=[proposal_module.RECEIPT_PATH, "README.md"])
-        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "outside the release receipt"):
+        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "outside admitted proposal paths"):
+            proposal_module.materialize(
+                client=client,
+                repository="StreamScapeTV/halal-food-eu",
+                base_ref="main",
+                base_sha="a" * 40,
+                receipt=self._receipt(),
+                proposal=self._proposal(),
+            )
+
+    def test_branch_with_only_refresh_state_and_no_receipt_fails_closed(self) -> None:
+        client = FakeClient(compare_files=[next(iter(proposal_module.REFRESH_STATE_PATHS))])
+        with self.assertRaisesRegex(proposal_module.ProposalMutationError, "outside admitted proposal paths"):
             proposal_module.materialize(
                 client=client,
                 repository="StreamScapeTV/halal-food-eu",
@@ -275,11 +311,13 @@ class GitHubCatalogProposalTests(unittest.TestCase):
         self.assertIsNone(result["pullRequest"])
         self.assertEqual(client.posts, [])
 
-    def test_proposal_body_truthfully_requires_review(self) -> None:
+    def test_proposal_body_truthfully_requires_review_and_describes_refresh_companion(self) -> None:
         title, body = proposal_module.proposal_copy(self._receipt(), self._proposal())
         self.assertIn("Catalog update 1.2.0", title)
         self.assertIn("never auto-merged", body)
         self.assertIn("not committed", body)
+        self.assertIn("fixed accepted-source state checkpoints", body)
+        self.assertIn("raw source data", body)
         self.assertIn("53774", body)
         self.assertIn("Logical catalog SHA-256", body)
         self.assertIn("## Release review summary", body)

@@ -7,6 +7,7 @@ reviewed registry data; it never decides that a new real certifier is acceptable
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import re
@@ -24,8 +25,6 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MARKET_RE = re.compile(r"^[A-Z]{2}$")
 REGISTRY_STATES = {"accepted", "review-required", "blocked", "revoked"}
 EXACT_MATCH_KINDS = {"exact-gtin", "explicit-product-list", "exact-batch"}
-QUALIFYING_SCOPE_KINDS = {"product", "product-list", "batch"}
-CERTIFICATE_STATUSES = {"active", "expired", "revoked", "suspended", "unknown"}
 
 
 class RegistryError(ValueError):
@@ -198,6 +197,25 @@ def registry_entry(
     return entry, reasons
 
 
+def _binding_reasons(
+    certification: dict[str, Any],
+    *, ingredient_observation_id: str, binding: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(binding, dict):
+        return ["certificate-formulation-binding-missing"]
+    expected = {"certificationID", "ingredientObservationID", "matchBasis"}
+    if set(binding) != expected:
+        return ["certificate-formulation-binding-invalid"]
+    reasons: list[str] = []
+    if binding.get("certificationID") != certification.get("id"):
+        reasons.append("certificate-binding-id-mismatch")
+    if binding.get("ingredientObservationID") != ingredient_observation_id:
+        reasons.append("certificate-formulation-mismatch")
+    if binding.get("matchBasis") != certification.get("matchBasis"):
+        reasons.append("certificate-binding-match-basis-mismatch")
+    return reasons
+
+
 def certificate_eligibility(
     certification: dict[str, Any],
     registry: dict[str, Any],
@@ -206,11 +224,12 @@ def certificate_eligibility(
     market: str,
     ingredient_observation_id: str,
     at: datetime,
+    binding: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Return deterministic fail-closed eligibility without creating a halal ruling."""
     entry, reasons = registry_entry(registry, certification, at=at)
     if entry is None:
-        return {"eligible": False, "reasons": reasons, "registryEntry": None}
+        return {"eligible": False, "reasons": reasons, "registryEntry": None, "derivedStatus": "unknown"}
 
     if certification.get("gtin") != gtin:
         reasons.append("certificate-gtin-mismatch")
@@ -225,13 +244,11 @@ def certificate_eligibility(
     match_basis = certification.get("matchBasis")
     if match_basis not in EXACT_MATCH_KINDS or match_basis not in entry["allowedMatchKinds"]:
         reasons.append("certificate-match-not-exact")
-    scope_kind = certification.get("scopeKind")
-    if scope_kind not in QUALIFYING_SCOPE_KINDS:
-        reasons.append("certificate-scope-not-product-specific")
-    if certification.get("ingredientObservationID") != ingredient_observation_id:
-        reasons.append("certificate-formulation-mismatch")
-    if certification.get("status") != "active":
-        reasons.append("certificate-status-not-active")
+    reasons.extend(_binding_reasons(
+        certification,
+        ingredient_observation_id=ingredient_observation_id,
+        binding=binding,
+    ))
 
     for field in ("certificateReference", "scope", "sourceRecordID", "lastCheckedAt"):
         if not isinstance(certification.get(field), str) or not certification[field].strip():
@@ -240,17 +257,22 @@ def certificate_eligibility(
     if not isinstance(evidence_hash, str) or not SHA256_RE.fullmatch(evidence_hash):
         reasons.append("certificate-evidence-hash-missing")
 
+    derived_status = "active"
     effective = certification.get("effectiveAt")
     expiry = certification.get("expiryAt")
     revoked = certification.get("revokedAt")
     suspended = certification.get("suspendedAt")
     if effective is not None and _timestamp(effective, "certification.effectiveAt") > at:
+        derived_status = "not-yet-effective"
         reasons.append("certificate-not-yet-effective")
     if expiry is not None and at >= _timestamp(expiry, "certification.expiryAt"):
+        derived_status = "expired"
         reasons.append("certificate-expired")
     if revoked is not None and _timestamp(revoked, "certification.revokedAt") <= at:
+        derived_status = "revoked"
         reasons.append("certificate-revoked")
     if suspended is not None and _timestamp(suspended, "certification.suspendedAt") <= at:
+        derived_status = "suspended"
         reasons.append("certificate-suspended")
 
     checked = certification.get("lastCheckedAt")
@@ -269,7 +291,95 @@ def certificate_eligibility(
             "schemeKey": entry["schemeKey"],
             "registryVersion": registry["registryVersion"],
         },
+        "derivedStatus": derived_status,
     }
+
+
+def complete_review_with_registry(
+    *,
+    report: dict[str, Any],
+    methodology: dict[str, Any],
+    review_input: dict[str, Any],
+    certifications: list[dict[str, Any]],
+    registry: dict[str, Any],
+) -> dict[str, Any]:
+    """Gate certified reviews through the canonical registry before core review materialization."""
+    from halal_methodology_core import MethodologyError, complete_review
+
+    if review_input.get("decision") != "halal-certified":
+        return complete_review(
+            report=report,
+            methodology=methodology,
+            review_input=review_input,
+            certifications=certifications,
+        )
+    validate_registry(registry)
+    ingredient_id = report.get("ingredientObservationID")
+    if not isinstance(ingredient_id, str) or not ingredient_id:
+        raise MethodologyError("halal-certified requires exact current formulation evidence")
+    reviewed_at = _timestamp(review_input.get("reviewedAt"), "reviewedAt")
+    eligible: list[dict[str, Any]] = []
+    bindings: list[dict[str, str]] = []
+    entries: list[dict[str, Any]] = []
+    rejected_reasons: set[str] = set()
+    for certification in certifications:
+        if not isinstance(certification, dict) or not isinstance(certification.get("id"), str):
+            continue
+        binding = {
+            "certificationID": certification["id"],
+            "ingredientObservationID": ingredient_id,
+            "matchBasis": str(certification.get("matchBasis", "")),
+        }
+        result = certificate_eligibility(
+            certification,
+            registry,
+            gtin=str(report.get("gtin", "")),
+            market=str(report.get("market", "")),
+            ingredient_observation_id=ingredient_id,
+            at=reviewed_at,
+            binding=binding,
+        )
+        if result["eligible"]:
+            eligible.append(certification)
+            bindings.append(binding)
+            entry = next(
+                item for item in registry["entries"]
+                if item["certifierKey"] == result["registryEntry"]["certifierKey"]
+                and item["schemeKey"] == result["registryEntry"]["schemeKey"]
+            )
+            entries.append(entry)
+        else:
+            rejected_reasons.update(result["reasons"])
+    if not eligible:
+        suffix = f": {', '.join(sorted(rejected_reasons))}" if rejected_reasons else ""
+        raise MethodologyError(
+            "halal-certified requires current exact-scope certification from the accepted registry" + suffix
+        )
+
+    transient_methodology = copy.deepcopy(methodology)
+    transient_methodology["certificationPolicy"]["acceptedCertifiers"] = [
+        {
+            "certifier": entry["certifier"],
+            "scheme": entry["scheme"],
+            "markets": list(entry["markets"]),
+            "reviewedAt": entry["reviewedAt"],
+            "expiresAt": entry["nextReviewAt"],
+        }
+        for entry in entries
+    ]
+    result = complete_review(
+        report=report,
+        methodology=transient_methodology,
+        review_input=review_input,
+        certifications=eligible,
+    )
+    artifact = result["reviewArtifact"]
+    artifact.pop("reviewArtifactSha256", None)
+    artifact["certifierRegistryVersion"] = registry["registryVersion"]
+    artifact["certifierRegistrySha256"] = digest(registry)
+    artifact["certificationBindings"] = sorted(bindings, key=lambda item: item["certificationID"])
+    artifact["reviewArtifactSha256"] = digest(artifact)
+    return result
 
 
 def certification_status_report(
@@ -303,6 +413,11 @@ def certification_status_report(
             if cert is None:
                 results.append({"certificateID": cert_id, "eligible": False, "reasons": ["certificate-record-missing"]})
                 continue
+            binding = {
+                "certificationID": cert_id,
+                "ingredientObservationID": assessment.get("ingredientObservationID"),
+                "matchBasis": cert.get("matchBasis"),
+            }
             result = certificate_eligibility(
                 cert,
                 registry,
@@ -310,6 +425,7 @@ def certification_status_report(
                 market=str(selection.get("market", "")),
                 ingredient_observation_id=str(ingredient_id or ""),
                 at=at,
+                binding=binding,
             )
             results.append({"certificateID": cert_id, "eligible": result["eligible"], "reasons": result["reasons"]})
         eligible_ids = sorted(item["certificateID"] for item in results if item["eligible"])
@@ -337,6 +453,35 @@ def certification_status_report(
     }
     report["statusReportSha256"] = digest(report)
     return report
+
+
+def merge_status_into_migration(
+    migration: dict[str, Any], certification_status: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge certification invalidation into the normal methodology migration decision set."""
+    result = copy.deepcopy(migration)
+    certification_by_assessment = {
+        item["assessmentID"]: item
+        for item in certification_status.get("decisions", [])
+        if isinstance(item, dict) and isinstance(item.get("assessmentID"), str)
+    }
+    for decision in result.get("decisions", []):
+        if not isinstance(decision, dict):
+            continue
+        certification = certification_by_assessment.get(decision.get("assessmentID"))
+        if certification is None or certification.get("action") != "invalidate":
+            continue
+        reasons = set(decision.get("reasons", []))
+        reasons.update(certification.get("reasons", []))
+        decision["reasons"] = sorted(reasons)
+        decision["action"] = "invalidate"
+    result["invalidated"] = sum(item.get("action") == "invalidate" for item in result.get("decisions", []) if isinstance(item, dict))
+    result["carriedForward"] = sum(item.get("action") == "carry-forward" for item in result.get("decisions", []) if isinstance(item, dict))
+    result["certifierRegistryVersion"] = certification_status["registryVersion"]
+    result["certificationEvaluatedAt"] = certification_status["evaluatedAt"]
+    result.pop("migrationSha256", None)
+    result["migrationSha256"] = digest(result)
+    return result
 
 
 def validity_events_from_status_report(report: dict[str, Any]) -> list[dict[str, Any]]:

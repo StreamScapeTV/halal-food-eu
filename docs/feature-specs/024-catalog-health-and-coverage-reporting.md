@@ -9,7 +9,7 @@ Catalog health reports make evidence coverage, freshness, source state, review b
 
 ## Canonical artifacts
 
-- **HF-HEALTH-001:** Every catalog proposal emits a machine-readable `catalog-health.json` and a human-readable `catalog-health.md` derived from the same exact evidence/quality inputs and repository revision.
+- **HF-HEALTH-001:** Every catalog proposal emits a machine-readable `catalog-health.json` and a human-readable `catalog-health.md` derived from the same exact evidence/quality inputs and repository revision. `Data/health/catalog-health-v1.schema.json` is the versioned interchange schema.
 - **HF-HEALTH-002:** Health output is deterministic for fixed inputs and includes a canonical SHA-256 digest. It contains aggregate/public metadata only; raw confidential payloads, credentials, personal submission data, and source-prohibited content are excluded.
 - **HF-HEALTH-003:** Health reporting is a projection over accepted evidence/quality authorities. It may expose release blockers and incident identities but must not independently assign halal status, approve sources, admit certifiers, or alter evidence.
 
@@ -17,7 +17,7 @@ Catalog health reports make evidence coverage, freshness, source state, review b
 
 - **HF-HEALTH-004:** Reports distinguish current product selections from current exact ingredient coverage. Missing ingredient evidence remains visible and cannot count as covered.
 - **HF-HEALTH-005:** Reports expose current selection counts by market, brand, category, and source where those dimensions exist, plus ingredient language, conflicts, and the accepted formulation freshness buckets.
-- **HF-HEALTH-006:** Change metrics separately expose additions, formulation changes, removals, and review-queue size. Record count alone is never presented as proof of useful coverage.
+- **HF-HEALTH-006:** Change metrics separately expose additions, formulation changes, removals, review-queue size, and available accepted before/after source counts. Record count alone is never presented as proof of useful coverage.
 
 ## Halal review and certification health
 
@@ -37,9 +37,9 @@ Allowed retailer claim states are:
 - `degraded`
 
 - **HF-HEALTH-010:** REWE, Lidl, and future retailer metrics remain separate. Official listing evidence, dated retailer observations, community evidence, and unknown/other evidence are counted independently.
-- **HF-HEALTH-011:** `official-complete-snapshot` is allowed only from explicit official evidence that carries a reviewed complete-snapshot claim, a non-negative denominator, and successful denominator reconciliation. The presence of official product rows alone yields at most `official-partial`.
+- **HF-HEALTH-011:** `official-complete-snapshot` requires both official product evidence and a separate passing reviewed retailer-coverage gate containing the exact complete snapshot ID, a non-negative denominator, and successful denominator reconciliation. Fields on an individual retailer-evidence row cannot create a completeness claim; official rows without the separate gate yield at most `official-partial`.
 - **HF-HEALTH-012:** A previously strong official claim becomes `degraded` when its accepted freshness/health evidence is stale or otherwise degraded. A degraded report does not retain a completeness denominator as a current claim.
-- **HF-HEALTH-013:** Human-readable reports repeat that retailer claim states describe the evidence corpus and do not imply nationwide/current stock unless the explicit complete-snapshot gate is satisfied.
+- **HF-HEALTH-013:** Human-readable reports repeat that retailer claim states describe the evidence corpus and do not imply nationwide/current stock unless the separate reviewed complete-snapshot gate is satisfied.
 
 ## Source and runtime health
 
@@ -55,4 +55,4 @@ Allowed retailer claim states are:
 
 ## Acceptance tests
 
-Tests cover deterministic digesting, ingredient coverage versus product count, assessment separation, REWE/Lidl evidence separation, observational and official-partial claims, explicit denominator/reconciliation requirement for complete claims, degraded official evidence, certificate state/unmatched counts, absence of guessed runtime metrics, and human completeness wording.
+Tests cover deterministic digesting, ingredient coverage versus product count, assessment separation, REWE/Lidl evidence separation, observational and official-partial claims, separate reviewed coverage-gate plus denominator/reconciliation requirements for complete claims, degraded official evidence, certificate state/unmatched counts, before/after source counts, absence of guessed runtime metrics, and human completeness wording.

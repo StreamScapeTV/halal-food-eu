@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from catalog_refresh import RefreshError, digest_without, promote_state, validate_policy
+from catalog_refresh_operational_state import OperationalRefreshError, validate_operational_state
 from github_catalog_proposal import RECEIPT_PATH, GitHubClient
 from production_catalog_release_input import ReleaseInputError, validate_release_input
 
@@ -84,10 +85,14 @@ def _decode_json(value: Any, label: str) -> dict[str, Any]:
     return decoded
 
 
-def _validate_state_digest(state: dict[str, Any], label: str) -> None:
+def _validate_state(state: dict[str, Any], label: str) -> None:
     digest = state.get("stateSha256")
     if not isinstance(digest, str) or digest != digest_without(state, "stateSha256"):
         raise RefreshStateMutationError(f"{label} state digest mismatch")
+    try:
+        validate_operational_state(state)
+    except OperationalRefreshError as exc:
+        raise RefreshStateMutationError(f"{label} operational state invalid: {exc}") from exc
 
 
 def materialize(
@@ -107,7 +112,7 @@ def materialize(
     if receipt["reviewedSourceCommit"] != base_sha:
         raise RefreshStateMutationError("refresh promotion base differs from reviewed catalog source commit")
 
-    _validate_state_digest(candidate_state, "candidate")
+    _validate_state(candidate_state, "candidate")
     if candidate_state.get("sourceKey") != source_key or candidate_state.get("market") != policy.get("market"):
         raise RefreshStateMutationError("candidate refresh state identity differs from release input")
     candidate = candidate_state.get("candidateComplete")
@@ -118,18 +123,21 @@ def materialize(
         or candidate.get("snapshotID") != receipt["snapshotId"]
     ):
         raise RefreshStateMutationError("candidate refresh state does not bind the reviewed catalog snapshot")
+    if candidate.get("mode") == "full":
+        if candidate_state.get("lastSuccessfulFullAcquisitionAt") != candidate.get("retrievedAt"):
+            raise RefreshStateMutationError("candidate full acquisition clock does not match reviewed snapshot")
+        if candidate_state.get("lastSuccessfulFullSnapshotID") != candidate.get("snapshotID"):
+            raise RefreshStateMutationError("candidate full acquisition snapshot clock does not match reviewed snapshot")
 
     base_state_response = client.get_optional(_content_path(state_path, base_sha))
     if base_state_response is None:
         raise RefreshStateMutationError("protected base refresh state is missing")
     base_state = _decode_json(base_state_response, "protected base refresh state")
-    _validate_state_digest(base_state, "protected base")
+    _validate_state(base_state, "protected base")
     if base_state.get("sourceKey") != source_key or base_state.get("market") != policy.get("market"):
         raise RefreshStateMutationError("protected base refresh state identity mismatch")
     if candidate_state.get("acceptedComplete") != base_state.get("acceptedComplete"):
         raise RefreshStateMutationError("candidate was not evaluated against protected accepted source lineage")
-    if candidate_state.get("nextFullDueAt") != base_state.get("nextFullDueAt"):
-        raise RefreshStateMutationError("candidate changed the accepted full-refresh clock before promotion")
 
     accepted_receipt_response = client.get_optional(_content_path(RECEIPT_PATH, base_sha))
     if accepted_receipt_response is not None:
@@ -155,7 +163,8 @@ def materialize(
 
     try:
         promoted = promote_state(policy, candidate_state)
-    except RefreshError as exc:
+        validate_operational_state(promoted)
+    except (RefreshError, OperationalRefreshError) as exc:
         raise RefreshStateMutationError(f"candidate refresh promotion failed: {exc}") from exc
     desired = _json_bytes(promoted)
 

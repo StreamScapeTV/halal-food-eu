@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch aggregate status for the trusted scheduled catalog refresh workflow."""
+"""Fetch source-specific status for the trusted scheduled catalog refresh workflow."""
 from __future__ import annotations
 
 import argparse
@@ -42,17 +42,31 @@ def _request(url: str, token: str) -> dict[str, Any]:
     return value
 
 
-def latest_relevant_run(payload: dict[str, Any]) -> dict[str, Any]:
+def _valid_source_key(source_key: str) -> str:
+    if not source_key or any(char not in "abcdefghijklmnopqrstuvwxyz0123456789-." for char in source_key):
+        raise WorkflowStatusError("source key is invalid")
+    return source_key
+
+
+def _display_title(source_key: str) -> str:
+    return f"Catalog refresh {source_key}"
+
+
+def latest_relevant_run(payload: dict[str, Any], source_key: str) -> dict[str, Any]:
+    source_key = _valid_source_key(source_key)
     runs = payload.get("workflow_runs")
     if not isinstance(runs, list):
         raise WorkflowStatusError("workflow_runs must be an array")
     eligible = []
+    expected_title = _display_title(source_key)
     for run in runs:
         if not isinstance(run, dict):
             continue
         if run.get("head_branch") != "main":
             continue
         if run.get("event") not in {"schedule", "workflow_dispatch"}:
+            continue
+        if run.get("display_title") != expected_title:
             continue
         run_id = run.get("id")
         if not isinstance(run_id, int):
@@ -63,6 +77,7 @@ def latest_relevant_run(payload: dict[str, Any]) -> dict[str, Any]:
             "schemaVersion": 1,
             "available": False,
             "workflow": "scheduled-catalog-refresh.yml",
+            "sourceKey": source_key,
             "runId": None,
             "event": None,
             "status": None,
@@ -82,6 +97,7 @@ def latest_relevant_run(payload: dict[str, Any]) -> dict[str, Any]:
         "schemaVersion": 1,
         "available": True,
         "workflow": "scheduled-catalog-refresh.yml",
+        "sourceKey": source_key,
         "runId": str(latest["id"]),
         "event": latest.get("event") if isinstance(latest.get("event"), str) else None,
         "status": latest.get("status") if isinstance(latest.get("status"), str) else None,
@@ -92,17 +108,18 @@ def latest_relevant_run(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def fetch_status(*, repository: str, workflow: str, token: str) -> dict[str, Any]:
+def fetch_status(*, repository: str, workflow: str, source_key: str, token: str) -> dict[str, Any]:
     if "/" not in repository or repository.startswith("/") or repository.endswith("/"):
         raise WorkflowStatusError("repository must be owner/name")
     if not workflow or "/" in workflow or ".." in workflow:
         raise WorkflowStatusError("workflow must be a workflow filename")
+    source_key = _valid_source_key(source_key)
     encoded = urllib.parse.quote(workflow, safe="")
     url = (
         f"https://api.github.com/repos/{repository}/actions/workflows/{encoded}/runs"
-        "?branch=main&per_page=20"
+        "?branch=main&per_page=40"
     )
-    result = latest_relevant_run(_request(url, token))
+    result = latest_relevant_run(_request(url, token), source_key)
     result["workflow"] = workflow
     return result
 
@@ -116,6 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--workflow", default="scheduled-catalog-refresh.yml")
+    parser.add_argument("--source-key", required=True)
     parser.add_argument("--token-env", default="GITHUB_TOKEN")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
@@ -127,11 +145,13 @@ def main() -> None:
         result = fetch_status(
             repository=args.repository,
             workflow=args.workflow,
+            source_key=args.source_key,
             token=os.environ.get(args.token_env, ""),
         )
         write_json(args.output, result)
         print(
-            f"Scheduled refresh status: available={str(result['available']).lower()} "
+            f"Scheduled refresh status: source={result['sourceKey']} "
+            f"available={str(result['available']).lower()} "
             f"conclusion={result['conclusion']} run={result['runId']}"
         )
     except WorkflowStatusError as exc:

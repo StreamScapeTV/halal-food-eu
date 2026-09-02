@@ -1,0 +1,253 @@
+name: Catalog refresh state
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      source_artifact_name:
+        required: true
+        type: string
+      normalized_artifact_name:
+        required: true
+        type: string
+      change_artifact_name:
+        required: true
+        type: string
+      quality_artifact_name:
+        required: true
+        type: string
+    outputs:
+      state_artifact_name:
+        value: ${{ jobs.refresh.outputs.state_artifact_name }}
+      report_artifact_name:
+        value: ${{ jobs.refresh.outputs.report_artifact_name }}
+      queue_artifact_name:
+        value: ${{ jobs.refresh.outputs.queue_artifact_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      state_artifact_name: ${{ steps.names.outputs.state_artifact_name }}
+      report_artifact_name: ${{ steps.names.outputs.report_artifact_name }}
+      queue_artifact_name: ${{ steps.names.outputs.queue_artifact_name }}
+    steps:
+      - name: Check out trusted workflow code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download exact same-run refresh inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.source_artifact_name }}
+          path: ${{ runner.temp }}/source
+
+      - name: Download exact normalized evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/normalized
+
+      - name: Download exact change report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.change_artifact_name }}
+          path: ${{ runner.temp }}/change
+
+      - name: Download exact quality report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.quality_artifact_name }}
+          path: ${{ runner.temp }}/quality
+
+      - name: Validate refresh handoffs and exact run lineage
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          for artifact in source normalized change quality; do
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/${artifact}/handoff.json" \
+              --consumer-stage refresh \
+              --payload-root "$RUNNER_TEMP/${artifact}"
+          done
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          handoffs = {
+              name: json.loads((root / name / 'handoff.json').read_text(encoding='utf-8'))
+              for name in ('source', 'normalized', 'change', 'quality')
+          }
+          for name, handoff in handoffs.items():
+              if handoff.get('sourceKey') != os.environ['SOURCE_KEY']:
+                  raise SystemExit(f'{name} refresh input source differs from caller')
+              if handoff.get('snapshotId') != os.environ['SNAPSHOT_ID']:
+                  raise SystemExit(f'{name} refresh input snapshot differs from caller')
+              producer = handoff.get('producer', {})
+              if producer.get('commitSha') != os.environ['GITHUB_SHA']:
+                  raise SystemExit(f'{name} refresh input producer commit differs from trusted workflow code')
+              if producer.get('runId') != os.environ['GITHUB_RUN_ID']:
+                  raise SystemExit(f'{name} refresh input did not originate in this exact run')
+          if handoffs['source'].get('artifactKind') != 'source-snapshot':
+              raise SystemExit('refresh source input kind mismatch')
+          if handoffs['normalized'].get('artifactKind') != 'normalized-evidence':
+              raise SystemExit('refresh normalized input kind mismatch')
+          if handoffs['change'].get('artifactKind') != 'change-report':
+              raise SystemExit('refresh change input kind mismatch')
+          if handoffs['quality'].get('artifactKind') != 'quality-report':
+              raise SystemExit('refresh quality input kind mismatch')
+          PY
+
+      - name: Resolve admitted source policy and source-controlled accepted state
+        id: paths
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE_KEY" in
+            open-food-facts)
+              echo "source_policy=Data/sources/open-food-facts/source-policy-v1.json" >> "$GITHUB_OUTPUT"
+              echo "accepted_state=Data/refresh/accepted-open-food-facts-v1.json" >> "$GITHUB_OUTPUT"
+              ;;
+            open-prices)
+              echo "source_policy=Data/sources/open-prices/source-policy-v1.json" >> "$GITHUB_OUTPUT"
+              echo "accepted_state=Data/refresh/accepted-open-prices-v1.json" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "No refresh state adapter is admitted for $SOURCE_KEY" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Evaluate deterministic source refresh state and queues
+        env:
+          EVALUATED_AT: ${{ github.event.repository.updated_at }}
+        run: |
+          set -euo pipefail
+          mkdir -p \
+            "$RUNNER_TEMP/refresh-state/payload" \
+            "$RUNNER_TEMP/refresh-report/payload" \
+            "$RUNNER_TEMP/refresh-queue/payload"
+          EVALUATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python3 Tools/catalog_refresh.py validate-policy \
+            --policy Data/refresh/catalog-refresh-policy-v1.json
+          python3 Tools/catalog_refresh.py evaluate \
+            --policy Data/refresh/catalog-refresh-policy-v1.json \
+            --quality-policy Data/quality/catalog-quality-policy-v1.json \
+            --source-policy "${{ steps.paths.outputs.source_policy }}" \
+            --acquisition-metadata "$RUNNER_TEMP/source/acquisition-metadata.json" \
+            --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+            --quality-report "$RUNNER_TEMP/quality/payload/quality-report.json" \
+            --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
+            --previous-state "${{ steps.paths.outputs.accepted_state }}" \
+            --evaluated-at "$EVALUATED_AT" \
+            --state-output "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
+            --report-output "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
+            --queue-output "$RUNNER_TEMP/refresh-queue/payload/refresh-queue.json"
+
+      - name: Emit immutable refresh handoffs
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          QUEUE_COUNT="$(python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          queue = json.loads(Path(os.environ['RUNNER_TEMP'] + '/refresh-queue/payload/refresh-queue.json').read_text(encoding='utf-8'))
+          print(len(queue['entries']))
+          PY
+          )"
+          CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind source-refresh-state \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow catalog-refresh.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
+            --payload-relative-path payload/source-refresh-state.json \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version source-refresh-state-v1 \
+            --created-at "$CREATED_AT" \
+            --output "$RUNNER_TEMP/refresh-state/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind refresh-report \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow catalog-refresh.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
+            --payload-relative-path payload/refresh-report.json \
+            --record-count 1 \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version refresh-report-v1 \
+            --created-at "$CREATED_AT" \
+            --output "$RUNNER_TEMP/refresh-report/handoff.json"
+          python3 Tools/catalog_workflow.py emit-handoff \
+            --artifact-kind refresh-queue \
+            --source-key "$SOURCE_KEY" \
+            --snapshot-id "$SNAPSHOT_ID" \
+            --producer-commit "$GITHUB_SHA" \
+            --producer-workflow catalog-refresh.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --payload "$RUNNER_TEMP/refresh-queue/payload/refresh-queue.json" \
+            --payload-relative-path payload/refresh-queue.json \
+            --record-count "$QUEUE_COUNT" \
+            --completeness complete \
+            --redistribution-class metadata-only \
+            --content-schema-version refresh-queue-v1 \
+            --created-at "$CREATED_AT" \
+            --output "$RUNNER_TEMP/refresh-queue/handoff.json"
+
+      - name: Define immutable refresh artifact names
+        id: names
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          echo "state_artifact_name=refresh-state-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "report_artifact_name=refresh-report-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "queue_artifact_name=refresh-queue-${SOURCE_KEY}-${SNAPSHOT_ID}-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload source refresh state
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.state_artifact_name }}
+          path: ${{ runner.temp }}/refresh-state
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload refresh report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.report_artifact_name }}
+          path: ${{ runner.temp }}/refresh-report
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload privacy-safe refresh queue
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.names.outputs.queue_artifact_name }}
+          path: ${{ runner.temp }}/refresh-queue
+          if-no-files-found: error
+          retention-days: 90

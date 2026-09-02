@@ -41,6 +41,8 @@ def previous_state():
         "acceptedComplete": accepted,
         "candidateComplete": None,
         "lastAttempt": accepted,
+        "lastSuccessfulFullAcquisitionAt": "2026-08-30T00:00:00Z",
+        "lastSuccessfulFullSnapshotID": "off-full-1",
         "nextFullDueAt": "2026-09-06T00:00:00Z",
         "candidateEligible": False,
         "candidateChangedFromAccepted": False,
@@ -56,6 +58,7 @@ def refresh_queue():
         "entries": [
             {"key": "k2", "reason": "stale-ingredients", "priority": "high", "gtin": "1234567890123", "market": "DE"},
             {"key": "k1", "reason": "missing-current-ingredients", "priority": "high", "gtin": "12345678", "market": "DE"},
+            {"key": "k3", "reason": "admitted-submission", "priority": "high", "gtin": "4006381333931", "market": "DE"},
             {"key": "ignored", "reason": "source-or-quality-blocker", "priority": "high", "gtin": None, "market": None},
         ],
         "userEmail": "must-not-affect-target-plan@example.invalid",
@@ -81,7 +84,7 @@ class RefreshPlanTests(unittest.TestCase):
         self.assertEqual(scheduled, manual)
         MODULE.validate_plan(scheduled)
 
-    def test_supported_conditional_metadata_projects_exact_headers(self):
+    def test_supported_conditional_metadata_projects_exact_headers_from_accepted_lineage(self):
         plan = self.build(previous=previous_state())
         self.assertEqual(
             plan["conditionalRequestHeaders"],
@@ -90,6 +93,16 @@ class RefreshPlanTests(unittest.TestCase):
                 "If-Modified-Since": "Sun, 30 Aug 2026 00:00:00 GMT",
             },
         )
+
+    def test_operational_clock_does_not_rewrite_conditional_evidence_source(self):
+        state = previous_state()
+        state["lastSuccessfulFullAcquisitionAt"] = "2026-09-05T00:00:00Z"
+        state["lastSuccessfulFullSnapshotID"] = "off-noop-2"
+        state["nextFullDueAt"] = "2026-09-12T00:00:00Z"
+        plan = self.build(previous=state, evaluated_at="2026-09-06T00:00:00Z")
+        self.assertEqual(plan["fullDueAt"], "2026-09-12T00:00:00Z")
+        self.assertEqual(plan["acceptedSnapshotID"], "off-full-1")
+        self.assertEqual(plan["conditionalRequestHeaders"]["If-None-Match"], '"off-etag-1"')
 
     def test_unsupported_conditional_metadata_is_omitted(self):
         policy = copy.deepcopy(POLICY)
@@ -138,7 +151,7 @@ class RefreshPlanTests(unittest.TestCase):
         self.assertEqual(target["blockedReason"], "target-endpoint-not-admitted-for-acquisition")
         self.assertEqual(
             sorted(gtin for batch in target["batches"] for gtin in batch),
-            ["12345678", "1234567890123"],
+            ["12345678", "4006381333931", "1234567890123"],
         )
         self.assertLessEqual(60 / target["minimumRequestIntervalSeconds"], target["maxRequestsPerMinute"])
         self.assertNotIn("userEmail", json.dumps(first))
@@ -157,12 +170,24 @@ class RefreshPlanTests(unittest.TestCase):
         with self.assertRaises(MODULE.RefreshPlanError):
             self.build(policy=policy, lane="targeted", queue=refresh_queue())
 
-    def test_full_due_is_anchored_to_accepted_complete_not_evaluation_time(self):
+    def test_full_due_is_anchored_to_operational_success_not_evaluation_time(self):
         plan = self.build(previous=previous_state(), evaluated_at="2026-09-02T12:00:00Z")
         self.assertEqual(plan["fullDueAt"], "2026-09-06T00:00:00Z")
         self.assertEqual(plan["fullDueReason"], "full-cadence-not-due")
         later = self.build(previous=previous_state(), evaluated_at="2026-09-07T00:00:00Z")
         self.assertEqual(later["fullDueReason"], "full-cadence-due")
+
+    def test_no_successful_full_acquisition_is_explicitly_due_without_fabricating_acceptance(self):
+        state = previous_state()
+        state["acceptedComplete"] = None
+        state["lastSuccessfulFullAcquisitionAt"] = None
+        state["lastSuccessfulFullSnapshotID"] = None
+        state["nextFullDueAt"] = "2026-09-02T00:00:00Z"
+        plan = self.build(previous=state, evaluated_at="2026-09-02T12:00:00Z")
+        self.assertEqual(plan["fullDueAt"], "2026-09-02T00:00:00Z")
+        self.assertEqual(plan["fullDueReason"], "no-successful-full-acquisition")
+        self.assertIsNone(plan["acceptedSnapshotID"])
+        self.assertEqual(plan["conditionalRequestHeaders"], {})
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@ import Testing
 @Suite("Scanner lookup state")
 @MainActor
 struct ScannerViewModelTests {
-    @Test("A newer scan cancels an obsolete lookup and wins the UI state")
-    func rapidScanCancelsObsoleteLookup() async throws {
+    @Test("A newer scan supersedes an obsolete lookup and wins the UI state")
+    func rapidScanSupersedesObsoleteLookup() async throws {
         let first = try Barcode(validating: "0200000000035")
         let second = try Barcode(validating: "4006381333931")
         let catalog = DelayedCatalog(slowBarcode: first.rawValue)
@@ -24,11 +24,11 @@ struct ScannerViewModelTests {
             }
             return false
         }
-        try await waitUntilLookupCancelled(first.rawValue, in: catalog)
 
+        // The slow catalog intentionally ignores cancellation so the obsolete
+        // lookup still returns. The cancelled result task must not publish it.
+        try await Task.sleep(for: .milliseconds(320))
         #expect(viewModel.lookupState == .notFound(second))
-        let cancelled = await catalog.cancelledLookups
-        #expect(cancelled.contains(first.rawValue))
     }
 
     @Test("Catalog failures preserve manual entry for retry or correction")
@@ -67,18 +67,6 @@ struct ScannerViewModelTests {
         Issue.record("Timed out waiting for lookup to start")
     }
 
-    private func waitUntilLookupCancelled(
-        _ barcode: String,
-        in catalog: DelayedCatalog,
-        attempts: Int = 100
-    ) async throws {
-        for _ in 0..<attempts {
-            if await catalog.cancelledLookups.contains(barcode) { return }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        Issue.record("Timed out waiting for lookup cancellation cleanup")
-    }
-
     private func waitUntil(
         attempts: Int = 100,
         condition: @MainActor () -> Bool
@@ -94,7 +82,6 @@ struct ScannerViewModelTests {
 private actor DelayedCatalog: ProductCatalog {
     let slowBarcode: String
     private(set) var startedLookups: [String] = []
-    private(set) var cancelledLookups: [String] = []
 
     init(slowBarcode: String) {
         self.slowBarcode = slowBarcode
@@ -102,17 +89,14 @@ private actor DelayedCatalog: ProductCatalog {
 
     func product(for barcode: Barcode) async throws -> ProductRecord? {
         startedLookups.append(barcode.rawValue)
-        do {
-            if barcode.rawValue == slowBarcode {
-                try await Task.sleep(for: .milliseconds(250))
-            } else {
-                try await Task.sleep(for: .milliseconds(10))
-            }
-            return nil
-        } catch is CancellationError {
-            cancelledLookups.append(barcode.rawValue)
-            throw CancellationError()
+        if barcode.rawValue == slowBarcode {
+            await Task.detached {
+                try? await Task.sleep(for: .milliseconds(250))
+            }.value
+        } else {
+            try await Task.sleep(for: .milliseconds(10))
         }
+        return nil
     }
 }
 

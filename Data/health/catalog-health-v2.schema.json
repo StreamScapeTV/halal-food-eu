@@ -52,7 +52,7 @@
         "queue",
         "targeted",
         "latestAttempt",
-        "scheduledWorkflow",
+        "scheduledWorkflows",
         "deduplicationKeys"
       ],
       "properties": {
@@ -102,16 +102,19 @@
             "candidateChangedFromAccepted": {"type": ["boolean", "null"]}
           }
         },
-        "scheduledWorkflow": {
+        "scheduledWorkflows": {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["available", "conclusion", "runId", "event", "updatedAt"],
-          "properties": {
-            "available": {"type": "boolean"},
-            "conclusion": {"type": ["string", "null"]},
-            "runId": {"type": ["string", "null"]},
-            "event": {"type": ["string", "null"]},
-            "updatedAt": {"type": ["string", "null"]}
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["available", "conclusion", "runId", "event", "updatedAt"],
+            "properties": {
+              "available": {"type": "boolean"},
+              "conclusion": {"type": ["string", "null"]},
+              "runId": {"type": ["string", "null"]},
+              "event": {"type": ["string", "null"]},
+              "updatedAt": {"type": ["string", "null"]}
+            }
           }
         },
         "deduplicationKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}

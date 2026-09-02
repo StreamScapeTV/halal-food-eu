@@ -110,6 +110,20 @@ class ManufacturerEvidenceIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             snapshot, evidence, provenance, target = self._pipeline(Path(temporary))
 
+            projected_lines = [
+                json.loads(line)
+                for line in snapshot.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            producer_record = next(item for item in projected_lines if item.get("code") == "4006381333931")
+            self.assertNotIn("owner_fields", producer_record)
+            self.assertNotIn("sources", producer_record)
+            self.assertIn(MFG.PROVENANCE_KEY, producer_record)
+            self.assertNotIn(
+                "WEIZENMEHL, Zucker, Kakaobutter, Emulgator: Lecithine.",
+                json.dumps(producer_record[MFG.PROVENANCE_KEY], ensure_ascii=False),
+            )
+
         self.assertEqual(provenance["metrics"]["confirmedProducerFormulations"], 1)
         self.assertEqual(provenance["metrics"]["producerProvenanceCandidates"], 1)
         self.assertEqual(provenance["metrics"]["freshnessEvidenceGain"], 0)
@@ -127,16 +141,6 @@ class ManufacturerEvidenceIntegrationTests(unittest.TestCase):
         self.assertIn("producer-formulation-confirmed", reasons)
         self.assertIn("producer-provenance-candidate", reasons)
         self.assertIn("ingredients-missing", reasons)
-
-        projected_lines = [json.loads(line) for line in snapshot.read_text(encoding="utf-8").splitlines() if line.strip()]
-        producer_record = next(item for item in projected_lines if item.get("code") == "4006381333931")
-        self.assertNotIn("owner_fields", producer_record)
-        self.assertNotIn("sources", producer_record)
-        self.assertIn(MFG.PROVENANCE_KEY, producer_record)
-        self.assertNotIn(
-            "WEIZENMEHL, Zucker, Kakaobutter, Emulgator: Lecithine.",
-            json.dumps(producer_record[MFG.PROVENANCE_KEY], ensure_ascii=False),
-        )
 
     def test_reports_are_deterministic_for_same_snapshot_and_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -82,10 +82,10 @@ def _bounded_text(value: Any, maximum: int) -> str | None:
     return value.strip()
 
 
-def _exact_field_value(value: Any) -> str | None:
+def _exact_field_hash(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip() or len(value) > MAX_FIELD_VALUE_LENGTH:
         return None
-    return value
+    return sha256_text(value)
 
 
 def _safe_https(value: Any) -> str | None:
@@ -114,21 +114,21 @@ def _import_timestamp(value: Any) -> str | None:
 
 
 def sanitize_producer_provenance(record: dict[str, Any]) -> dict[str, Any] | None:
-    """Return only the bounded producer metadata needed for exact-field auditing."""
+    """Return only bounded hashes/metadata needed for exact-field auditing."""
     result: dict[str, Any] = {}
     owner = _bounded_text(record.get("owner"), MAX_OWNER_LENGTH)
     if owner is not None:
         result["owner"] = owner
 
-    owner_fields: dict[str, str] = {}
+    owner_hashes: dict[str, str] = {}
     raw_owner_fields = record.get("owner_fields")
     if isinstance(raw_owner_fields, dict):
         for field in sorted(PRODUCER_FIELDS):
-            exact = _exact_field_value(raw_owner_fields.get(field))
-            if exact is not None:
-                owner_fields[field] = exact
-    if owner_fields:
-        result["ownerFields"] = owner_fields
+            digest = _exact_field_hash(raw_owner_fields.get(field))
+            if digest is not None:
+                owner_hashes[field] = digest
+    if owner_hashes:
+        result["ownerFieldSha256"] = owner_hashes
 
     manufacturer_sources: list[dict[str, Any]] = []
     raw_sources = record.get("sources")
@@ -160,11 +160,16 @@ def sanitize_producer_provenance(record: dict[str, Any]) -> dict[str, Any] | Non
         manufacturer_sources.sort(key=lambda item: (item["sourceID"], item.get("sourceName", "")))
         result["manufacturerSources"] = manufacturer_sources
 
-    tags = off.strings(record.get("data_sources_tags"))
-    if tags:
-        bounded = sorted({tag for tag in tags if 0 < len(tag) <= MAX_SOURCE_TEXT_LENGTH})[:MAX_DATA_SOURCE_TAGS]
+    raw_tags = record.get("data_sources_tags")
+    if isinstance(raw_tags, list):
+        bounded: list[str] = []
+        for item in raw_tags:
+            if len(bounded) >= MAX_DATA_SOURCE_TAGS:
+                break
+            if isinstance(item, str) and 0 < len(item) <= MAX_SOURCE_TEXT_LENGTH and item.strip():
+                bounded.append(item)
         if bounded:
-            result["dataSourceTags"] = bounded
+            result["dataSourceTags"] = sorted(set(bounded))
 
     return result or None
 
@@ -188,7 +193,8 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return value
 
 
-def _snapshot(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+def _snapshot(path: Path, wanted_source_ids: set[str]) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Stream the complete snapshot while retaining only selected source records."""
     records: dict[str, dict[str, Any]] = {}
     metadata: dict[str, Any] | None = None
     try:
@@ -210,15 +216,17 @@ def _snapshot(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
                 if metadata is not None:
                     raise ManufacturerEvidenceError("product records must precede acquisition metadata")
                 source_id = str(value.get("_id") or value.get("id") or value.get("code") or "")
-                if not source_id:
-                    raise ManufacturerEvidenceError(f"snapshot line {line_number} lacks a source record ID")
-                records[source_id] = value
+                if source_id and source_id in wanted_source_ids:
+                    records[source_id] = value
     except (OSError, UnicodeDecodeError) as exc:
         raise ManufacturerEvidenceError(f"failed to read snapshot: {exc}") from exc
     if not isinstance(metadata, dict):
         raise ManufacturerEvidenceError("snapshot is missing acquisition metadata")
     if metadata.get("sourceKey") != SOURCE_KEY:
         raise ManufacturerEvidenceError("producer analysis supports only Open Food Facts snapshots")
+    missing = sorted(wanted_source_ids - records.keys())
+    if missing:
+        raise ManufacturerEvidenceError(f"snapshot lacks selected OFF source records: {missing[:5]}")
     return records, metadata
 
 
@@ -280,6 +288,8 @@ def _queue_item(
     reason: str, detail: str, ingredient_id: str | None = None,
     provenance_id: str | None = None, producer_id: str | None = None,
 ) -> dict[str, Any]:
+    if not source_record_id:
+        raise ManufacturerEvidenceError("manufacturer queue item lacks source record provenance")
     item: dict[str, Any] = {
         "gtin": gtin,
         "market": market,
@@ -311,36 +321,48 @@ def _dedupe_queue(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def analyze(
     *, snapshot_path: Path, evidence_path: Path, change_report_path: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    records, metadata = _snapshot(snapshot_path)
     evidence = _load_json(evidence_path, "evidence envelope")
     changes = _load_json(change_report_path, "change report")
-    if changes.get("sourceKey") != SOURCE_KEY or changes.get("snapshotID") != metadata.get("snapshotID"):
-        raise ManufacturerEvidenceError("change report lineage does not match the OFF snapshot")
-
     ingredients = {
         item["id"]: item for item in evidence.get("ingredients", [])
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
+    identities = {
+        item["id"]: item for item in evidence.get("identities", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
     selections = [item for item in evidence.get("currentSelections", []) if isinstance(item, dict)]
+
+    def source_record_for(selection: dict[str, Any]) -> str:
+        ingredient_id = selection.get("ingredientObservationID")
+        ingredient = ingredients.get(ingredient_id) if isinstance(ingredient_id, str) else None
+        if isinstance(ingredient, dict) and isinstance(ingredient.get("sourceRecordID"), str):
+            return ingredient["sourceRecordID"]
+        identity_id = selection.get("identityObservationID")
+        identity = identities.get(identity_id) if isinstance(identity_id, str) else None
+        return identity.get("sourceRecordID", "") if isinstance(identity, dict) else ""
+
+    wanted_source_ids = {source_record_for(item) for item in selections}
+    wanted_source_ids.discard("")
+    records, metadata = _snapshot(snapshot_path, wanted_source_ids)
+    if changes.get("sourceKey") != SOURCE_KEY or changes.get("snapshotID") != metadata.get("snapshotID"):
+        raise ManufacturerEvidenceError("change report lineage does not match the OFF snapshot")
+
     provenance_records: list[dict[str, Any]] = []
     queue: list[dict[str, Any]] = []
     producer_ids: set[str] = set()
     candidate_products: set[tuple[str, str]] = set()
     source_modified_confirmed = 0
+    selection_by_gtin: dict[str, list[dict[str, Any]]] = {}
 
     for selection in sorted(selections, key=lambda item: (str(item.get("gtin", "")), str(item.get("market", "")))):
         gtin, market = selection.get("gtin"), selection.get("market")
         if not isinstance(gtin, str) or not isinstance(market, str):
             continue
+        selection_by_gtin.setdefault(gtin, []).append(selection)
         ingredient_id = selection.get("ingredientObservationID")
         ingredient = ingredients.get(ingredient_id) if isinstance(ingredient_id, str) else None
-        source_record_id = ""
-        if ingredient is not None:
-            source_record_id = str(ingredient.get("sourceRecordID") or "")
-        if not source_record_id:
-            identity_id = selection.get("identityObservationID")
-            identity = next((item for item in evidence.get("identities", []) if isinstance(item, dict) and item.get("id") == identity_id), None)
-            source_record_id = str(identity.get("sourceRecordID") or "") if isinstance(identity, dict) else ""
+        source_record_id = source_record_for(selection)
         record = records.get(source_record_id)
         if record is None:
             continue
@@ -354,14 +376,13 @@ def analyze(
         else:
             producer = record.get(PROVENANCE_KEY)
             fields = _ingredient_field_candidates(record, ingredient)
-            confirmed: dict[str, Any] | None = None
             if isinstance(producer, dict) and fields:
                 owner = producer.get("owner")
-                owner_fields = producer.get("ownerFields")
+                owner_hashes = producer.get("ownerFieldSha256")
+                current_hash = sha256_text(ingredient["ingredientsText"])
                 exact_owner_fields = [
                     field for field in fields
-                    if isinstance(owner_fields, dict)
-                    and owner_fields.get(field) == ingredient.get("ingredientsText")
+                    if isinstance(owner_hashes, dict) and owner_hashes.get(field) == current_hash
                 ]
                 if isinstance(owner, str) and owner.strip() and exact_owner_fields:
                     field = exact_owner_fields[0]
@@ -380,15 +401,15 @@ def analyze(
                         gtin=gtin, market=market, source_record_id=source_record_id,
                         ingredient_id=ingredient["id"], provenance_id=confirmed["id"], producer_id=owner,
                         priority="medium", reason="producer-formulation-confirmed",
-                        detail="Exact OFF owner-field value matches the current ingredient observation; prioritize this producer-origin formulation for methodology review where useful.",
+                        detail="Exact OFF owner-field hash matches the current ingredient observation; prioritize this producer-origin formulation for methodology review where useful.",
                     ))
                 else:
                     contexts = [context for field in fields for context in _manufacturer_contexts(producer, field)]
-                    owner_conflict = isinstance(owner_fields, dict) and any(
-                        field in owner_fields and owner_fields.get(field) != ingredient.get("ingredientsText")
-                        for field in fields
+                    owner_conflict = isinstance(owner_hashes, dict) and any(
+                        field in owner_hashes and owner_hashes.get(field) != current_hash for field in fields
                     )
-                    if owner_conflict or len({context.get("sourceID") for context in contexts}) > 1:
+                    source_ids = {context.get("sourceID") for context in contexts if context.get("sourceID")}
+                    if owner_conflict or len(source_ids) > 1:
                         candidate_products.add((gtin, market))
                         queue.append(_queue_item(
                             gtin=gtin, market=market, source_record_id=source_record_id,
@@ -403,7 +424,7 @@ def analyze(
                             gtin=gtin, market=market, source_record_id=source_record_id,
                             ingredient_id=ingredient["id"], priority="medium",
                             reason="producer-provenance-candidate",
-                            detail="Producer/import metadata references this product or field but lacks an exact owner-field value match; human/source review is required before treating it as producer-provided formulation evidence.",
+                            detail="Producer/import metadata references this product or field but lacks an exact owner-field hash match; human/source review is required before treating it as producer-provided formulation evidence.",
                             producer_id=owner if isinstance(owner, str) and owner.strip() else None,
                         ))
 
@@ -417,19 +438,16 @@ def analyze(
                 detail=f"Current selection conflict requires evidence review: {flag}.",
             ))
 
-    selection_by_gtin = {
-        (item.get("gtin"), item.get("market")): item for item in selections
-        if isinstance(item.get("gtin"), str) and isinstance(item.get("market"), str)
-    }
     for raw in changes.get("reviewQueue", []):
         if not isinstance(raw, dict):
             continue
         gtin = raw.get("gtin")
-        selection = next((item for (candidate, _market), item in selection_by_gtin.items() if candidate == gtin), None)
-        if not isinstance(gtin, str) or selection is None:
+        matches = selection_by_gtin.get(gtin, []) if isinstance(gtin, str) else []
+        if len(matches) != 1:
             continue
+        selection = matches[0]
         market = selection["market"]
-        source_record_id = str(raw.get("sourceRecordID") or "")
+        source_record_id = source_record_for(selection)
         reason = raw.get("reason")
         if reason == "formulation-changed":
             queue.append(_queue_item(
@@ -543,6 +561,8 @@ def validate_provenance_report(report: dict[str, Any]) -> None:
             raise ManufacturerEvidenceError("producer provenance field is outside the reviewed ingredient allowlist")
         if len(record["fieldValueSha256"]) != 64:
             raise ManufacturerEvidenceError("producer provenance field hash must be SHA-256")
+        if not isinstance(record.get("sourceRecordID"), str) or not record["sourceRecordID"].strip():
+            raise ManufacturerEvidenceError("producer provenance sourceRecordID is blank")
         if "sourceModifiedAt" in record:
             _timestamp(record["sourceModifiedAt"], "sourceModifiedAt")
     limitations = report.get("limitations")
@@ -571,6 +591,10 @@ def validate_target_queue(report: dict[str, Any]) -> None:
     for index, item in enumerate(items):
         if not isinstance(item, dict) or item.get("reason") not in allowed_reasons or item.get("priority") not in allowed_priority:
             raise ManufacturerEvidenceError(f"manufacturer target item {index} is invalid")
+        if not isinstance(item.get("sourceRecordID"), str) or not item["sourceRecordID"].strip():
+            raise ManufacturerEvidenceError(f"manufacturer target item {index} sourceRecordID is blank")
+        if not isinstance(item.get("gtin"), str) or len(item["gtin"]) != 14 or not item["gtin"].isdigit():
+            raise ManufacturerEvidenceError(f"manufacturer target item {index} GTIN is invalid")
         if not isinstance(item.get("detail"), str) or not item["detail"].strip():
             raise ManufacturerEvidenceError(f"manufacturer target item {index} detail is blank")
     limitations = report.get("limitations")

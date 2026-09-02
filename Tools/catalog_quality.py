@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+from catalog_health import CatalogHealthError, build_health_report, human_summary as health_summary
 from catalog_quality_core import CatalogQualityError, canonical_json, evaluate_quality, human_summary, parse_timestamp, validate_policy
 from catalog_quality_reporting import augment_quality_report
 from catalog_quality_source_review import SourceReviewError, enforce_source_review, validate_source_reviews
@@ -116,6 +118,7 @@ def parse_args() -> argparse.Namespace:
     evaluate.add_argument("--source-policy", type=Path)
     evaluate.add_argument("--source-reviews", type=Path, default=DEFAULT_SOURCE_REVIEWS)
     evaluate.add_argument("--as-of", help="explicit RFC3339 proposal evaluation time used for freshness and review expiry")
+    evaluate.add_argument("--commit-sha", help="exact repository revision represented by generated health artifacts")
     evaluate.add_argument("--output", type=Path, required=True)
     evaluate.add_argument("--summary-output", type=Path, required=True)
     evaluate.add_argument("--defer-blocker-exit", action="store_true", help="write blocked reports successfully so a later workflow step can publish diagnostics before enforcing the gate")
@@ -165,10 +168,30 @@ def main() -> None:
         summary += f"- Action: `{report['incident']['action']}`\n"
         summary += "- Deduplication keys: " + (", ".join(f"`{key}`" for key in report["deduplicationKeys"]) or "none") + "\n"
         args.summary_output.write_text(summary, encoding="utf-8")
+
+        commit_sha = args.commit_sha or os.environ.get("GITHUB_SHA") or "local-fixture"
+        health = build_health_report(
+            envelope=evidence,
+            quality=report,
+            change=change,
+            benchmark=None,
+            evaluated_at=report["evaluatedAt"],
+            commit_sha=commit_sha,
+        )
+        health_json = args.output.parent / "catalog-health.json"
+        health_markdown = args.summary_output.parent / "catalog-health.md"
+        write_json(health_json, health)
+        health_text = health_summary(health)
+        health_markdown.write_text(health_text, encoding="utf-8")
+        job_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if job_summary:
+            with Path(job_summary).open("a", encoding="utf-8") as stream:
+                stream.write("\n" + health_text)
+
         print(f"Catalog quality status: {report['status']} ({len(report['releaseBlockingFindings'])} blockers)")
         if report["status"] != "pass" and not args.defer_blocker_exit:
             raise SystemExit(2)
-    except (CatalogQualityError, EvidenceValidationError, SourceReviewError) as exc:
+    except (CatalogQualityError, CatalogHealthError, EvidenceValidationError, SourceReviewError) as exc:
         raise SystemExit(f"catalog quality validation failed: {exc}") from exc
 
 

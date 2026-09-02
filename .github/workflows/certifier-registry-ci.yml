@@ -1,0 +1,126 @@
+name: Certifier registry CI
+
+on:
+  push:
+    paths:
+      - "Data/certifiers/**"
+      - "Data/methodology/**"
+      - "Tools/certifier_registry.py"
+      - "Tools/halal_methodology.py"
+      - "Tools/halal_methodology_core.py"
+      - "Tools/halal_methodology_review_artifact.py"
+      - "Tools/tests/test_certifier_registry.py"
+      - "Tools/tests/test_halal_methodology_certification.py"
+      - "Tools/tests/test_halal_methodology_cli.py"
+      - "Tools/tests/test_halal_methodology_review_artifact.py"
+      - "HalalFoodEU/Resources/en.lproj/ProductResult.strings"
+      - "HalalFoodEU/Resources/de.lproj/ProductResult.strings"
+      - "docs/feature-specs/013-methodology-and-review-governance.md"
+      - "docs/feature-specs/023-certifier-registry-and-certificate-validity.md"
+      - "docs/feature-specs/README.md"
+      - ".github/workflows/certifier-registry-ci.yml"
+  pull_request:
+    paths:
+      - "Data/certifiers/**"
+      - "Data/methodology/**"
+      - "Tools/certifier_registry.py"
+      - "Tools/halal_methodology.py"
+      - "Tools/halal_methodology_core.py"
+      - "Tools/halal_methodology_review_artifact.py"
+      - "Tools/tests/test_certifier_registry.py"
+      - "Tools/tests/test_halal_methodology_certification.py"
+      - "Tools/tests/test_halal_methodology_cli.py"
+      - "Tools/tests/test_halal_methodology_review_artifact.py"
+      - "HalalFoodEU/Resources/en.lproj/ProductResult.strings"
+      - "HalalFoodEU/Resources/de.lproj/ProductResult.strings"
+      - "docs/feature-specs/013-methodology-and-review-governance.md"
+      - "docs/feature-specs/023-certifier-registry-and-certificate-validity.md"
+      - "docs/feature-specs/README.md"
+      - ".github/workflows/certifier-registry-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certifier-registry:
+    name: Validate certifier admission and certificate validity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate committed registry, review artifact schema, and tooling
+        run: |
+          set -euo pipefail
+          python3 -m json.tool Data/certifiers/certifier-registry-v1.schema.json >/dev/null
+          python3 -m json.tool Data/certifiers/certifier-registry-v1.json >/dev/null
+          python3 -m json.tool Data/methodology/halal-review-artifact-v1.schema.json >/dev/null
+          python3 -m py_compile \
+            Tools/certifier_registry.py \
+            Tools/halal_methodology.py \
+            Tools/tests/test_certifier_registry.py
+          PYTHONPATH=Tools python3 Tools/certifier_registry.py validate
+          PYTHONPATH=Tools python3 Tools/halal_methodology.py validate
+
+      - name: Prove production review cannot bypass registry wrapper
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          import json
+          from pathlib import Path
+
+          path = Path("Tools/halal_methodology.py")
+          tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          for node in ast.walk(tree):
+              if isinstance(node, ast.ImportFrom) and node.module == "halal_methodology_core":
+                  if any(alias.name == "complete_review" for alias in node.names):
+                      raise SystemExit("production CLI imports legacy complete_review directly")
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "complete_review":
+                  raise SystemExit("production CLI calls legacy complete_review directly")
+          source = path.read_text(encoding="utf-8")
+          if "complete_review_with_registry" not in source:
+              raise SystemExit("production CLI does not route reviews through certifier registry")
+
+          registry = json.loads(Path("Data/certifiers/certifier-registry-v1.json").read_text(encoding="utf-8"))
+          if registry["entries"]:
+              raise SystemExit("production registry must not silently admit a real certifier in #20")
+          if registry["defaultDecision"] != "review-required":
+              raise SystemExit("unknown certifier/scheme must fail closed")
+
+          artifact_schema = json.loads(Path("Data/methodology/halal-review-artifact-v1.schema.json").read_text(encoding="utf-8"))
+          properties = artifact_schema["properties"]
+          for field in ("certifierRegistryVersion", "certifierRegistrySha256", "certificationBindings"):
+              if field not in properties:
+                  raise SystemExit(f"review artifact schema omits certified registry binding field {field}")
+          certified_required = set(artifact_schema["allOf"][0]["then"]["required"])
+          if certified_required != {"certifierRegistryVersion", "certifierRegistrySha256", "certificationBindings"}:
+              raise SystemExit("halal-certified review artifact does not require exact registry/formulation binding")
+          PY
+
+      - name: Prove offline certification presentation states exact-scope limits
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          english = Path("HalalFoodEU/Resources/en.lproj/ProductResult.strings").read_text(encoding="utf-8")
+          german = Path("HalalFoodEU/Resources/de.lproj/ProductResult.strings").read_text(encoding="utf-8")
+          if '"certification.footer"' not in english or "exact product" not in english or "remains current" not in english:
+              raise SystemExit("English certification footer does not state exact-product/current-evidence limits")
+          if '"certification.footer"' not in german or "genau dieses Produkt" not in german or "aktuell" not in german:
+              raise SystemExit("German certification footer does not state exact-product/current-evidence limits")
+          PY
+
+      - name: Run certification registry, CLI, artifact, and methodology regressions
+        run: |
+          set -euo pipefail
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_certifier_registry \
+            Tools.tests.test_halal_methodology_certification \
+            Tools.tests.test_halal_methodology_cli \
+            Tools.tests.test_halal_methodology_review_artifact \
+            -v

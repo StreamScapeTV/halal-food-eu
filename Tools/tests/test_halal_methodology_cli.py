@@ -127,6 +127,9 @@ class HalalMethodologyCLITests(unittest.TestCase):
             migration_report = json.loads(migration.read_text(encoding="utf-8"))
             self.assertGreaterEqual(migration_report["invalidated"], 1)
             self.assertTrue(migration_report["validityEvents"])
+            self.assertIn("certificationStatus", migration_report)
+            supplied_digest = migration_report.pop("migrationSha256")
+            self.assertEqual(supplied_digest, digest(migration_report))
 
 
 if __name__ == "__main__":

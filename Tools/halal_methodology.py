@@ -12,6 +12,7 @@ from certifier_registry import (
     RegistryError,
     certification_status_report,
     complete_review_with_registry,
+    digest as certification_digest,
     load_registry,
     merge_status_into_migration,
 )
@@ -217,6 +218,8 @@ def main() -> None:
         migration = merge_status_into_migration(migration, certification_status)
         migration["certificationStatus"] = certification_status
         migration["validityEvents"] = validity_events_from_migration(migration, occurred_at=args.occurred_at)
+        migration.pop("migrationSha256", None)
+        migration["migrationSha256"] = certification_digest(migration)
         write_json(args.output, migration)
         print(f"Methodology migration: {migration['invalidated']} invalidated, {migration['carriedForward']} carried forward")
     except (MethodologyError, EvidenceValidationError, AdditiveReferenceError, RegistryError) as exc:

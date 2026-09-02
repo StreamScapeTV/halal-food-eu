@@ -1,0 +1,93 @@
+name: Promote reviewed refresh state
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      refresh_state_artifact_name:
+        required: true
+        type: string
+      proposal_artifact_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require protected default-branch workflow context
+        env:
+          EXPECTED_REF: refs/heads/main
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+
+      - name: Check out exact reviewed source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download exact refresh state candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.refresh_state_artifact_name }}
+          path: ${{ runner.temp }}/refresh-state
+
+      - name: Download exact catalog proposal evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.proposal_artifact_name }}
+          path: ${{ runner.temp }}/proposal
+
+      - name: Validate proposal-bound refresh state lineage
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/refresh-state/handoff.json" \
+            --consumer-stage proposal \
+            --payload-root "$RUNNER_TEMP/refresh-state"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          state_handoff = json.loads((root / 'refresh-state/handoff.json').read_text(encoding='utf-8'))
+          release_input = json.loads((root / 'proposal/payload/production-catalog-release-input.json').read_text(encoding='utf-8'))
+          expected_source = os.environ['SOURCE_KEY']
+          expected_snapshot = os.environ['SNAPSHOT_ID']
+          if state_handoff.get('sourceKey') != expected_source or release_input.get('sourceKey') != expected_source:
+              raise SystemExit('refresh promotion source differs from reviewed catalog proposal')
+          if state_handoff.get('snapshotId') != expected_snapshot or release_input.get('snapshotId') != expected_snapshot:
+              raise SystemExit('refresh promotion snapshot differs from reviewed catalog proposal')
+          for label, value in (('refresh state', state_handoff.get('producer', {})),):
+              if value.get('commitSha') != os.environ['GITHUB_SHA'] or value.get('runId') != os.environ['GITHUB_RUN_ID']:
+                  raise SystemExit(f'{label} was not produced by this exact trusted catalog run')
+          if release_input.get('reviewedSourceCommit') != os.environ['GITHUB_SHA']:
+              raise SystemExit('catalog release input was not reviewed from this exact source commit')
+          if release_input.get('sourceRunId') != os.environ['GITHUB_RUN_ID']:
+              raise SystemExit('catalog release input was not produced in this exact trusted run')
+          PY
+
+      - name: Promote candidate only on the existing material catalog proposal branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/github_refresh_state_proposal.py \
+            --policy Data/refresh/catalog-refresh-policy-v1.json \
+            --candidate-state "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
+            --release-input "$RUNNER_TEMP/proposal/payload/production-catalog-release-input.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$GITHUB_SHA"

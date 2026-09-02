@@ -151,7 +151,7 @@ class RefreshPlanTests(unittest.TestCase):
         self.assertEqual(target["blockedReason"], "target-endpoint-not-admitted-for-acquisition")
         self.assertEqual(
             sorted(gtin for batch in target["batches"] for gtin in batch),
-            ["12345678", "4006381333931", "1234567890123"],
+            ["12345678", "1234567890123", "4006381333931"],
         )
         self.assertLessEqual(60 / target["minimumRequestIntervalSeconds"], target["maxRequestsPerMinute"])
         self.assertNotIn("userEmail", json.dumps(first))

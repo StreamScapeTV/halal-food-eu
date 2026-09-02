@@ -34,24 +34,27 @@ For the initial public-source set:
 - Open Prices receives a weekly complete snapshot on an independently staggered schedule; and
 - the daily targeted lane may execute only against sources whose reviewed source policy explicitly admits the required targeted endpoint and rate limits.
 
-The scheduler and manual dispatcher must resolve to the same deterministic acquisition/refresh plan for equivalent source, mode, accepted state, and evaluation time.
+The scheduler and manual dispatcher must resolve to the same deterministic acquisition/refresh plan for equivalent source, mode, source state, and evaluation time.
 
-### REF-003 — Durable accepted lineage
+### REF-003 — Durable accepted lineage and operational cadence
 
-The durable source state is the versioned/attested accepted catalog lineage, never an Actions cache.
+The durable source state is the versioned/attested accepted catalog lineage, never an Actions cache. Operational acquisition facts may additionally be retained in immutable workflow/health artifacts and, when a material catalog proposal is reviewed, in the accepted source-state metadata.
 
 Per source, refresh state must distinguish:
 
 - the latest attempted acquisition represented by the current refresh artifact;
-- the last accepted complete source state;
+- the last accepted complete source state used as catalog/evidence authority;
 - an eligible complete candidate waiting for protected-branch acceptance;
+- the latest successful complete **full acquisition** time/snapshot used only for acquisition scheduling;
 - upstream revision metadata such as ETag, Last-Modified, snapshot revision, or cursor when officially supported;
 - content digest and record count;
 - adapter and source-policy versions;
 - full versus delta mode and predecessor/cursor lineage when applicable; and
-- the next due refresh reason/time derived from the accepted complete state.
+- the next due full-acquisition reason/time derived from the latest successful complete full acquisition when known.
 
-Operational attempts that are not accepted may be retained in workflow/health evidence without becoming catalog authority.
+The operational acquisition clock and accepted evidence clock are independent. A successful complete full acquisition may advance `lastSuccessfulFullAcquisitionAt` / `nextFullDueAt` even when its bytes are unchanged or its changed candidate is not yet accepted. That operational advancement must not rewrite `acceptedComplete.retrievedAt`, ingredient `observedAt`, retailer observation dates, certificate dates, assessment dates, or any other evidence-freshness field.
+
+If no successful complete full acquisition is known, the full lane remains explicitly due rather than fabricating a successful baseline. Delta acquisitions do not reset the full-acquisition cadence unless a future reviewed source policy explicitly defines equivalent complete semantics.
 
 ### REF-004 — Candidate promotion
 
@@ -59,15 +62,16 @@ A complete passing acquisition may become `candidateComplete`. It must not silen
 
 Promotion to accepted state is allowed only when the candidate is included in the exact reviewed catalog proposal/accepted protected-branch lineage. Promotion must be deterministic: the promoted accepted record is byte-for-byte the candidate record, the candidate slot is cleared, and the resulting state digest is recomputed canonically.
 
-A logical catalog no-op must not create a noisy catalog-data proposal merely to record transient attempt timestamps. Health/reporting may retain that operational evidence separately.
+A logical catalog no-op must not create a noisy catalog-data proposal merely to record transient attempt or operational cadence metadata. Health/reporting artifacts may retain that operational evidence separately. Consequently, a successful unchanged source check can schedule the next acquisition without creating a catalog PR and without freshening accepted evidence.
 
 ### REF-005 — Partial and failed acquisition
 
-A partial, sampled, truncated, failed, policy-blocked, schema-blocked, or quality-blocked acquisition must never replace a prior accepted complete source state.
+A partial, sampled, truncated, failed, policy-blocked, schema-blocked, or quality-blocked acquisition must never replace a prior accepted complete source state or advance the successful-full-acquisition clock.
 
 For such runs:
 
 - old evidence must not receive a new `retrievedAt` or equivalent freshness timestamp;
+- the operational `lastSuccessfulFullAcquisitionAt` / `nextFullDueAt` remain anchored to the prior successful complete full acquisition;
 - a missing record must not be interpreted as deletion;
 - deletion reconciliation must be disabled;
 - the accepted complete digest/revision remains unchanged; and
@@ -89,13 +93,13 @@ Conditional requests may be planned only for metadata explicitly declared by bot
 
 For a source without reviewed conditional support, those headers must be omitted even if a prior response happened to contain similarly named metadata.
 
-A validated not-modified response preserves accepted content and may update operational health evidence, but must not fabricate a new content observation.
+A validated not-modified/unchanged complete response may advance the operational acquisition clock while preserving accepted content and evidence observation clocks. It must not fabricate a new content observation.
 
 ### REF-008 — Independent evidence clocks
 
-Ingredient formulation, retailer observation, certification, and assessment evidence remain independently dated.
+Ingredient formulation, retailer observation, certification, assessment evidence, and source acquisition cadence remain independently dated.
 
-A retailer listing refresh must not refresh ingredient age. A certificate recheck must not refresh formulation age. A source outage must not refresh any old observation.
+A retailer listing refresh must not refresh ingredient age. A certificate recheck must not refresh formulation age. A source acquisition success must not refresh an unchanged formulation merely because the transport was checked again. A source outage must not refresh any old observation.
 
 A changed formulation must invalidate or route the affected prior assessment for mandatory re-review according to 013/014. Expired, revoked, suspended, or materially changed certificate evidence must invalidate or re-route certification-dependent assessment according to 023. The refresh queue must surface these conditions without silently assigning a new halal status.
 
@@ -115,6 +119,8 @@ Refresh processing must emit a bounded deterministic machine-readable queue. Sup
 - source or quality blocker;
 - admitted not-found/new-submission target; and
 - privacy-safe demand target when such an aggregate signal is available.
+
+Owner-admitted submission targets may be derived only from the committed non-personal evidence boundary defined by 019. Raw email packages, package photos, local scan history, not-found history, reviewer identity, and other per-user data must never be copied into refresh queues. When no admitted submission or reviewed aggregate demand signal exists, the queue must not invent one.
 
 Queue deduplication must use stable source/market/GTIN/reason identity. Queue ordering and truncation must be deterministic. Queue artifacts must not contain user identities, email addresses, raw scan histories, or other per-user activity.
 
@@ -140,7 +146,7 @@ Catalog health (024) must expose refresh health in the same aggregate report/inc
 - attempt status;
 - accepted complete snapshot identifier and retrieval time, when present;
 - candidate-changed state;
-- next due refresh time/reason;
+- latest successful full acquisition/next due full acquisition state;
 - deletion-reconciliation eligibility;
 - queue entry count and reason counts; and
 - stable refresh blocker/deduplication keys.
@@ -172,16 +178,18 @@ Because public-repository schedules may be disabled after prolonged inactivity, 
 The implementation must cover, at minimum:
 
 1. schedule/manual plan equivalence;
-2. same-snapshot idempotency;
+2. same-snapshot and same-content/new-run idempotency;
 3. conditional-header planning for supported metadata and omission for unsupported metadata;
 4. valid delta predecessor and cursor-expiry/missing-cursor fallback to full;
-5. partial acquisition preserving the prior accepted complete state and forbidding false deletion;
+5. partial acquisition preserving the prior accepted complete state, prior operational-success clock, and forbidding false deletion;
 6. source outage/no false freshness;
-7. formulation change routing and certificate invalidation/recheck routing;
-8. independent formulation/retailer/certificate clocks;
-9. bounded rate plan and retry metadata;
-10. source-policy/schema/auth blocker behavior;
-11. queue and catalog-proposal deduplication;
-12. health projection of refresh failures/stale queues;
-13. no secrets or user identities in pull-request/fork/queue surfaces; and
-14. manual recovery/default-branch schedule safeguards.
+7. successful unchanged acquisition advancing only operational cadence, not accepted/evidence freshness;
+8. formulation change routing and certificate invalidation/recheck routing;
+9. independent formulation/retailer/certificate/acquisition clocks;
+10. bounded rate plan and retry metadata;
+11. source-policy/schema/auth blocker behavior;
+12. queue and catalog-proposal deduplication;
+13. health projection of refresh failures/stale queues;
+14. admitted submission targeting without user identity/history leakage;
+15. no secrets or user identities in pull-request/fork/queue surfaces; and
+16. manual recovery/default-branch schedule safeguards.

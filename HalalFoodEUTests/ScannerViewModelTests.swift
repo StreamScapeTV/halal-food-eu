@@ -15,7 +15,7 @@ struct ScannerViewModelTests {
         )
 
         viewModel.tryDemoBarcode(first.rawValue)
-        await Task.yield()
+        try await waitUntilLookupStarted(first.rawValue, in: catalog)
         viewModel.tryDemoBarcode(second.rawValue)
 
         try await waitUntil {
@@ -54,6 +54,18 @@ struct ScannerViewModelTests {
         }
     }
 
+    private func waitUntilLookupStarted(
+        _ barcode: String,
+        in catalog: DelayedCatalog,
+        attempts: Int = 100
+    ) async throws {
+        for _ in 0..<attempts {
+            if await catalog.startedLookups.contains(barcode) { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for lookup to start")
+    }
+
     private func waitUntil(
         attempts: Int = 100,
         condition: @MainActor () -> Bool
@@ -68,6 +80,7 @@ struct ScannerViewModelTests {
 
 private actor DelayedCatalog: ProductCatalog {
     let slowBarcode: String
+    private(set) var startedLookups: [String] = []
     private(set) var cancelledLookups: [String] = []
 
     init(slowBarcode: String) {
@@ -75,6 +88,7 @@ private actor DelayedCatalog: ProductCatalog {
     }
 
     func product(for barcode: Barcode) async throws -> ProductRecord? {
+        startedLookups.append(barcode.rawValue)
         do {
             if barcode.rawValue == slowBarcode {
                 try await Task.sleep(for: .milliseconds(250))

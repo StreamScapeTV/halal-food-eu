@@ -3,13 +3,15 @@
 
 This is the narrow repository-write adapter for the trusted proposal workflow. It
 never uploads catalog databases, manifests, raw source data, or product images. The
-only repository mutation it can make is the fixed metadata receipt path
+only repository mutation it performs itself is the fixed metadata receipt path
 ``Data/catalog/production-catalog-release-input-v1.json`` on the deterministic branch
 already derived by the reviewed production proposal gate.
 
-The adapter is deliberately fail-closed: an existing deterministic branch may be
-reused only when its receipt bytes are identical and its diff from the exact reviewed
-base contains no other path. Material changes are never merged automatically.
+A later source-aware refresh companion may add only the fixed accepted-state
+checkpoint paths declared below. The adapter is deliberately fail-closed: an
+existing deterministic branch may be reused only when its receipt bytes are
+identical and its diff from the exact reviewed base is confined to the receipt plus
+those fixed refresh-state paths. Material changes are never merged automatically.
 """
 
 from __future__ import annotations
@@ -28,6 +30,11 @@ from typing import Any, Protocol
 from production_catalog_release_input import ReleaseInputError, validate_release_input
 
 RECEIPT_PATH = "Data/catalog/production-catalog-release-input-v1.json"
+REFRESH_STATE_PATHS = {
+    "Data/refresh/accepted-open-food-facts-v1.json",
+    "Data/refresh/accepted-open-prices-v1.json",
+}
+ALLOWED_EXISTING_BRANCH_PATHS = {RECEIPT_PATH} | REFRESH_STATE_PATHS
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -232,8 +239,9 @@ def proposal_copy(receipt: dict[str, Any], proposal: dict[str, Any]) -> tuple[st
             f"- Current licenses: `{json.dumps(source_license['currentLicenses'], ensure_ascii=False, sort_keys=True)}`",
             f"- Current attributions: `{json.dumps(source_license['currentAttributions'], ensure_ascii=False, sort_keys=True)}`",
             "",
-            "This generated branch contains only the bounded post-merge release-input receipt. "
-            "The SQLite database and product image binaries are intentionally not committed.",
+            "The proposal writer commits only the bounded post-merge release-input receipt. "
+            "The reviewed source-refresh companion may subsequently add only the fixed accepted-source state checkpoints. "
+            "The SQLite database, raw source data, and product image binaries are intentionally not committed.",
             "",
             "Material changes require human review and are never auto-merged.",
         )
@@ -330,11 +338,15 @@ def materialize(
     files = comparison.get("files")
     if not isinstance(files, list):
         raise ProposalMutationError("proposal branch comparison did not include files")
-    paths = [item.get("filename") for item in files if isinstance(item, dict)]
+    paths = {
+        item.get("filename")
+        for item in files
+        if isinstance(item, dict) and isinstance(item.get("filename"), str)
+    }
     if not paths:
         return {"branch": branch, "pullRequest": None, "unchanged": True}
-    if paths != [RECEIPT_PATH]:
-        raise ProposalMutationError("deterministic proposal branch contains changes outside the release receipt")
+    if RECEIPT_PATH not in paths or not paths.issubset(ALLOWED_EXISTING_BRANCH_PATHS):
+        raise ProposalMutationError("deterministic proposal branch contains changes outside admitted proposal paths")
 
     query = urllib.parse.urlencode({"state": "open", "head": f"{owner}:{branch}", "base": base_ref})
     pulls = client.get(f"/pulls?{query}")

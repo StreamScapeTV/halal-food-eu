@@ -60,6 +60,7 @@ jobs:
           python3 Tools/tests/test_catalog_refresh_operational_state.py
           python3 Tools/tests/test_catalog_refresh_plan.py
           python3 Tools/tests/test_catalog_refresh_health.py
+          python3 Tools/tests/test_catalog_refresh_health_workflow.py
           python3 Tools/tests/test_catalog_refresh_workflow_status.py
           python3 Tools/tests/test_catalog_refresh_artifact_locator.py
           python3 Tools/tests/test_catalog_refresh_submission_targets.py

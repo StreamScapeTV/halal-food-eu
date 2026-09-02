@@ -65,6 +65,12 @@ def refresh_queue():
     }
 
 
+def conditionally_admitted_source_policy():
+    value = copy.deepcopy(SOURCE_POLICY)
+    value["conditionalRequestMetadata"] = ["etag", "last-modified"]
+    return value
+
+
 class RefreshPlanTests(unittest.TestCase):
     def build(self, *, policy=None, source_policy=None, lane="full", previous=None, queue=None, evaluated_at="2026-09-02T00:00:00Z"):
         return MODULE.build_plan(
@@ -84,8 +90,11 @@ class RefreshPlanTests(unittest.TestCase):
         self.assertEqual(scheduled, manual)
         MODULE.validate_plan(scheduled)
 
-    def test_supported_conditional_metadata_projects_exact_headers_from_accepted_lineage(self):
-        plan = self.build(previous=previous_state())
+    def test_supported_conditional_metadata_requires_both_refresh_and_source_authority(self):
+        plan = self.build(
+            source_policy=conditionally_admitted_source_policy(),
+            previous=previous_state(),
+        )
         self.assertEqual(
             plan["conditionalRequestHeaders"],
             {
@@ -99,16 +108,34 @@ class RefreshPlanTests(unittest.TestCase):
         state["lastSuccessfulFullAcquisitionAt"] = "2026-09-05T00:00:00Z"
         state["lastSuccessfulFullSnapshotID"] = "off-noop-2"
         state["nextFullDueAt"] = "2026-09-12T00:00:00Z"
-        plan = self.build(previous=state, evaluated_at="2026-09-06T00:00:00Z")
+        plan = self.build(
+            source_policy=conditionally_admitted_source_policy(),
+            previous=state,
+            evaluated_at="2026-09-06T00:00:00Z",
+        )
         self.assertEqual(plan["fullDueAt"], "2026-09-12T00:00:00Z")
         self.assertEqual(plan["acceptedSnapshotID"], "off-full-1")
         self.assertEqual(plan["conditionalRequestHeaders"]["If-None-Match"], '"off-etag-1"')
 
-    def test_unsupported_conditional_metadata_is_omitted(self):
+    def test_refresh_policy_metadata_without_source_admission_is_omitted(self):
+        plan = self.build(previous=previous_state())
+        self.assertEqual(plan["conditionalRequestHeaders"], {})
+
+    def test_source_admission_without_refresh_policy_metadata_is_omitted(self):
         policy = copy.deepcopy(POLICY)
         policy["sources"]["open-food-facts"]["conditionalMetadata"] = []
-        plan = self.build(policy=policy, previous=previous_state())
+        plan = self.build(
+            policy=policy,
+            source_policy=conditionally_admitted_source_policy(),
+            previous=previous_state(),
+        )
         self.assertEqual(plan["conditionalRequestHeaders"], {})
+
+    def test_malformed_source_conditional_capability_fails_closed(self):
+        source_policy = copy.deepcopy(SOURCE_POLICY)
+        source_policy["conditionalRequestMetadata"] = "etag"
+        with self.assertRaises(MODULE.RefreshPlanError):
+            self.build(source_policy=source_policy, previous=previous_state())
 
     def test_valid_reviewed_delta_cursor_selects_delta(self):
         policy = copy.deepcopy(POLICY)

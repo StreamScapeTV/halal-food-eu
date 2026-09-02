@@ -27,11 +27,17 @@
         "additionalProperties": false,
         "required": ["adapterVersion", "fullCadenceDays", "targetedCadenceHours", "supportedAcquisitionModes", "conditionalMetadata", "targetedQueue"],
         "properties": {
-          "adapterVersion": {"type": "string"},
+          "adapterVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
           "fullCadenceDays": {"type": "integer", "minimum": 1, "maximum": 365},
           "targetedCadenceHours": {"type": ["integer", "null"], "minimum": 1},
-          "supportedAcquisitionModes": {"type": "array", "items": {"enum": ["full"]}, "uniqueItems": true, "minItems": 1},
-          "conditionalMetadata": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "supportedAcquisitionModes": {
+            "type": "array",
+            "items": {"enum": ["full", "delta"]},
+            "contains": {"const": "full"},
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "conditionalMetadata": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "targetedQueue": {
             "type": "object",
             "additionalProperties": false,
@@ -43,7 +49,7 @@
               "batchSize": {"type": "integer", "minimum": 0},
               "maxRequestsPerMinute": {"type": "integer", "minimum": 0},
               "minimumRequestIntervalSeconds": {"type": "number", "minimum": 0},
-              "fields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+              "fields": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
             }
           }
         }

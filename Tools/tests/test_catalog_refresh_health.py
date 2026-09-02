@@ -95,6 +95,18 @@ def plan(due_reason="full-cadence-not-due"):
     }
 
 
+def workflow_status(source_key, conclusion="success", run_id=12345):
+    return {
+        "schemaVersion": 1,
+        "sourceKey": source_key,
+        "available": True,
+        "conclusion": conclusion,
+        "runId": str(run_id),
+        "event": "schedule",
+        "updatedAt": "2026-09-02T03:30:00Z",
+    }
+
+
 class RefreshHealthTests(unittest.TestCase):
     def test_refresh_queue_is_visible_in_catalog_health(self):
         report = REFRESH_HEALTH.enrich_health(
@@ -130,23 +142,66 @@ class RefreshHealthTests(unittest.TestCase):
         )
         self.assertIn("refresh:open-food-facts:full-overdue", report["refresh"]["deduplicationKeys"])
 
-    def test_failed_scheduled_refresh_is_visible_through_health_incidents(self):
-        workflow = {
-            "conclusion": "failure",
-            "runId": 12345,
-            "event": "schedule",
-            "updatedAt": "2026-09-02T03:30:00Z",
+    def test_failed_scheduled_refresh_is_source_specific_and_visible_through_incidents(self):
+        statuses = [
+            workflow_status("open-food-facts", "failure", 100),
+            workflow_status("open-prices", "success", 101),
+        ]
+        report = REFRESH_HEALTH.enrich_health(
+            base_health=base_health(),
+            refresh_queue=queue(),
+            refresh_plan=plan(),
+            workflow_statuses=statuses,
+        )
+        key = "refresh:open-food-facts:scheduled-workflow:failure"
+        self.assertIn(key, report["refresh"]["deduplicationKeys"])
+        self.assertIn(key, report["qualityGate"]["deduplicationKeys"])
+        self.assertEqual(report["qualityGate"]["incident"]["action"], "investigate-refresh")
+        self.assertEqual(report["refresh"]["scheduledWorkflows"]["open-food-facts"]["conclusion"], "failure")
+        self.assertEqual(report["refresh"]["scheduledWorkflows"]["open-prices"]["conclusion"], "success")
+
+    def test_open_prices_failure_cannot_be_hidden_by_newer_off_success(self):
+        statuses = [
+            workflow_status("open-food-facts", "success", 200),
+            workflow_status("open-prices", "failure", 199),
+        ]
+        report = REFRESH_HEALTH.enrich_health(
+            base_health=base_health(),
+            refresh_queue=queue(),
+            refresh_plan=plan(),
+            workflow_statuses=statuses,
+        )
+        self.assertIn(
+            "refresh:open-prices:scheduled-workflow:failure",
+            report["refresh"]["deduplicationKeys"],
+        )
+
+    def test_unavailable_source_workflow_is_visible_without_false_failure(self):
+        unavailable = {
+            "schemaVersion": 1,
+            "sourceKey": "open-prices",
+            "available": False,
         }
         report = REFRESH_HEALTH.enrich_health(
             base_health=base_health(),
             refresh_queue=queue(),
             refresh_plan=plan(),
-            workflow_status=workflow,
+            workflow_statuses=[unavailable],
         )
-        key = "refresh:scheduled-catalog-refresh:failure"
-        self.assertIn(key, report["refresh"]["deduplicationKeys"])
-        self.assertIn(key, report["qualityGate"]["deduplicationKeys"])
-        self.assertEqual(report["qualityGate"]["incident"]["action"], "investigate-refresh")
+        self.assertFalse(report["refresh"]["scheduledWorkflows"]["open-prices"]["available"])
+        self.assertNotIn(
+            "refresh:open-prices:scheduled-workflow:failure",
+            report["refresh"]["deduplicationKeys"],
+        )
+
+    def test_duplicate_source_workflow_status_fails_closed(self):
+        with self.assertRaises(REFRESH_HEALTH.RefreshHealthError):
+            REFRESH_HEALTH.enrich_health(
+                base_health=base_health(),
+                refresh_queue=queue(),
+                refresh_plan=plan(),
+                workflow_statuses=[workflow_status("open-food-facts"), workflow_status("open-food-facts")],
+            )
 
     def test_partial_or_blocked_attempt_is_health_incident_not_freshness(self):
         refresh_report = {
@@ -206,10 +261,12 @@ class RefreshHealthTests(unittest.TestCase):
             base_health=base_health(),
             refresh_queue=queue(),
             refresh_plan=plan(),
+            workflow_statuses=[workflow_status("open-food-facts")],
         )
         summary = REFRESH_HEALTH.human_summary(report)
         self.assertIn("Refresh dates are independent", summary)
         self.assertIn("never freshens older evidence", summary)
+        self.assertIn("Scheduled source workflows", summary)
 
 
 if __name__ == "__main__":

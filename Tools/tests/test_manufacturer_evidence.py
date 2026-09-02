@@ -36,10 +36,10 @@ class ManufacturerProjectionTests(unittest.TestCase):
         provenance = projected[MFG.PROVENANCE_KEY]
         self.assertEqual(provenance["owner"], "fixture-producer-org")
         self.assertEqual(
-            provenance["ownerFields"]["ingredients_text_de"],
-            raw["ingredients_text_de"],
+            provenance["ownerFieldSha256"]["ingredients_text_de"],
+            MFG.sha256_text(raw["ingredients_text_de"]),
         )
-        self.assertNotIn("unreviewed_private_blob", provenance["ownerFields"])
+        self.assertNotIn("unreviewed_private_blob", provenance["ownerFieldSha256"])
         source = provenance["manufacturerSources"][0]
         self.assertEqual(source["sourceID"], "fixture-producer-pim")
         self.assertNotIn("unreviewed_private_blob", source["fields"])
@@ -50,7 +50,7 @@ class ManufacturerProjectionTests(unittest.TestCase):
         provenance = MFG.sanitize_producer_provenance(raw)
         self.assertIsNotNone(provenance)
         assert provenance is not None
-        self.assertNotIn("ownerFields", provenance)
+        self.assertNotIn("ownerFieldSha256", provenance)
         self.assertEqual(provenance["manufacturerSources"][0]["fields"], ["ingredients_text_en"])
 
     def test_unsafe_or_unbounded_source_metadata_is_omitted(self):
@@ -70,7 +70,7 @@ class ManufacturerProjectionTests(unittest.TestCase):
         self.assertIsNotNone(provenance)
         assert provenance is not None
         self.assertNotIn("owner", provenance)
-        self.assertNotIn("ownerFields", provenance)
+        self.assertNotIn("ownerFieldSha256", provenance)
         self.assertNotIn("sourceLicenceURL", provenance["manufacturerSources"][0])
 
 
@@ -133,6 +133,10 @@ class ManufacturerEvidenceIntegrationTests(unittest.TestCase):
         self.assertNotIn("owner_fields", producer_record)
         self.assertNotIn("sources", producer_record)
         self.assertIn(MFG.PROVENANCE_KEY, producer_record)
+        self.assertNotIn(
+            "WEIZENMEHL, Zucker, Kakaobutter, Emulgator: Lecithine.",
+            json.dumps(producer_record[MFG.PROVENANCE_KEY], ensure_ascii=False),
+        )
 
     def test_reports_are_deterministic_for_same_snapshot_and_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -161,6 +165,19 @@ class ManufacturerEvidenceIntegrationTests(unittest.TestCase):
         candidate = next(item for item in target["items"] if item["reason"] == "producer-provenance-candidate")
         self.assertNotIn("producerProvenanceID", candidate)
         self.assertFalse(any(record["sourceRecordID"] == candidate["sourceRecordID"] for record in provenance["records"]))
+
+    def test_ambiguous_manufacturer_sources_remain_review_only(self):
+        raw = {
+            "owner": "producer-x",
+            "sources": [
+                {"manufacturer": 1, "id": "source-a", "fields": ["ingredients_text_en"]},
+                {"manufacturer": 1, "id": "source-b", "fields": ["ingredients_text_en"]},
+            ],
+        }
+        provenance = MFG.sanitize_producer_provenance(raw)
+        assert provenance is not None
+        self.assertEqual(len(provenance["manufacturerSources"]), 2)
+        self.assertNotIn("ownerFieldSha256", provenance)
 
 
 if __name__ == "__main__":

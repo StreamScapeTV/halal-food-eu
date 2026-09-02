@@ -39,6 +39,8 @@ def base_state():
         "acceptedComplete": None,
         "candidateComplete": None,
         "lastAttempt": None,
+        "lastSuccessfulFullAcquisitionAt": None,
+        "lastSuccessfulFullSnapshotID": None,
         "nextFullDueAt": "2026-09-02T00:00:00Z",
         "candidateEligible": False,
         "candidateChangedFromAccepted": False,
@@ -65,6 +67,9 @@ def candidate_state():
         evaluatedAt="2026-09-05T00:00:00Z",
         candidateComplete=copy.deepcopy(attempt),
         lastAttempt=copy.deepcopy(attempt),
+        lastSuccessfulFullAcquisitionAt="2026-09-05T00:00:00Z",
+        lastSuccessfulFullSnapshotID="off-full-2",
+        nextFullDueAt="2026-09-12T00:00:00Z",
         candidateEligible=True,
         candidateChangedFromAccepted=True,
     )
@@ -181,6 +186,7 @@ class RefreshStateProposalTests(unittest.TestCase):
         promoted = json.loads(base64.b64decode(body["content"]).decode("utf-8"))
         self.assertEqual(promoted["acceptedComplete"]["snapshotID"], "off-full-2")
         self.assertIsNone(promoted["candidateComplete"])
+        self.assertEqual(promoted["lastSuccessfulFullAcquisitionAt"], "2026-09-05T00:00:00Z")
         self.assertEqual(promoted["nextFullDueAt"], "2026-09-12T00:00:00Z")
 
     def test_logical_noop_does_not_create_or_promote_refresh_state(self):
@@ -203,11 +209,23 @@ class RefreshStateProposalTests(unittest.TestCase):
         self.assertFalse(result["promoted"])
         self.assertEqual(client.puts, [])
 
-    def test_candidate_cannot_move_full_due_clock_before_promotion(self):
+    def test_operational_clock_may_advance_before_promotion_but_accepted_lineage_may_not(self):
         candidate = candidate_state()
-        candidate["nextFullDueAt"] = "2026-09-12T00:00:00Z"
+        self.assertNotEqual(candidate["nextFullDueAt"], base_state()["nextFullDueAt"])
+        result = materialize(
+            client=FakeClient(receipt=release_input(), state=base_state()),
+            policy=copy.deepcopy(POLICY),
+            candidate_state=candidate,
+            release_input=release_input(),
+            base_sha=BASE_SHA,
+        )
+        self.assertTrue(result["promoted"])
+
+    def test_candidate_full_operational_clock_must_bind_reviewed_snapshot(self):
+        candidate = candidate_state()
+        candidate["lastSuccessfulFullSnapshotID"] = "different-snapshot"
         candidate["stateSha256"] = digest_without(candidate, "stateSha256")
-        with self.assertRaisesRegex(RefreshStateMutationError, "full-refresh clock"):
+        with self.assertRaisesRegex(RefreshStateMutationError, "snapshot clock"):
             materialize(
                 client=FakeClient(receipt=release_input(), state=base_state()),
                 policy=copy.deepcopy(POLICY),
@@ -221,6 +239,19 @@ class RefreshStateProposalTests(unittest.TestCase):
         candidate["candidateComplete"]["snapshotID"] = "different-snapshot"
         candidate["stateSha256"] = digest_without(candidate, "stateSha256")
         with self.assertRaisesRegex(RefreshStateMutationError, "reviewed catalog snapshot"):
+            materialize(
+                client=FakeClient(receipt=release_input(), state=base_state()),
+                policy=copy.deepcopy(POLICY),
+                candidate_state=candidate,
+                release_input=release_input(),
+                base_sha=BASE_SHA,
+            )
+
+    def test_accepted_lineage_must_match_protected_base(self):
+        candidate = candidate_state()
+        candidate["acceptedComplete"] = copy.deepcopy(candidate["candidateComplete"])
+        candidate["stateSha256"] = digest_without(candidate, "stateSha256")
+        with self.assertRaisesRegex(RefreshStateMutationError, "protected accepted source lineage"):
             materialize(
                 client=FakeClient(receipt=release_input(), state=base_state()),
                 policy=copy.deepcopy(POLICY),

@@ -1,0 +1,14 @@
+{
+  "acceptedComplete": null,
+  "candidateChangedFromAccepted": false,
+  "candidateComplete": null,
+  "candidateEligible": false,
+  "evaluatedAt": "2026-09-02T00:00:00Z",
+  "lastAttempt": null,
+  "market": "DE",
+  "nextFullDueAt": "2026-09-02T00:00:00Z",
+  "policyVersion": "1.0.0",
+  "schemaVersion": 1,
+  "sourceKey": "open-food-facts",
+  "stateSha256": "1d12a9e92a3ac577282907d5cc67653e0faa0cfc254f3ed86baaf63681c657e5"
+}

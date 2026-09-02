@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/catalog-health-v1.schema.json",
+  "title": "Halal Food EU Catalog Health v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evaluatedAt",
+    "commitSha",
+    "scope",
+    "products",
+    "freshness",
+    "assessments",
+    "certifications",
+    "retailers",
+    "sources",
+    "changes",
+    "buildRuntime",
+    "qualityGate",
+    "reportSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "evaluatedAt": {"type": "string", "format": "date-time"},
+    "commitSha": {"type": "string", "minLength": 7},
+    "scope": {"type": "object"},
+    "products": {"type": "object"},
+    "freshness": {"type": "object"},
+    "assessments": {"type": "object"},
+    "certifications": {"type": "object"},
+    "retailers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claimState",
+          "denominator",
+          "completeSnapshotID",
+          "coverageGatePresent",
+          "evidenceCounts",
+          "latestEvidenceAt"
+        ],
+        "properties": {
+          "claimState": {
+            "enum": [
+              "no-evidence",
+              "community-only",
+              "observational-partial",
+              "official-partial",
+              "official-complete-snapshot",
+              "degraded"
+            ]
+          },
+          "denominator": {"type": ["integer", "null"], "minimum": 0},
+          "completeSnapshotID": {"type": ["string", "null"]},
+          "coverageGatePresent": {"type": "boolean"},
+          "evidenceCounts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["official", "observational", "community", "other"],
+            "properties": {
+              "official": {"type": "integer", "minimum": 0},
+              "observational": {"type": "integer", "minimum": 0},
+              "community": {"type": "integer", "minimum": 0},
+              "other": {"type": "integer", "minimum": 0}
+            }
+          },
+          "latestEvidenceAt": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "changes": {"type": "object"},
+    "buildRuntime": {"type": "object"},
+    "qualityGate": {"type": "object"},
+    "reportSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

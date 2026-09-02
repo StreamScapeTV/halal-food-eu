@@ -13,12 +13,14 @@ ALLOWED_WRITE_PERMISSIONS = {
     "configuration-health.yml": {"issues"},
     "label-sync.yml": {"issues"},
     "propose-catalog-update.yml": {"contents", "pull-requests"},
+    "promote-refresh-state.yml": {"contents"},
     "scheduled-catalog-refresh.yml": {"contents", "pull-requests"},
 }
 TRUSTED_ONLY_WORKFLOWS = {
     "acquire-catalog.yml",
     "scheduled-catalog-refresh.yml",
     "propose-catalog-update.yml",
+    "promote-refresh-state.yml",
     "catalog-release.yml",
     "catalog-health.yml",
     "configuration-health.yml",
@@ -26,6 +28,7 @@ TRUSTED_ONLY_WORKFLOWS = {
 DEFAULT_BRANCH_ONLY_WORKFLOWS = {
     "scheduled-catalog-refresh.yml",
     "propose-catalog-update.yml",
+    "promote-refresh-state.yml",
     "catalog-release.yml",
     "catalog-health.yml",
     "configuration-health.yml",

@@ -7,13 +7,20 @@ import json
 from pathlib import Path
 from typing import Any
 
+from certifier_registry import (
+    DEFAULT_REGISTRY,
+    RegistryError,
+    certification_status_report,
+    complete_review_with_registry,
+    load_registry,
+    merge_status_into_migration,
+)
 from evidence_model_core import EvidenceValidationError, validate_envelope
 from halal_methodology_batch import analyze_envelope
 from halal_methodology_core import (
     MethodologyError,
     analyze_ingredient,
     assessment_migration_report,
-    complete_review,
     validate_methodology,
     validity_events_from_migration,
 )
@@ -95,9 +102,10 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
 
-    validate = sub.add_parser("validate", help="validate the committed methodology and identity-only additive data")
+    validate = sub.add_parser("validate", help="validate the committed methodology, additive data, and certifier registry")
     validate.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
     validate.add_argument("--additives", type=Path, default=DEFAULT_ADDITIVES)
+    validate.add_argument("--certifier-registry", type=Path, default=DEFAULT_REGISTRY)
 
     analyze = sub.add_parser("analyze", help="analyze one current GTIN/market ingredient observation")
     analyze.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
@@ -115,13 +123,15 @@ def parser() -> argparse.ArgumentParser:
 
     review = sub.add_parser("review", help="materialize immutable assessment/review records from explicit human review input")
     review.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
+    review.add_argument("--certifier-registry", type=Path, default=DEFAULT_REGISTRY)
     review.add_argument("--evidence", type=Path, required=True)
     review.add_argument("--analysis", type=Path, required=True)
     review.add_argument("--review-input", type=Path, required=True)
     review.add_argument("--output", type=Path, required=True)
 
-    migrate = sub.add_parser("migrate", help="report current-assessment compatibility with the current methodology/formulation")
+    migrate = sub.add_parser("migrate", help="report current-assessment compatibility with methodology, formulation, and certification policy")
     migrate.add_argument("--methodology", type=Path, default=DEFAULT_METHODOLOGY)
+    migrate.add_argument("--certifier-registry", type=Path, default=DEFAULT_REGISTRY)
     migrate.add_argument("--evidence", type=Path, required=True)
     migrate.add_argument("--occurred-at", required=True)
     migrate.add_argument("--output", type=Path, required=True)
@@ -136,9 +146,11 @@ def main() -> None:
         if args.command == "validate":
             additives = load_json(args.additives)
             validate_additive_identities(additives)
+            registry = load_registry(args.certifier_registry)
             print(
-                f"Validated halal methodology {methodology['methodologyVersion']} "
-                f"and additive identities {additives['datasetVersion']}"
+                f"Validated halal methodology {methodology['methodologyVersion']}, "
+                f"additive identities {additives['datasetVersion']}, and "
+                f"certifier registry {registry['registryVersion']} ({len(registry['entries'])} entries)"
             )
             return
 
@@ -174,6 +186,7 @@ def main() -> None:
             )
             return
 
+        registry = load_registry(args.certifier_registry)
         if args.command == "review":
             report = load_json(args.analysis)
             review_input = load_json(args.review_input)
@@ -183,11 +196,12 @@ def main() -> None:
                 methodology=methodology,
             )
             cert_ids = [] if selection is None else [item for item in selection.get("certificationIDs", []) if isinstance(item, str)]
-            result = complete_review(
+            result = complete_review_with_registry(
                 report=report,
                 methodology=methodology,
                 review_input=review_input,
                 certifications=_certifications(envelope, cert_ids),
+                registry=registry,
             )
             result = attach_checklist_snapshot(result, report, methodology)
             write_json(args.output, result)
@@ -195,10 +209,17 @@ def main() -> None:
             return
 
         migration = assessment_migration_report(envelope=envelope, methodology=methodology)
+        certification_status = certification_status_report(
+            envelope=envelope,
+            registry=registry,
+            evaluated_at=args.occurred_at,
+        )
+        migration = merge_status_into_migration(migration, certification_status)
+        migration["certificationStatus"] = certification_status
         migration["validityEvents"] = validity_events_from_migration(migration, occurred_at=args.occurred_at)
         write_json(args.output, migration)
         print(f"Methodology migration: {migration['invalidated']} invalidated, {migration['carriedForward']} carried forward")
-    except (MethodologyError, EvidenceValidationError, AdditiveReferenceError) as exc:
+    except (MethodologyError, EvidenceValidationError, AdditiveReferenceError, RegistryError) as exc:
         raise SystemExit(f"halal methodology failed: {exc}") from exc
 
 

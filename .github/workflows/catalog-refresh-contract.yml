@@ -7,6 +7,8 @@ on:
       - "Tools/github_refresh_state_proposal.py"
       - "Tools/tests/test_catalog_refresh*.py"
       - "Tools/tests/test_github_refresh_state_proposal.py"
+      - "Tools/tests/test_production_release_workflow.py"
+      - "Tools/tests/test_production_retailer_workflow.py"
       - "Data/refresh/**"
       - "Data/health/catalog-health-v2.schema.json"
       - ".github/workflows/catalog-refresh*.yml"
@@ -14,6 +16,7 @@ on:
       - ".github/workflows/promote-refresh-state.yml"
       - ".github/workflows/scheduled-catalog-refresh.yml"
       - ".github/workflows/catalog-health.yml"
+      - ".github/workflows/catalog-release.yml"
       - "docs/feature-specs/025-source-aware-catalog-refresh.md"
   workflow_dispatch:
 
@@ -59,3 +62,5 @@ jobs:
           python3 Tools/tests/test_catalog_refresh_artifact_locator.py
           python3 Tools/tests/test_catalog_refresh_submission_targets.py
           python3 Tools/tests/test_github_refresh_state_proposal.py
+          python3 Tools/tests/test_production_retailer_workflow.py
+          python3 Tools/tests/test_production_release_workflow.py

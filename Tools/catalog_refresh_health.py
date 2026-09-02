@@ -85,8 +85,8 @@ def _queue_projection(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]
     )
 
 
-def _workflow_projection(status: dict[str, Any] | None) -> tuple[dict[str, Any], str | None]:
-    if status is None or status.get("available") is False:
+def _workflow_projection(status: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    if status.get("available") is False:
         return {"available": False, "conclusion": None, "runId": None, "event": None, "updatedAt": None}, None
     available = status.get("available")
     if available not in {None, True}:
@@ -108,13 +108,29 @@ def _workflow_projection(status: dict[str, Any] | None) -> tuple[dict[str, Any],
     return projection, conclusion if unhealthy else None
 
 
+def _workflow_projections(statuses: list[dict[str, Any]] | None) -> tuple[dict[str, Any], list[str]]:
+    projections: dict[str, Any] = {}
+    blockers: list[str] = []
+    for status in statuses or []:
+        source_key = status.get("sourceKey")
+        if not isinstance(source_key, str) or not source_key:
+            raise RefreshHealthError("workflow status sourceKey is invalid")
+        if source_key in projections:
+            raise RefreshHealthError(f"duplicate workflow status for source {source_key}")
+        projection, conclusion = _workflow_projection(status)
+        projections[source_key] = projection
+        if conclusion:
+            blockers.append(f"refresh:{source_key}:scheduled-workflow:{conclusion}")
+    return dict(sorted(projections.items())), sorted(blockers)
+
+
 def enrich_health(
     *,
     base_health: dict[str, Any],
     refresh_queue: dict[str, Any],
     refresh_plan: dict[str, Any],
     refresh_report: dict[str, Any] | None = None,
-    workflow_status: dict[str, Any] | None = None,
+    workflow_statuses: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     catalog_health.validate_health_report(base_health)
     if refresh_plan.get("schemaVersion") != 1:
@@ -124,7 +140,7 @@ def enrich_health(
         raise RefreshHealthError("refresh plan sourceKey is invalid")
 
     queue_projection, queue_blockers = _queue_projection(refresh_queue)
-    workflow_projection, workflow_blocker = _workflow_projection(workflow_status)
+    workflow_projections, workflow_blockers = _workflow_projections(workflow_statuses)
     targeted = refresh_plan.get("targetedExecution")
     if targeted is not None and not isinstance(targeted, dict):
         raise RefreshHealthError("targetedExecution must be object or null")
@@ -132,13 +148,12 @@ def enrich_health(
     blocker_keys: set[str] = {
         f"refresh:{source_key}:queue:{reason}" for reason in queue_blockers
     }
+    blocker_keys.update(workflow_blockers)
     due_reason = refresh_plan.get("fullDueReason")
     if due_reason == "full-cadence-due":
         blocker_keys.add(f"refresh:{source_key}:full-overdue")
     elif due_reason == "no-successful-full-acquisition":
         blocker_keys.add(f"refresh:{source_key}:no-successful-full-acquisition")
-    if workflow_blocker:
-        blocker_keys.add(f"refresh:scheduled-catalog-refresh:{workflow_blocker}")
 
     attempt = {
         "available": refresh_report is not None,
@@ -194,7 +209,7 @@ def enrich_health(
             "blockedReason": targeted.get("blockedReason") if targeted else None,
         },
         "latestAttempt": attempt,
-        "scheduledWorkflow": workflow_projection,
+        "scheduledWorkflows": workflow_projections,
         "deduplicationKeys": sorted(blocker_keys),
     }
 
@@ -228,6 +243,9 @@ def validate_refresh_health(report: dict[str, Any]) -> None:
     success_snapshot = refresh.get("lastSuccessfulFullSnapshotID")
     if (success_at is None) != (success_snapshot is None):
         raise RefreshHealthError("refresh successful-full acquisition clock is inconsistent")
+    workflows = refresh.get("scheduledWorkflows")
+    if not isinstance(workflows, dict):
+        raise RefreshHealthError("refresh scheduledWorkflows must be an object")
     gate = report.get("qualityGate")
     if not isinstance(gate, dict):
         raise RefreshHealthError("refresh-enriched health lacks qualityGate")
@@ -258,7 +276,7 @@ def human_summary(report: dict[str, Any]) -> str:
         f"- Full refresh due: `{refresh['fullDueAt']}` (`{refresh['fullDueReason']}`)",
         f"- Queue entries: `{refresh['queue']['entryCount']}`; reasons: `{json.dumps(refresh['queue']['reasonCounts'], sort_keys=True)}`",
         f"- Targeted network allowed: `{str(refresh['targeted']['networkExecutionAllowed']).lower()}`; performed: `{str(refresh['targeted']['networkExecutionPerformed']).lower()}`",
-        f"- Scheduled refresh conclusion: `{refresh['scheduledWorkflow']['conclusion']}`",
+        f"- Scheduled source workflows: `{json.dumps(refresh['scheduledWorkflows'], sort_keys=True)}`",
         f"- Refresh incident keys: `{json.dumps(refresh['deduplicationKeys'])}`",
         "",
         "Refresh dates are independent of formulation, retailer, certification, and assessment evidence dates. A source check never freshens older evidence by itself.",
@@ -277,7 +295,7 @@ def parse_args() -> argparse.Namespace:
     enrich.add_argument("--refresh-queue", type=Path, required=True)
     enrich.add_argument("--refresh-plan", type=Path, required=True)
     enrich.add_argument("--refresh-report", type=Path)
-    enrich.add_argument("--workflow-status", type=Path)
+    enrich.add_argument("--workflow-status", type=Path, action="append", default=[])
     enrich.add_argument("--output", type=Path, required=True)
     enrich.add_argument("--markdown-output", type=Path, required=True)
     validate = sub.add_parser("validate", help="validate refresh-enriched catalog health")
@@ -298,12 +316,17 @@ def main() -> None:
         queue = load_json(args.refresh_queue)
         plan = load_json(args.refresh_plan)
         assert base is not None and queue is not None and plan is not None
+        statuses = []
+        for path in args.workflow_status:
+            value = load_json(path)
+            assert value is not None
+            statuses.append(value)
         report = enrich_health(
             base_health=base,
             refresh_queue=queue,
             refresh_plan=plan,
             refresh_report=load_json(args.refresh_report),
-            workflow_status=load_json(args.workflow_status),
+            workflow_statuses=statuses,
         )
         write_json(args.output, report)
         args.markdown_output.parent.mkdir(parents=True, exist_ok=True)

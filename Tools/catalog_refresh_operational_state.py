@@ -176,6 +176,62 @@ def validate_operational_report(report: dict[str, Any]) -> None:
         raise OperationalRefreshError("refresh report digest mismatch")
 
 
+def merge_previous_state(
+    *,
+    accepted: dict[str, Any],
+    operational: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compose authoritative accepted lineage with the newest safe operational clock.
+
+    `accepted` comes from protected main and owns every evidence/candidate field.
+    `operational` may come from an immutable prior workflow artifact and contributes
+    only the successful-full acquisition timestamp/snapshot and next-due time.
+    """
+    validate_operational_state(accepted)
+    if accepted.get("candidateComplete") is not None or accepted.get("candidateEligible") is not False or accepted.get("candidateChangedFromAccepted") is not False:
+        raise OperationalRefreshError("protected accepted refresh state contains an unpromoted candidate")
+    result = json.loads(json.dumps(accepted))
+    if operational is None:
+        return result
+    validate_operational_state(operational)
+    if (
+        operational.get("schemaVersion") != accepted.get("schemaVersion")
+        or operational.get("sourceKey") != accepted.get("sourceKey")
+        or operational.get("market") != accepted.get("market")
+        or operational.get("policyVersion") != accepted.get("policyVersion")
+    ):
+        raise OperationalRefreshError("operational artifact identity differs from protected accepted state")
+
+    accepted_at = parse_time(
+        accepted.get("lastSuccessfulFullAcquisitionAt"),
+        "accepted lastSuccessfulFullAcquisitionAt",
+        allow_none=True,
+    )
+    operational_at = parse_time(
+        operational.get("lastSuccessfulFullAcquisitionAt"),
+        "operational lastSuccessfulFullAcquisitionAt",
+        allow_none=True,
+    )
+    use_operational = False
+    if operational_at is not None and accepted_at is None:
+        use_operational = True
+    elif operational_at is not None and accepted_at is not None:
+        if operational_at > accepted_at:
+            use_operational = True
+        elif operational_at == accepted_at:
+            accepted_snapshot = accepted.get("lastSuccessfulFullSnapshotID")
+            operational_snapshot = operational.get("lastSuccessfulFullSnapshotID")
+            if operational_snapshot != accepted_snapshot:
+                raise OperationalRefreshError("equal successful-full timestamps identify different snapshots")
+    if use_operational:
+        result["lastSuccessfulFullAcquisitionAt"] = operational["lastSuccessfulFullAcquisitionAt"]
+        result["lastSuccessfulFullSnapshotID"] = operational["lastSuccessfulFullSnapshotID"]
+        result["nextFullDueAt"] = operational["nextFullDueAt"]
+    result["stateSha256"] = digest_without(result, "stateSha256")
+    validate_operational_state(result)
+    return result
+
+
 def write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -191,6 +247,10 @@ def parse_args() -> argparse.Namespace:
     apply.add_argument("--previous-state", type=Path)
     apply.add_argument("--state-output", type=Path, required=True)
     apply.add_argument("--report-output", type=Path, required=True)
+    merge = sub.add_parser("merge-previous")
+    merge.add_argument("--accepted-state", type=Path, required=True)
+    merge.add_argument("--operational-state", type=Path)
+    merge.add_argument("--output", type=Path, required=True)
     validate_state = sub.add_parser("validate-state")
     validate_state.add_argument("--input", type=Path, required=True)
     validate_report = sub.add_parser("validate-report")
@@ -212,6 +272,20 @@ def main() -> None:
             assert value is not None
             validate_operational_report(value)
             print(f"Validated operational refresh report {value['reportSha256']}")
+            return
+        if args.command == "merge-previous":
+            accepted = load_json(args.accepted_state)
+            assert accepted is not None
+            merged = merge_previous_state(
+                accepted=accepted,
+                operational=load_json(args.operational_state),
+            )
+            write_json(args.output, merged)
+            print(
+                f"Merged previous refresh state: source={merged['sourceKey']} "
+                f"lastFull={merged['lastSuccessfulFullAcquisitionAt']} "
+                f"accepted={((merged.get('acceptedComplete') or {}).get('snapshotID'))}"
+            )
             return
         state = load_json(args.state)
         report = load_json(args.report)

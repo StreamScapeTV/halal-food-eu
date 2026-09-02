@@ -49,6 +49,7 @@ def quality():
             "assessmentMethodologyVersions": {"1.0": 1},
             "retailerFreshnessByRetailerAndKind": {"lidl|store-observation": {"fresh": 1}},
         },
+        "changes": {"previousSourceRecordCount": 80, "currentSourceRecordCount": 100},
         "releaseBlockingFindings": [],
         "warnings": [{"code": "formulation-date-unknown"}],
         "incident": {"action": "none", "deduplicationKeys": []},
@@ -56,13 +57,23 @@ def quality():
     }
 
 
+def passing_lidl_gate():
+    return {
+        "state": "pass",
+        "claimState": "official-complete-snapshot",
+        "denominatorReconciled": True,
+        "denominator": 1,
+        "snapshotID": "lidl-de-2026-09-01",
+    }
+
+
 class CatalogHealthTests(unittest.TestCase):
-    def build(self, evidence=None, q=None, change=None):
+    def build(self, evidence=None, q=None, change=None, benchmark=None):
         return MODULE.build_health_report(
             envelope=evidence or envelope(),
             quality=q if q is not None else quality(),
             change=change,
-            benchmark=None,
+            benchmark=benchmark,
             evaluated_at="2026-09-02T00:00:00Z",
             commit_sha="0123456789abcdef",
         )
@@ -84,38 +95,50 @@ class CatalogHealthTests(unittest.TestCase):
 
     def test_official_evidence_alone_never_claims_complete_coverage(self):
         data = envelope()
-        data["retailerEvidence"][0].update({"kind": "official-listing", "evidenceClass": "official"})
-        report = self.build(evidence=data)
-        self.assertEqual(report["retailers"]["lidl"]["claimState"], "official-partial")
-        self.assertIsNone(report["retailers"]["lidl"]["denominator"])
-
-    def test_complete_claim_requires_explicit_reconciled_denominator(self):
-        data = envelope()
         data["retailerEvidence"][0].update({
-            "kind": "official-listing",
-            "evidenceClass": "official",
-            "coverageClaim": "official-complete-snapshot",
-            "denominatorReconciled": True,
-            "denominator": 1,
+            "kind": "official-listing", "evidenceClass": "official",
+            "coverageClaim": "official-complete-snapshot", "denominatorReconciled": True, "denominator": 1,
         })
         report = self.build(evidence=data)
+        self.assertEqual(report["retailers"]["lidl"]["claimState"], "official-partial")
+        self.assertFalse(report["retailers"]["lidl"]["coverageGatePresent"])
+        self.assertIsNone(report["retailers"]["lidl"]["denominator"])
+
+    def test_complete_claim_requires_separate_passing_reviewed_coverage_gate(self):
+        data = envelope()
+        data["retailerEvidence"][0].update({"kind": "official-listing", "evidenceClass": "official"})
+        q = quality()
+        q["retailerCoverageGates"] = {"lidl": passing_lidl_gate()}
+        report = self.build(evidence=data, q=q)
         self.assertEqual(report["retailers"]["lidl"]["claimState"], "official-complete-snapshot")
         self.assertEqual(report["retailers"]["lidl"]["denominator"], 1)
+        self.assertEqual(report["retailers"]["lidl"]["completeSnapshotID"], "lidl-de-2026-09-01")
+
+    def test_incomplete_or_malformed_coverage_gate_fails_closed(self):
+        data = envelope()
+        data["retailerEvidence"][0].update({"kind": "official-listing", "evidenceClass": "official"})
+        q = quality()
+        gate = passing_lidl_gate()
+        gate["denominatorReconciled"] = False
+        q["retailerCoverageGates"] = {"lidl": gate}
+        report = self.build(evidence=data, q=q)
+        self.assertEqual(report["retailers"]["lidl"]["claimState"], "official-partial")
+        self.assertFalse(report["retailers"]["lidl"]["coverageGatePresent"])
 
     def test_stale_official_evidence_degrades_instead_of_remaining_complete(self):
         data = envelope()
-        data["retailerEvidence"][0].update({
-            "kind": "official-listing",
-            "evidenceClass": "official",
-            "coverageClaim": "official-complete-snapshot",
-            "denominatorReconciled": True,
-            "denominator": 1,
-        })
+        data["retailerEvidence"][0].update({"kind": "official-listing", "evidenceClass": "official"})
         q = quality()
+        q["retailerCoverageGates"] = {"lidl": passing_lidl_gate()}
         q["metrics"]["retailerFreshnessByRetailerAndKind"] = {"lidl|official-listing": {"stale": 1}}
         report = self.build(evidence=data, q=q)
         self.assertEqual(report["retailers"]["lidl"]["claimState"], "degraded")
         self.assertIsNone(report["retailers"]["lidl"]["denominator"])
+
+    def test_before_after_source_counts_are_projected_from_quality_authority(self):
+        report = self.build(change={"baseline": "fixture", "additions": 20, "removals": 0, "reviewQueue": [], "noCompletenessClaim": True})
+        self.assertEqual(report["changes"]["previousSourceRecordCount"], 80)
+        self.assertEqual(report["changes"]["currentSourceRecordCount"], 100)
 
     def test_certification_state_and_unmatched_counts_stay_separate(self):
         data = envelope()
@@ -127,6 +150,15 @@ class CatalogHealthTests(unittest.TestCase):
         report = self.build(evidence=data)
         self.assertEqual(report["certifications"]["states"], {"active": 1})
         self.assertEqual(report["certifications"]["unmatchedStoredCertificateCount"], 1)
+
+    def test_absent_runtime_metrics_are_unknown_not_guessed(self):
+        report = self.build()
+        self.assertFalse(report["buildRuntime"]["available"])
+        self.assertIsNone(report["buildRuntime"]["sqliteBytes"])
+        measured = self.build(benchmark={"sqliteBytes": 1234, "queryLatencyMs": {"p95": 4.5}})
+        self.assertTrue(measured["buildRuntime"]["available"])
+        self.assertEqual(measured["buildRuntime"]["sqliteBytes"], 1234)
+        self.assertEqual(measured["buildRuntime"]["queryLatencyP95Ms"], 4.5)
 
     def test_report_is_deterministic_and_digest_validates(self):
         first = self.build()
@@ -142,6 +174,7 @@ class CatalogHealthTests(unittest.TestCase):
         summary = MODULE.human_summary(self.build())
         self.assertIn("observational-partial", summary)
         self.assertIn("do not imply nationwide/current stock", summary)
+        self.assertIn("separate reviewed official coverage gate", summary)
 
 
 if __name__ == "__main__":

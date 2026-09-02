@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: catalog-health
@@ -38,6 +39,7 @@ jobs:
             --policy Data/quality/catalog-quality-policy-v1.json \
             --source-reviews Data/quality/source-review-policy-v1.json
           python3 Tools/tests/test_catalog_health.py
+          python3 Tools/tests/test_catalog_health_incident.py
 
       - name: Build exact-revision scheduled health report
         run: |
@@ -67,6 +69,7 @@ jobs:
             --source-key synthetic-fixture \
             --snapshot-id committed-runtime-fixture \
             --as-of "$EVALUATED_AT" \
+            --commit-sha "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/health/quality-report.json" \
             --summary-output "$RUNNER_TEMP/health/quality-summary.md" \
             --defer-blocker-exit
@@ -80,7 +83,19 @@ jobs:
             --markdown-output "$RUNNER_TEMP/health/catalog-health.md"
           python3 Tools/catalog_health.py validate \
             --input "$RUNNER_TEMP/health/payload/catalog-health.json"
-          cat "$RUNNER_TEMP/health/catalog-health.md" >> "$GITHUB_STEP_SUMMARY"
+          python3 Tools/catalog_health_incident.py plan \
+            --report "$RUNNER_TEMP/health/payload/catalog-health.json" \
+            > "$RUNNER_TEMP/health/incident-plan.json"
+
+      - name: Synchronize persistent health incidents
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_health_incident.py sync \
+            --report "$RUNNER_TEMP/health/payload/catalog-health.json" \
+            --repository "$REPOSITORY"
 
       - name: Emit immutable health handoff
         run: |
@@ -97,7 +112,7 @@ jobs:
             --record-count 1 \
             --completeness complete \
             --redistribution-class metadata-only \
-            --content-schema-version catalog-health-v1 \
+            --content-schema-version health-report-v1 \
             --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --output "$RUNNER_TEMP/health/handoff.json"
 

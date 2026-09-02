@@ -133,8 +133,6 @@ jobs:
           esac
 
       - name: Evaluate deterministic source refresh state and queues
-        env:
-          EVALUATED_AT: ${{ github.event.repository.updated_at }}
         run: |
           set -euo pipefail
           mkdir -p \
@@ -157,6 +155,17 @@ jobs:
             --state-output "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
             --report-output "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
             --queue-output "$RUNNER_TEMP/refresh-queue/payload/refresh-queue.json"
+          python3 Tools/catalog_refresh_operational_state.py apply \
+            --policy Data/refresh/catalog-refresh-policy-v1.json \
+            --state "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
+            --report "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
+            --previous-state "${{ steps.paths.outputs.accepted_state }}" \
+            --state-output "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
+            --report-output "$RUNNER_TEMP/refresh-report/payload/refresh-report.json"
+          python3 Tools/catalog_refresh_operational_state.py validate-state \
+            --input "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json"
+          python3 Tools/catalog_refresh_operational_state.py validate-report \
+            --input "$RUNNER_TEMP/refresh-report/payload/refresh-report.json"
 
       - name: Emit immutable refresh handoffs
         env:

@@ -320,6 +320,33 @@ class CertificationInvalidationTests(unittest.TestCase):
                 self.assertEqual(first, second)
                 self.assertIn(reason, first["decisions"][0]["reasons"])
 
+    def test_one_remaining_eligible_certificate_carries_forward(self):
+        active = certification()
+        expired_id = "hfeu:certification:sha256:" + "4" * 64
+        expired = certification(
+            id=expired_id,
+            certificateReference="FIXTURE-CERT-EXPIRED",
+            sourceRecordID="fixture-cert-expired",
+            expiryAt="2026-08-01T00:00:00Z",
+        )
+        envelope = certified_envelope(active)
+        envelope["certifications"].append(expired)
+        envelope["assessments"][0]["certificationIDs"].append(expired_id)
+        envelope["currentSelections"][0]["certificationIDs"].append(expired_id)
+
+        report = REGISTRY.certification_status_report(
+            envelope=envelope,
+            registry=accepted_registry(),
+            evaluated_at="2026-08-30T12:00:00Z",
+        )
+        decision = report["decisions"][0]
+        self.assertEqual(decision["action"], "carry-forward")
+        self.assertEqual(decision["eligibleCertificationIDs"], [CERT_ID])
+        self.assertIn("certificate-expired", decision["reasons"])
+        self.assertEqual(report["invalidated"], 0)
+        self.assertEqual(report["carriedForward"], 1)
+        self.assertEqual(REGISTRY.validity_events_from_status_report(report), [])
+
     def test_validity_event_is_immutable_and_reasoned(self):
         report = REGISTRY.certification_status_report(
             envelope=certified_envelope(certification(expiryAt="2026-08-01T00:00:00Z")),

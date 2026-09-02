@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "defaultMarket": "DE",
   "stages": [
     {
@@ -143,6 +143,21 @@
       "credentialsRequired": false,
       "redistributionClass": "redistributable",
       "allowedHosts": [],
+      "adapterVersion": "1.0.0"
+    },
+    {
+      "key": "eu-additives",
+      "enabled": true,
+      "sourceClass": "reference",
+      "accessMethod": "manual-admission",
+      "credentialsRequired": false,
+      "redistributionClass": "redistributable",
+      "allowedHosts": [
+        "data.europa.eu",
+        "eur-lex.europa.eu",
+        "food.ec.europa.eu",
+        "www.efsa.europa.eu"
+      ],
       "adapterVersion": "1.0.0"
     },
     {

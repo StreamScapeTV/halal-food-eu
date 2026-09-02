@@ -1,0 +1,9 @@
+"section.additives" = "EU-Zusatzstoffreferenzen";
+"field.referenceRevision" = "Referenzstand";
+"additive.matchedAs" = "Erkannt als: %@";
+"additive.functions" = "EU-Funktionsbezeichnungen: %@";
+"additive.originContext" = "Zitierter Herkunftskontext der EU-Spezifikation (englische Referenzzusammenfassung)";
+"additive.identityOnly" = "Diese EU-Referenz identifiziert den Zusatzstoff, belegt aber weder die produktspezifische Herkunft oder Herstellungsweise noch einen Halal-Status.";
+"additive.footer" = "EU-Zulassung und Zusatzstoffidentität sind Referenzinformationen, kein Halal-Urteil. Produktspezifische Herkunfts- oder Prozessnachweise und die erfasste Bewertung bleiben getrennt.";
+"additive.source" = "Referenzquelle: %@ Lizenz: %@.";
+"action.openReference" = "EU-Referenz öffnen";

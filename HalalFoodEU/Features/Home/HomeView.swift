@@ -3,6 +3,17 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var viewModel: ScannerViewModel
     @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
+    let additiveReferenceCatalog: AdditiveReferenceCatalog?
+
+    init(
+        viewModel: ScannerViewModel,
+        submissionCoordinator: ProductEvidenceSubmissionCoordinator,
+        additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
+    ) {
+        self.viewModel = viewModel
+        self.submissionCoordinator = submissionCoordinator
+        self.additiveReferenceCatalog = additiveReferenceCatalog
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,7 +45,8 @@ struct HomeView: View {
 
                 LookupStateContent(
                     viewModel: viewModel,
-                    submissionCoordinator: submissionCoordinator
+                    submissionCoordinator: submissionCoordinator,
+                    additiveReferenceCatalog: additiveReferenceCatalog
                 )
 
                 Section("Synthetic demonstration data") {
@@ -92,6 +104,7 @@ struct HomeView: View {
 private struct LookupStateContent: View {
     let viewModel: ScannerViewModel
     let submissionCoordinator: ProductEvidenceSubmissionCoordinator
+    let additiveReferenceCatalog: AdditiveReferenceCatalog?
 
     var body: some View {
         switch viewModel.lookupState {
@@ -116,6 +129,10 @@ private struct LookupStateContent: View {
             ProductResultView(
                 product: product,
                 submissionCoordinator: submissionCoordinator
+            )
+            AdditiveReferenceSection(
+                product: product,
+                catalog: additiveReferenceCatalog
             )
         case let .notFound(barcode):
             Section {

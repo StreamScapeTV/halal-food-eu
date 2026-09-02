@@ -3,12 +3,17 @@ import Foundation
 @MainActor
 struct AppContainer {
     private let catalog: any ProductCatalog
+    private let additiveReferenceCatalog: AdditiveReferenceCatalog?
     private let submissionConfiguration: ProductEvidenceSubmissionRuntimeConfiguration?
     private let submissionConfigurationError: String?
     private let submissionComposer: any ProductEvidenceComposer
 
-    init(catalog: any ProductCatalog) {
+    init(
+        catalog: any ProductCatalog,
+        additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
+    ) {
         self.catalog = catalog
+        self.additiveReferenceCatalog = additiveReferenceCatalog
         submissionConfiguration = nil
         submissionConfigurationError = String(localized: "Product evidence submission is unavailable in this test configuration.")
         submissionComposer = SystemProductEvidenceComposer()
@@ -16,11 +21,13 @@ struct AppContainer {
 
     private init(
         catalog: any ProductCatalog,
+        additiveReferenceCatalog: AdditiveReferenceCatalog?,
         submissionConfiguration: ProductEvidenceSubmissionRuntimeConfiguration?,
         submissionConfigurationError: String?,
         submissionComposer: any ProductEvidenceComposer
     ) {
         self.catalog = catalog
+        self.additiveReferenceCatalog = additiveReferenceCatalog
         self.submissionConfiguration = submissionConfiguration
         self.submissionConfigurationError = submissionConfigurationError
         self.submissionComposer = submissionComposer
@@ -28,9 +35,12 @@ struct AppContainer {
 
     static func live(bundle: Bundle = .main) -> AppContainer {
         let composer = SystemProductEvidenceComposer()
+        let additiveReferenceCatalog = try? AdditiveReferenceCatalogLoader.load(bundle: bundle)
+
         guard let databaseURL = bundle.url(forResource: "catalog", withExtension: "sqlite3") else {
             return AppContainer(
                 catalog: UnavailableProductCatalog(message: "catalog.sqlite3 is missing from the application bundle"),
+                additiveReferenceCatalog: additiveReferenceCatalog,
                 submissionConfiguration: nil,
                 submissionConfigurationError: String(localized: "Product evidence submission is unavailable because the bundled catalog is missing."),
                 submissionComposer: composer
@@ -39,6 +49,7 @@ struct AppContainer {
         guard let manifestURL = bundle.url(forResource: "catalog-manifest", withExtension: "json") else {
             return AppContainer(
                 catalog: UnavailableProductCatalog(message: "catalog-manifest.json is missing from the application bundle"),
+                additiveReferenceCatalog: additiveReferenceCatalog,
                 submissionConfiguration: nil,
                 submissionConfigurationError: String(localized: "Product evidence submission is unavailable because the bundled catalog manifest is missing."),
                 submissionComposer: composer
@@ -57,6 +68,7 @@ struct AppContainer {
                 databaseURL: databaseURL,
                 manifestURL: manifestURL
             ),
+            additiveReferenceCatalog: additiveReferenceCatalog,
             submissionConfiguration: try? submissionResult.get(),
             submissionConfigurationError: submissionResult.failure?.localizedDescription,
             submissionComposer: composer
@@ -65,6 +77,10 @@ struct AppContainer {
 
     func makeScannerViewModel() -> ScannerViewModel {
         ScannerViewModel(lookupProduct: LookupProductByBarcode(catalog: catalog))
+    }
+
+    func makeAdditiveReferenceCatalog() -> AdditiveReferenceCatalog? {
+        additiveReferenceCatalog
     }
 
     func makeSubmissionCoordinator() -> ProductEvidenceSubmissionCoordinator {

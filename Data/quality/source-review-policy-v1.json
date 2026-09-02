@@ -1,7 +1,14 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "1.0.0",
+  "policyVersion": "1.1.0",
   "sources": {
+    "eu-additives": {
+      "state": "approved",
+      "reviewedAt": "2026-09-01T23:00:33Z",
+      "expiresAt": "2026-12-01T00:00:00Z",
+      "licenseIdentifiers": ["CC-BY-4.0"],
+      "scope": "Reviewed deterministic EU food-additive identity/reference curation from stable EUR-Lex ELI/CELEX documents plus Commission/EFSA explanatory references; third-party material remains excluded unless separately reviewed."
+    },
     "open-food-facts": {
       "state": "approved",
       "reviewedAt": "2026-08-30T00:00:00Z",

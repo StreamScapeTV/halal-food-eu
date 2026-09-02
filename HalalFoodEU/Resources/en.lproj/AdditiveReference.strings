@@ -1,0 +1,9 @@
+"section.additives" = "EU additive references";
+"field.referenceRevision" = "Reference revision";
+"additive.matchedAs" = "Matched as: %@";
+"additive.functions" = "EU function labels: %@";
+"additive.originContext" = "Cited EU specification origin context (English reference summary)";
+"additive.identityOnly" = "This EU reference identifies the additive, but it does not establish the product-specific source, manufacturing route, or halal status.";
+"additive.footer" = "EU authorisation and additive identity are reference information, not a halal ruling. Product-specific origin or process evidence and the recorded assessment remain separate.";
+"additive.source" = "Reference source: %@ License: %@.";
+"action.openReference" = "Open EU reference";

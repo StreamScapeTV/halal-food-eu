@@ -116,8 +116,6 @@ def enrich_health(
     refresh_report: dict[str, Any] | None = None,
     workflow_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    # Validate the unmodified authority first. This proves refresh observability is
-    # additive and cannot rescue or rewrite an invalid base catalog-health report.
     catalog_health.validate_health_report(base_health)
     if refresh_plan.get("schemaVersion") != 1:
         raise RefreshHealthError("refresh plan schemaVersion must be 1")
@@ -134,8 +132,11 @@ def enrich_health(
     blocker_keys: set[str] = {
         f"refresh:{source_key}:queue:{reason}" for reason in queue_blockers
     }
-    if refresh_plan.get("fullDueReason") == "full-cadence-due":
+    due_reason = refresh_plan.get("fullDueReason")
+    if due_reason == "full-cadence-due":
         blocker_keys.add(f"refresh:{source_key}:full-overdue")
+    elif due_reason == "no-successful-full-acquisition":
+        blocker_keys.add(f"refresh:{source_key}:no-successful-full-acquisition")
     if workflow_blocker:
         blocker_keys.add(f"refresh:scheduled-catalog-refresh:{workflow_blocker}")
 
@@ -146,11 +147,21 @@ def enrich_health(
         "snapshotID": None,
         "candidateChangedFromAccepted": None,
     }
+    last_success_at = None
+    last_success_snapshot = None
     if refresh_report is not None:
         if refresh_report.get("schemaVersion") != 1:
             raise RefreshHealthError("refresh report schemaVersion must be 1")
         if refresh_report.get("sourceKey") != source_key:
             raise RefreshHealthError("refresh report source differs from plan")
+        last_success_at = refresh_report.get("lastSuccessfulFullAcquisitionAt")
+        last_success_snapshot = refresh_report.get("lastSuccessfulFullSnapshotID")
+        if (last_success_at is None) != (last_success_snapshot is None):
+            raise RefreshHealthError("refresh report successful-full acquisition clock is inconsistent")
+        if last_success_at is not None and not isinstance(last_success_at, str):
+            raise RefreshHealthError("refresh report successful-full acquisition time is invalid")
+        if last_success_snapshot is not None and (not isinstance(last_success_snapshot, str) or not last_success_snapshot):
+            raise RefreshHealthError("refresh report successful-full snapshot ID is invalid")
         attempt.update(
             attemptStatus=refresh_report.get("attemptStatus"),
             qualityStatus=refresh_report.get("qualityStatus"),
@@ -167,8 +178,10 @@ def enrich_health(
         "sourceKey": source_key,
         "acceptedSnapshotID": refresh_plan.get("acceptedSnapshotID"),
         "acceptedContentSha256": refresh_plan.get("acceptedContentSha256"),
+        "lastSuccessfulFullAcquisitionAt": last_success_at,
+        "lastSuccessfulFullSnapshotID": last_success_snapshot,
         "fullDueAt": refresh_plan.get("fullDueAt"),
-        "fullDueReason": refresh_plan.get("fullDueReason"),
+        "fullDueReason": due_reason,
         "requestedMode": refresh_plan.get("requestedMode"),
         "fallbackReason": refresh_plan.get("fallbackReason"),
         "queue": queue_projection,
@@ -211,6 +224,10 @@ def validate_refresh_health(report: dict[str, Any]) -> None:
         raise RefreshHealthError("refresh-enriched health lacks refresh projection")
     if not isinstance(refresh.get("deduplicationKeys"), list):
         raise RefreshHealthError("refresh deduplicationKeys must be an array")
+    success_at = refresh.get("lastSuccessfulFullAcquisitionAt")
+    success_snapshot = refresh.get("lastSuccessfulFullSnapshotID")
+    if (success_at is None) != (success_snapshot is None):
+        raise RefreshHealthError("refresh successful-full acquisition clock is inconsistent")
     gate = report.get("qualityGate")
     if not isinstance(gate, dict):
         raise RefreshHealthError("refresh-enriched health lacks qualityGate")
@@ -237,6 +254,7 @@ def human_summary(report: dict[str, Any]) -> str:
         "## Refresh health",
         f"- Source: `{refresh['sourceKey']}`",
         f"- Accepted snapshot: `{refresh['acceptedSnapshotID']}`",
+        f"- Last successful full acquisition: `{refresh['lastSuccessfulFullAcquisitionAt']}` (`{refresh['lastSuccessfulFullSnapshotID']}`)",
         f"- Full refresh due: `{refresh['fullDueAt']}` (`{refresh['fullDueReason']}`)",
         f"- Queue entries: `{refresh['queue']['entryCount']}`; reasons: `{json.dumps(refresh['queue']['reasonCounts'], sort_keys=True)}`",
         f"- Targeted network allowed: `{str(refresh['targeted']['networkExecutionAllowed']).lower()}`; performed: `{str(refresh['targeted']['networkExecutionPerformed']).lower()}`",

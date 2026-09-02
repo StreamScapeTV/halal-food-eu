@@ -26,10 +26,12 @@ class CatalogRefreshHealthWorkflowTests(unittest.TestCase):
     def test_latest_refresh_artifacts_are_used_only_for_refresh_projection(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("HF-HEALTH-003/017", text)
-        self.assertIn("latest source refresh is projected only into", text)
+        self.assertIn("accepted fixture authority", text)
+        self.assertIn("refresh queue/attempt section until reviewed catalog acceptance occurs", text)
         self.assertIn('--refresh-report "$REFRESH_REPORT"', text)
         self.assertIn('--workflow-status "$RUNNER_TEMP/health/scheduled-off-status.json"', text)
         self.assertIn('--workflow-status "$RUNNER_TEMP/health/scheduled-open-prices-status.json"', text)
+        self.assertNotIn('--base-health "$RUNNER_TEMP/normalized/payload/evidence.json"', text)
 
 
 if __name__ == "__main__":

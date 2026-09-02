@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/source-refresh-state-v1.schema.json",
+  "title": "Halal Food EU source refresh state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceKey", "market", "policyVersion", "evaluatedAt", "acceptedComplete", "candidateComplete", "lastAttempt", "nextFullDueAt", "candidateEligible", "candidateChangedFromAccepted", "stateSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "sourceKey": {"type": "string"},
+    "market": {"const": "DE"},
+    "policyVersion": {"type": "string"},
+    "evaluatedAt": {"type": "string", "format": "date-time"},
+    "acceptedComplete": {"type": ["object", "null"]},
+    "candidateComplete": {"type": ["object", "null"]},
+    "lastAttempt": {"type": ["object", "null"]},
+    "nextFullDueAt": {"type": "string", "format": "date-time"},
+    "candidateEligible": {"type": "boolean"},
+    "candidateChangedFromAccepted": {"type": "boolean"},
+    "stateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

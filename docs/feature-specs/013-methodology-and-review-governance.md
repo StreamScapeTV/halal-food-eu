@@ -1,7 +1,7 @@
 # 013 — Methodology and review governance
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-02
 
 ## Purpose
 
@@ -34,6 +34,7 @@ The application can only be trustworthy when its assessment method is explicit, 
 - **HF-REVIEW-005:** Reviewer identity may be pseudonymous publicly, but the project must retain a durable audit identifier and timestamp without publishing unnecessary personal data.
 - **HF-REVIEW-006:** Rejection and supersession preserve the record and reason; they do not erase history.
 - **HF-REVIEW-007:** Corrections with consumer-safety impact must be prioritized, documented, and shipped through the normal validated catalog release process.
+- **HF-REVIEW-008:** Production certifier/scheme admission is governed by the canonical registry and eligibility contract in specification 023. A methodology-embedded allowlist, parser result, logo, brand claim, or source record cannot independently admit a real certifier or create `halal-certified`.
 
 ## Interpretation profiles
 

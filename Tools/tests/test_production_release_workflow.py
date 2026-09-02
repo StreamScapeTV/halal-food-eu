@@ -22,6 +22,18 @@ class ProductionReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.text.count("github-token: ${{ github.token }}"), 3)
         self.assertIn("actions: read", self.text)
 
+    def test_production_release_validates_protected_main_refresh_checkpoints_before_build(self) -> None:
+        checkpoint = self.text.index("- name: Validate protected main accepted refresh checkpoints")
+        downloads = self.text.index("- name: Download reviewed normalized evidence")
+        self.assertLess(checkpoint, downloads)
+        block = self.text[checkpoint:downloads]
+        self.assertIn("Tools/catalog_refresh_operational_state.py validate-state", block)
+        self.assertIn("Data/refresh/accepted-open-food-facts-v1.json", block)
+        self.assertIn("Data/refresh/accepted-open-prices-v1.json", block)
+        self.assertIn("post-merge accepted refresh state still contains a candidate", block)
+        self.assertIn("post-merge accepted refresh state has unpromoted candidate flags", block)
+        self.assertIn("if: steps.mode.outputs.production == 'true'", block)
+
     def test_production_release_rebuilds_locally_and_validates_exact_sqlite(self) -> None:
         self.assertIn("if: steps.mode.outputs.production == 'true'", self.text)
         self.assertIn("Tools/production_catalog_request.py validate", self.text)

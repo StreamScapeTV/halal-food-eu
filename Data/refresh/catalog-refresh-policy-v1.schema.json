@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/catalog-refresh-policy-v1.schema.json",
+  "title": "Halal Food EU catalog refresh policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "policyVersion", "market", "queue", "sources"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "policyVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "market": {"const": "DE"},
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxEntries", "certificationDueDays", "assessmentDueDays"],
+      "properties": {
+        "maxEntries": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "certificationDueDays": {"type": "integer", "minimum": 1, "maximum": 365},
+        "assessmentDueDays": {"type": "integer", "minimum": 1, "maximum": 365}
+      }
+    },
+    "sources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["adapterVersion", "fullCadenceDays", "targetedCadenceHours", "supportedAcquisitionModes", "conditionalMetadata", "targetedQueue"],
+        "properties": {
+          "adapterVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+          "fullCadenceDays": {"type": "integer", "minimum": 1, "maximum": 365},
+          "targetedCadenceHours": {"type": ["integer", "null"], "minimum": 1},
+          "supportedAcquisitionModes": {
+            "type": "array",
+            "items": {"enum": ["full", "delta"]},
+            "contains": {"const": "full"},
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "conditionalMetadata": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "targetedQueue": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled", "endpointReference", "maxGtinsPerRun", "batchSize", "maxRequestsPerMinute", "minimumRequestIntervalSeconds", "fields"],
+            "properties": {
+              "enabled": {"type": "boolean"},
+              "endpointReference": {"type": ["string", "null"]},
+              "maxGtinsPerRun": {"type": "integer", "minimum": 0},
+              "batchSize": {"type": "integer", "minimum": 0},
+              "maxRequestsPerMinute": {"type": "integer", "minimum": 0},
+              "minimumRequestIntervalSeconds": {"type": "number", "minimum": 0},
+              "fields": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+            }
+          }
+        }
+      }
+    }
+  }
+}

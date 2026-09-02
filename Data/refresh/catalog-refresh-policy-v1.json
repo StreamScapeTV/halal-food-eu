@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "1.0.0",
+  "market": "DE",
+  "queue": {
+    "maxEntries": 5000,
+    "certificationDueDays": 30,
+    "assessmentDueDays": 30
+  },
+  "sources": {
+    "open-food-facts": {
+      "adapterVersion": "1.0.0",
+      "fullCadenceDays": 7,
+      "targetedCadenceHours": 24,
+      "supportedAcquisitionModes": ["full"],
+      "conditionalMetadata": ["etag", "last-modified"],
+      "targetedQueue": {
+        "enabled": true,
+        "endpointReference": "https://world.openfoodfacts.org/api/v2/search",
+        "maxGtinsPerRun": 400,
+        "batchSize": 40,
+        "maxRequestsPerMinute": 10,
+        "minimumRequestIntervalSeconds": 7,
+        "fields": [
+          "code",
+          "product_name",
+          "brands",
+          "quantity",
+          "countries_tags",
+          "categories_tags",
+          "ingredients_text",
+          "ingredients_text_de",
+          "ingredients_text_en",
+          "allergens",
+          "allergens_tags",
+          "traces",
+          "traces_tags",
+          "rev",
+          "last_modified_t"
+        ]
+      }
+    },
+    "open-prices": {
+      "adapterVersion": "1.0.0",
+      "fullCadenceDays": 7,
+      "targetedCadenceHours": null,
+      "supportedAcquisitionModes": ["full"],
+      "conditionalMetadata": ["etag", "lastModified"],
+      "targetedQueue": {
+        "enabled": false,
+        "endpointReference": null,
+        "maxGtinsPerRun": 0,
+        "batchSize": 0,
+        "maxRequestsPerMinute": 0,
+        "minimumRequestIntervalSeconds": 0,
+        "fields": []
+      }
+    }
+  }
+}

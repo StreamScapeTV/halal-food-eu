@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/catalog-health-v2.schema.json",
+  "title": "Halal Food EU Catalog Health v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evaluatedAt",
+    "commitSha",
+    "scope",
+    "products",
+    "freshness",
+    "assessments",
+    "certifications",
+    "retailers",
+    "sources",
+    "changes",
+    "buildRuntime",
+    "qualityGate",
+    "refresh",
+    "reportSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 2},
+    "evaluatedAt": {"type": "string", "format": "date-time"},
+    "commitSha": {"type": "string", "minLength": 7},
+    "scope": {"type": "object"},
+    "products": {"type": "object"},
+    "freshness": {"type": "object"},
+    "assessments": {"type": "object"},
+    "certifications": {"type": "object"},
+    "retailers": {"type": "object"},
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "changes": {"type": "object"},
+    "buildRuntime": {"type": "object"},
+    "qualityGate": {"type": "object"},
+    "refresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "sourceKey",
+        "acceptedSnapshotID",
+        "acceptedContentSha256",
+        "lastSuccessfulFullAcquisitionAt",
+        "lastSuccessfulFullSnapshotID",
+        "fullDueAt",
+        "fullDueReason",
+        "requestedMode",
+        "fallbackReason",
+        "queue",
+        "targeted",
+        "latestAttempt",
+        "scheduledWorkflows",
+        "deduplicationKeys"
+      ],
+      "properties": {
+        "available": {"const": true},
+        "sourceKey": {"type": "string", "minLength": 1},
+        "acceptedSnapshotID": {"type": ["string", "null"]},
+        "acceptedContentSha256": {"type": ["string", "null"]},
+        "lastSuccessfulFullAcquisitionAt": {"type": ["string", "null"], "format": "date-time"},
+        "lastSuccessfulFullSnapshotID": {"type": ["string", "null"]},
+        "fullDueAt": {"type": "string", "format": "date-time"},
+        "fullDueReason": {"type": "string", "minLength": 1},
+        "requestedMode": {"type": "string", "minLength": 1},
+        "fallbackReason": {"type": ["string", "null"]},
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entryCount", "reasonCounts", "priorityCounts", "queueSha256"],
+          "properties": {
+            "entryCount": {"type": "integer", "minimum": 0},
+            "reasonCounts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "priorityCounts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "queueSha256": {"type": ["string", "null"]}
+          }
+        },
+        "targeted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "enabled", "gtinCount", "networkExecutionAllowed", "networkExecutionPerformed", "blockedReason"],
+          "properties": {
+            "available": {"type": "boolean"},
+            "enabled": {"type": "boolean"},
+            "gtinCount": {"type": "integer", "minimum": 0},
+            "networkExecutionAllowed": {"type": "boolean"},
+            "networkExecutionPerformed": {"type": "boolean"},
+            "blockedReason": {"type": ["string", "null"]}
+          }
+        },
+        "latestAttempt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "attemptStatus", "qualityStatus", "snapshotID", "candidateChangedFromAccepted"],
+          "properties": {
+            "available": {"type": "boolean"},
+            "attemptStatus": {"type": ["string", "null"]},
+            "qualityStatus": {"type": ["string", "null"]},
+            "snapshotID": {"type": ["string", "null"]},
+            "candidateChangedFromAccepted": {"type": ["boolean", "null"]}
+          }
+        },
+        "scheduledWorkflows": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["available", "conclusion", "runId", "event", "updatedAt"],
+            "properties": {
+              "available": {"type": "boolean"},
+              "conclusion": {"type": ["string", "null"]},
+              "runId": {"type": ["string", "null"]},
+              "event": {"type": ["string", "null"]},
+              "updatedAt": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "deduplicationKeys": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "reportSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

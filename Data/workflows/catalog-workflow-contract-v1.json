@@ -1,197 +1,50 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "1.5.0",
+  "contractVersion": "1.7.0",
   "defaultMarket": "DE",
   "stages": [
-    {
-      "key": "source-policy",
-      "accepts": [],
-      "produces": ["policy-report"],
-      "requiresCompleteInput": false,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "acquire",
-      "accepts": ["policy-report"],
-      "produces": ["source-snapshot"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "normalize-diff",
-      "accepts": ["source-snapshot"],
-      "produces": ["normalized-evidence", "change-report", "basic-exclusions"],
-      "requiresCompleteInput": false,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "quality",
-      "accepts": ["normalized-evidence", "change-report"],
-      "produces": ["quality-report"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "build",
-      "accepts": ["normalized-evidence", "quality-report", "basic-exclusions"],
-      "produces": ["catalog-database", "catalog-manifest", "catalog-release-notes"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "proposal",
-      "accepts": ["catalog-database", "catalog-manifest", "quality-report"],
-      "produces": ["proposal-report"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": true
-    },
-    {
-      "key": "ios-validation",
-      "accepts": ["catalog-database", "catalog-manifest"],
-      "produces": ["ios-validation-report"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": false
-    },
-    {
-      "key": "release",
-      "accepts": ["catalog-database", "catalog-manifest", "quality-report", "ios-validation-report"],
-      "produces": ["release-report"],
-      "requiresCompleteInput": true,
-      "mayWriteRepository": true
-    },
-    {
-      "key": "health",
-      "accepts": ["quality-report", "release-report"],
-      "produces": ["health-report"],
-      "requiresCompleteInput": false,
-      "mayWriteRepository": true
-    }
+    {"key":"source-policy","accepts":[],"produces":["policy-report"],"requiresCompleteInput":false,"mayWriteRepository":false},
+    {"key":"acquire","accepts":["policy-report"],"produces":["source-snapshot"],"requiresCompleteInput":true,"mayWriteRepository":false},
+    {"key":"normalize-diff","accepts":["source-snapshot"],"produces":["normalized-evidence","change-report","basic-exclusions"],"requiresCompleteInput":false,"mayWriteRepository":false},
+    {"key":"quality","accepts":["normalized-evidence","change-report"],"produces":["quality-report"],"requiresCompleteInput":true,"mayWriteRepository":false},
+    {"key":"refresh","accepts":["source-snapshot","normalized-evidence","change-report","quality-report"],"produces":["source-refresh-state","refresh-report","refresh-queue"],"requiresCompleteInput":false,"mayWriteRepository":false},
+    {"key":"build","accepts":["normalized-evidence","quality-report","basic-exclusions"],"produces":["catalog-database","catalog-manifest","catalog-release-notes"],"requiresCompleteInput":true,"mayWriteRepository":false},
+    {"key":"proposal","accepts":["catalog-database","catalog-manifest","quality-report","source-refresh-state"],"produces":["proposal-report"],"requiresCompleteInput":true,"mayWriteRepository":true},
+    {"key":"ios-validation","accepts":["catalog-database","catalog-manifest"],"produces":["ios-validation-report"],"requiresCompleteInput":true,"mayWriteRepository":false},
+    {"key":"release","accepts":["catalog-database","catalog-manifest","quality-report","ios-validation-report"],"produces":["release-report"],"requiresCompleteInput":true,"mayWriteRepository":true},
+    {"key":"health","accepts":["quality-report","source-refresh-state","refresh-report","refresh-queue","release-report"],"produces":["health-report"],"requiresCompleteInput":false,"mayWriteRepository":true}
   ],
   "artifactKinds": {
-    "policy-report": {
-      "maxBytes": 1048576,
-      "maxRecords": 10000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "source-snapshot": {
-      "maxBytes": 5368709120,
-      "maxRecords": 20000000,
-      "allowedRedistributionClasses": ["restricted", "redistributable"]
-    },
-    "normalized-evidence": {
-      "maxBytes": 2147483648,
-      "maxRecords": 10000000,
-      "allowedRedistributionClasses": ["restricted", "redistributable"]
-    },
-    "change-report": {
-      "maxBytes": 67108864,
-      "maxRecords": 1000000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "basic-exclusions": {
-      "maxBytes": 268435456,
-      "maxRecords": 10000000,
-      "allowedRedistributionClasses": ["redistributable"]
-    },
-    "quality-report": {
-      "maxBytes": 67108864,
-      "maxRecords": 1000000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "catalog-database": {
-      "maxBytes": 1073741824,
-      "maxRecords": 10000000,
-      "allowedRedistributionClasses": ["redistributable"]
-    },
-    "catalog-manifest": {
-      "maxBytes": 16777216,
-      "maxRecords": 100000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "catalog-release-notes": {
-      "maxBytes": 1048576,
-      "maxRecords": 1,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "proposal-report": {
-      "maxBytes": 16777216,
-      "maxRecords": 100000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "ios-validation-report": {
-      "maxBytes": 16777216,
-      "maxRecords": 100000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "release-report": {
-      "maxBytes": 16777216,
-      "maxRecords": 100000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    },
-    "health-report": {
-      "maxBytes": 16777216,
-      "maxRecords": 100000,
-      "allowedRedistributionClasses": ["metadata-only", "redistributable"]
-    }
+    "policy-report":{"maxBytes":1048576,"maxRecords":10000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "source-snapshot":{"maxBytes":5368709120,"maxRecords":20000000,"allowedRedistributionClasses":["restricted","redistributable"]},
+    "normalized-evidence":{"maxBytes":2147483648,"maxRecords":10000000,"allowedRedistributionClasses":["restricted","redistributable"]},
+    "change-report":{"maxBytes":67108864,"maxRecords":1000000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "basic-exclusions":{"maxBytes":268435456,"maxRecords":10000000,"allowedRedistributionClasses":["redistributable"]},
+    "quality-report":{"maxBytes":67108864,"maxRecords":1000000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "source-refresh-state":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only"]},
+    "refresh-report":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "refresh-queue":{"maxBytes":67108864,"maxRecords":1000000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "catalog-database":{"maxBytes":1073741824,"maxRecords":10000000,"allowedRedistributionClasses":["redistributable"]},
+    "catalog-manifest":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "catalog-release-notes":{"maxBytes":1048576,"maxRecords":1,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "proposal-report":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "ios-validation-report":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "release-report":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]},
+    "health-report":{"maxBytes":16777216,"maxRecords":100000,"allowedRedistributionClasses":["metadata-only","redistributable"]}
   },
   "sourceRegistry": [
-    {
-      "key": "synthetic-fixture",
-      "enabled": true,
-      "sourceClass": "fixture",
-      "accessMethod": "committed-fixture",
-      "credentialsRequired": false,
-      "redistributionClass": "redistributable",
-      "allowedHosts": [],
-      "adapterVersion": "1.0.0"
-    },
-    {
-      "key": "eu-additives",
-      "enabled": true,
-      "sourceClass": "reference",
-      "accessMethod": "manual-admission",
-      "credentialsRequired": false,
-      "redistributionClass": "redistributable",
-      "allowedHosts": [
-        "data.europa.eu",
-        "eur-lex.europa.eu",
-        "food.ec.europa.eu",
-        "www.efsa.europa.eu"
-      ],
-      "adapterVersion": "1.0.0"
-    },
-    {
-      "key": "open-food-facts",
-      "enabled": true,
-      "sourceClass": "open-database",
-      "accessMethod": "https-export",
-      "credentialsRequired": false,
-      "redistributionClass": "redistributable",
-      "allowedHosts": ["static.openfoodfacts.org"],
-      "adapterVersion": "1.0.0"
-    },
-    {
-      "key": "open-prices",
-      "enabled": true,
-      "sourceClass": "open-database",
-      "accessMethod": "https-export",
-      "credentialsRequired": false,
-      "redistributionClass": "redistributable",
-      "allowedHosts": ["prices.openfoodfacts.org"],
-      "adapterVersion": "1.0.0"
-    }
+    {"key":"synthetic-fixture","enabled":true,"sourceClass":"fixture","accessMethod":"committed-fixture","credentialsRequired":false,"redistributionClass":"redistributable","allowedHosts":[],"adapterVersion":"1.0.0"},
+    {"key":"eu-additives","enabled":true,"sourceClass":"reference","accessMethod":"manual-admission","credentialsRequired":false,"redistributionClass":"redistributable","allowedHosts":["data.europa.eu","eur-lex.europa.eu","food.ec.europa.eu","www.efsa.europa.eu"],"adapterVersion":"1.0.0"},
+    {"key":"open-food-facts","enabled":true,"sourceClass":"open-database","accessMethod":"https-export","credentialsRequired":false,"redistributionClass":"redistributable","allowedHosts":["static.openfoodfacts.org"],"adapterVersion":"1.0.0"},
+    {"key":"open-prices","enabled":true,"sourceClass":"open-database","accessMethod":"https-export","credentialsRequired":false,"redistributionClass":"redistributable","allowedHosts":["prices.openfoodfacts.org"],"adapterVersion":"1.0.0"}
   ],
   "execution": {
-    "allowedModes": ["fixture", "sample", "full"],
-    "maxRetries": 4,
-    "initialRetrySeconds": 5,
-    "maxRetrySeconds": 60,
-    "artifactRetentionDays": {
-      "restricted": 1,
-      "redistributable": 7,
-      "metadata-only": 14
-    },
-    "generatedBranchPrefix": "catalog-update/",
-    "healthIssuePrefix": "[Catalog Health]"
+    "allowedModes":["fixture","sample","full"],
+    "maxRetries":4,
+    "initialRetrySeconds":5,
+    "maxRetrySeconds":60,
+    "artifactRetentionDays":{"restricted":1,"redistributable":7,"metadata-only":14},
+    "generatedBranchPrefix":"catalog-update/",
+    "healthIssuePrefix":"[Catalog Health]"
   }
 }

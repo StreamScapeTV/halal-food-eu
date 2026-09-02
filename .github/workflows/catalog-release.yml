@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "Data/catalog/production-catalog-release-input-v1.json"
+      - "Data/refresh/accepted-open-food-facts-v1.json"
+      - "Data/refresh/accepted-open-prices-v1.json"
       - "Data/quality/catalog-quality-policy-v1.json"
       - "Data/sources/open-food-facts/source-policy-v1.json"
       - "Data/sources/open-prices/source-policy-v1.json"
@@ -12,6 +14,7 @@ on:
       - "HalalFoodEU/Resources/catalog.sqlite3"
       - "HalalFoodEU/Resources/catalog-manifest.json"
       - "Tools/catalog_builder.py"
+      - "Tools/catalog_refresh_operational_state.py"
       - "Tools/catalog_security.py"
       - "Tools/catalog_workflow.py"
       - "Tools/production_catalog.py"
@@ -83,6 +86,35 @@ jobs:
             echo "snapshot_id=main-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
             echo "catalog_version=0.0.0-demo.1" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Validate protected main accepted refresh checkpoints
+        if: steps.mode.outputs.production == 'true'
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_refresh_operational_state.py validate-state \
+            --input Data/refresh/accepted-open-food-facts-v1.json
+          python3 Tools/catalog_refresh_operational_state.py validate-state \
+            --input Data/refresh/accepted-open-prices-v1.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          paths = {
+              'open-food-facts': Path('Data/refresh/accepted-open-food-facts-v1.json'),
+              'open-prices': Path('Data/refresh/accepted-open-prices-v1.json'),
+          }
+          for source_key, path in paths.items():
+              state = json.loads(path.read_text(encoding='utf-8'))
+              if state.get('sourceKey') != source_key or state.get('market') != 'DE':
+                  raise SystemExit(f'post-merge accepted refresh state identity mismatch for {source_key}')
+              if state.get('candidateComplete') is not None:
+                  raise SystemExit(f'post-merge accepted refresh state still contains a candidate for {source_key}')
+              if state.get('candidateEligible') is not False or state.get('candidateChangedFromAccepted') is not False:
+                  raise SystemExit(f'post-merge accepted refresh state has unpromoted candidate flags for {source_key}')
+              accepted = state.get('acceptedComplete')
+              if accepted is not None and accepted.get('status') != 'complete':
+                  raise SystemExit(f'post-merge accepted refresh state is not complete for {source_key}')
+          PY
 
       - name: Download reviewed normalized evidence
         if: steps.mode.outputs.production == 'true'

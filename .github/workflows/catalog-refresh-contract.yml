@@ -1,0 +1,70 @@
+name: Catalog refresh contract
+
+on:
+  pull_request:
+    paths:
+      - "Tools/catalog_refresh*.py"
+      - "Tools/github_refresh_state_proposal.py"
+      - "Tools/github_catalog_proposal.py"
+      - "Tools/tests/test_catalog_refresh*.py"
+      - "Tools/tests/test_github_refresh_state_proposal.py"
+      - "Tools/tests/test_production_github_catalog_proposal.py"
+      - "Tools/tests/test_production_release_workflow.py"
+      - "Tools/tests/test_production_retailer_workflow.py"
+      - "Data/refresh/**"
+      - "Data/health/catalog-health-v2.schema.json"
+      - ".github/workflows/catalog-refresh*.yml"
+      - ".github/workflows/admitted-submission-refresh-queue.yml"
+      - ".github/workflows/promote-refresh-state.yml"
+      - ".github/workflows/scheduled-catalog-refresh.yml"
+      - ".github/workflows/catalog-health.yml"
+      - ".github/workflows/catalog-release.yml"
+      - "docs/feature-specs/025-source-aware-catalog-refresh.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out pull-request code without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate refresh schemas and workflow contract
+        run: |
+          set -euo pipefail
+          python3 -m json.tool Data/refresh/catalog-refresh-policy-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/source-refresh-state-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/refresh-report-v1.schema.json >/dev/null
+          python3 -m json.tool Data/refresh/refresh-queue-v1.schema.json >/dev/null
+          python3 -m json.tool Data/health/catalog-health-v2.schema.json >/dev/null
+          python3 Tools/catalog_workflow.py validate-contract
+          python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
+          python3 Tools/catalog_refresh.py validate-policy \
+            --policy Data/refresh/catalog-refresh-policy-v1.json
+          python3 Tools/catalog_refresh_operational_state.py validate-state \
+            --input Data/refresh/accepted-open-food-facts-v1.json
+          python3 Tools/catalog_refresh_operational_state.py validate-state \
+            --input Data/refresh/accepted-open-prices-v1.json
+
+      - name: Run source-aware refresh acceptance tests
+        run: |
+          set -euo pipefail
+          python3 Tools/tests/test_catalog_workflow.py
+          python3 Tools/tests/test_catalog_refresh.py
+          python3 Tools/tests/test_catalog_refresh_operational_state.py
+          python3 Tools/tests/test_catalog_refresh_plan.py
+          python3 Tools/tests/test_catalog_refresh_health.py
+          python3 Tools/tests/test_catalog_refresh_health_workflow.py
+          python3 Tools/tests/test_catalog_refresh_workflow_status.py
+          python3 Tools/tests/test_catalog_refresh_artifact_locator.py
+          python3 Tools/tests/test_catalog_refresh_submission_targets.py
+          python3 Tools/tests/test_github_refresh_state_proposal.py
+          python3 Tools/tests/test_production_github_catalog_proposal.py
+          python3 Tools/tests/test_production_retailer_workflow.py
+          python3 Tools/tests/test_production_release_workflow.py

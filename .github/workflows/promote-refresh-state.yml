@@ -1,0 +1,167 @@
+name: Promote reviewed refresh state
+
+on:
+  workflow_call:
+    inputs:
+      source_key:
+        required: true
+        type: string
+      snapshot_id:
+        required: true
+        type: string
+      refresh_state_artifact_name:
+        required: true
+        type: string
+      retailer_source_key:
+        required: false
+        default: ""
+        type: string
+      retailer_snapshot_id:
+        required: false
+        default: ""
+        type: string
+      retailer_refresh_state_artifact_name:
+        required: false
+        default: ""
+        type: string
+      normalized_artifact_name:
+        required: true
+        type: string
+      proposal_artifact_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require protected default-branch workflow context
+        env:
+          EXPECTED_REF: refs/heads/main
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+
+      - name: Check out exact reviewed source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download exact primary refresh state candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.refresh_state_artifact_name }}
+          path: ${{ runner.temp }}/refresh-primary
+
+      - name: Download exact retailer refresh state candidate
+        if: inputs.retailer_refresh_state_artifact_name != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.retailer_refresh_state_artifact_name }}
+          path: ${{ runner.temp }}/refresh-retailer
+
+      - name: Download exact reviewed aggregate normalized evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.normalized_artifact_name }}
+          path: ${{ runner.temp }}/normalized
+
+      - name: Download exact catalog proposal evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.proposal_artifact_name }}
+          path: ${{ runner.temp }}/proposal
+
+      - name: Validate proposal-bound refresh state lineage
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+          RETAILER_SOURCE_KEY: ${{ inputs.retailer_source_key }}
+          RETAILER_SNAPSHOT_ID: ${{ inputs.retailer_snapshot_id }}
+          RETAILER_STATE_ARTIFACT: ${{ inputs.retailer_refresh_state_artifact_name }}
+          NORMALIZED_ARTIFACT_NAME: ${{ inputs.normalized_artifact_name }}
+        run: |
+          set -euo pipefail
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/refresh-primary/handoff.json" \
+            --consumer-stage proposal \
+            --payload-root "$RUNNER_TEMP/refresh-primary"
+          python3 Tools/catalog_workflow.py validate-handoff \
+            --input "$RUNNER_TEMP/normalized/handoff.json" \
+            --consumer-stage build \
+            --payload-root "$RUNNER_TEMP/normalized"
+          if [[ -n "$RETAILER_STATE_ARTIFACT" ]]; then
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/refresh-retailer/handoff.json" \
+              --consumer-stage proposal \
+              --payload-root "$RUNNER_TEMP/refresh-retailer"
+          fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          release_input = json.loads(
+              (root / 'proposal/payload/production-catalog-release-input.json').read_text(encoding='utf-8')
+          )
+          normalized_handoff = json.loads((root / 'normalized/handoff.json').read_text(encoding='utf-8'))
+          primary = json.loads((root / 'refresh-primary/handoff.json').read_text(encoding='utf-8'))
+
+          if release_input.get('sourceKey') != os.environ['SOURCE_KEY']:
+              raise SystemExit('catalog release source differs from primary refresh source')
+          if release_input.get('snapshotId') != os.environ['SNAPSHOT_ID']:
+              raise SystemExit('catalog release snapshot differs from primary refresh snapshot')
+          if release_input.get('reviewedSourceCommit') != os.environ['GITHUB_SHA']:
+              raise SystemExit('catalog release input was not reviewed from this exact source commit')
+          if release_input.get('sourceRunId') != os.environ['GITHUB_RUN_ID']:
+              raise SystemExit('catalog release input was not produced in this exact trusted run')
+
+          normalized_receipt = release_input.get('inputs', {}).get('normalizedEvidence', {})
+          if normalized_receipt.get('artifactName') != os.environ['NORMALIZED_ARTIFACT_NAME']:
+              raise SystemExit('downloaded normalized artifact differs from reviewed release input')
+          if normalized_handoff.get('payload', {}).get('sha256') != normalized_receipt.get('payloadSha256'):
+              raise SystemExit('downloaded normalized evidence digest differs from reviewed release input')
+          for label, handoff in (('primary refresh state', primary), ('normalized evidence', normalized_handoff)):
+              producer = handoff.get('producer', {})
+              if producer.get('commitSha') != os.environ['GITHUB_SHA'] or producer.get('runId') != os.environ['GITHUB_RUN_ID']:
+                  raise SystemExit(f'{label} was not produced by this exact trusted catalog run')
+          if primary.get('sourceKey') != os.environ['SOURCE_KEY'] or primary.get('snapshotId') != os.environ['SNAPSHOT_ID']:
+              raise SystemExit('primary refresh state lineage differs from reviewed catalog proposal')
+
+          retailer_artifact = os.environ['RETAILER_STATE_ARTIFACT']
+          if retailer_artifact:
+              if not os.environ['RETAILER_SOURCE_KEY'] or not os.environ['RETAILER_SNAPSHOT_ID']:
+                  raise SystemExit('retailer refresh state requires source and snapshot identity')
+              retailer = json.loads((root / 'refresh-retailer/handoff.json').read_text(encoding='utf-8'))
+              producer = retailer.get('producer', {})
+              if producer.get('commitSha') != os.environ['GITHUB_SHA'] or producer.get('runId') != os.environ['GITHUB_RUN_ID']:
+                  raise SystemExit('retailer refresh state was not produced by this exact trusted catalog run')
+              if retailer.get('sourceKey') != os.environ['RETAILER_SOURCE_KEY'] or retailer.get('snapshotId') != os.environ['RETAILER_SNAPSHOT_ID']:
+                  raise SystemExit('retailer refresh state lineage differs from reviewed catalog proposal')
+          PY
+
+      - name: Promote changed candidates on the existing material catalog proposal branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RETAILER_STATE_ARTIFACT: ${{ inputs.retailer_refresh_state_artifact_name }}
+        run: |
+          set -euo pipefail
+          CANDIDATES=(
+            --candidate-state "$RUNNER_TEMP/refresh-primary/payload/source-refresh-state.json"
+          )
+          if [[ -n "$RETAILER_STATE_ARTIFACT" ]]; then
+            CANDIDATES+=(
+              --candidate-state "$RUNNER_TEMP/refresh-retailer/payload/source-refresh-state.json"
+            )
+          fi
+          python3 Tools/github_refresh_state_proposal.py \
+            --policy Data/refresh/catalog-refresh-policy-v1.json \
+            "${CANDIDATES[@]}" \
+            --release-input "$RUNNER_TEMP/proposal/payload/production-catalog-release-input.json" \
+            --normalized-evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --base-sha "$GITHUB_SHA"

@@ -1,0 +1,14 @@
+{
+  "acceptedComplete": null,
+  "candidateChangedFromAccepted": false,
+  "candidateComplete": null,
+  "candidateEligible": false,
+  "evaluatedAt": "2026-09-02T00:00:00Z",
+  "lastAttempt": null,
+  "market": "DE",
+  "nextFullDueAt": "2026-09-02T00:00:00Z",
+  "policyVersion": "1.0.0",
+  "schemaVersion": 1,
+  "sourceKey": "open-prices",
+  "stateSha256": "db6cb1ec4ec1317d06c9dc0f44354bc118d8452a751a3845bfd1f7fa5e36a841"
+}

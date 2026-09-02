@@ -110,9 +110,25 @@ def _accepted(previous: dict[str, Any] | None, source_key: str) -> dict[str, Any
     return value
 
 
-def _full_due(source: dict[str, Any], accepted: dict[str, Any] | None, now: datetime) -> tuple[str, str]:
+def _full_due(
+    source: dict[str, Any],
+    previous: dict[str, Any] | None,
+    accepted: dict[str, Any] | None,
+    now: datetime,
+) -> tuple[str, str]:
+    if previous is not None:
+        due = parse_time(previous.get("nextFullDueAt"), "previous nextFullDueAt", allow_none=True)
+        success_at = parse_time(
+            previous.get("lastSuccessfulFullAcquisitionAt"),
+            "previous lastSuccessfulFullAcquisitionAt",
+            allow_none=True,
+        )
+        if due is not None:
+            if success_at is None and previous.get("lastSuccessfulFullSnapshotID") is None:
+                return stamp(due), "no-successful-full-acquisition"
+            return stamp(due), "full-cadence-due" if now >= due else "full-cadence-not-due"
     if accepted is None:
-        return stamp(now), "no-accepted-complete-state"
+        return stamp(now), "no-successful-full-acquisition"
     retrieved = parse_time(accepted.get("retrievedAt"), "accepted retrievedAt")
     assert retrieved is not None
     due = retrieved + timedelta(days=source["fullCadenceDays"])
@@ -193,6 +209,8 @@ def _targeted_plan(
         "ambiguous-review",
         "assessment-recheck",
         "changed-unreviewed",
+        "admitted-submission",
+        "privacy-safe-demand",
     }
     gtins = sorted({
         item.get("gtin")
@@ -255,7 +273,7 @@ def build_plan(
     now = parse_time(evaluated_at, "evaluatedAt")
     assert now is not None
     accepted = _accepted(previous, source_key)
-    due_at, due_reason = _full_due(source, accepted, now)
+    due_at, due_reason = _full_due(source, previous, accepted, now)
 
     requested_mode = "full"
     fallback_reason = None

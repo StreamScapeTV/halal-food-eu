@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/refresh-queue-v1.schema.json",
+  "title": "Halal Food EU refresh queue v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "market", "evaluatedAt", "entries", "targetedExecution", "queueSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "market": {"const": "DE"},
+    "evaluatedAt": {"type": "string", "format": "date-time"},
+    "entries": {"type": "array", "items": {"type": "object"}},
+    "targetedExecution": {"type": "object"},
+    "queueSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

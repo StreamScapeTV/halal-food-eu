@@ -30,6 +30,7 @@ on:
         value: ${{ jobs.refresh.outputs.queue_artifact_name }}
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -132,6 +133,88 @@ jobs:
               ;;
           esac
 
+      - name: Locate latest successful prior operational refresh state
+        id: prior
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_KEY: ${{ inputs.source_key }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/previous-lineage"
+          python3 Tools/catalog_refresh_artifact_locator.py \
+            --repository "$REPOSITORY" \
+            --workflow scheduled-catalog-refresh.yml \
+            --source-key "$SOURCE_KEY" \
+            --output "$RUNNER_TEMP/previous-lineage/artifacts.json"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+
+          value = json.loads(
+              (Path(os.environ['RUNNER_TEMP']) / 'previous-lineage/artifacts.json').read_text(encoding='utf-8')
+          )
+          available = value.get('available') is True
+          print('available=' + ('true' if available else 'false'))
+          if available:
+              print('run_id=' + value['runId'])
+              print('artifact_name=' + value['artifacts']['refreshState'])
+              print('head_sha=' + (value.get('headSha') or ''))
+          PY
+
+      - name: Download latest successful prior operational refresh state
+        if: steps.prior.outputs.available == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.prior.outputs.artifact_name }}
+          path: ${{ runner.temp }}/previous-operational
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.prior.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Compose protected accepted lineage with prior operational clock
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          PRIOR_AVAILABLE: ${{ steps.prior.outputs.available }}
+          PRIOR_RUN_ID: ${{ steps.prior.outputs.run_id }}
+          PRIOR_HEAD_SHA: ${{ steps.prior.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          OPERATIONAL_ARGS=()
+          if [[ "$PRIOR_AVAILABLE" == "true" ]]; then
+            python3 Tools/catalog_workflow.py validate-handoff \
+              --input "$RUNNER_TEMP/previous-operational/handoff.json" \
+              --payload-root "$RUNNER_TEMP/previous-operational"
+            python3 Tools/catalog_refresh_operational_state.py validate-state \
+              --input "$RUNNER_TEMP/previous-operational/payload/source-refresh-state.json"
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'previous-operational'
+          handoff = json.loads((root / 'handoff.json').read_text(encoding='utf-8'))
+          if handoff.get('artifactKind') != 'source-refresh-state':
+              raise SystemExit('prior operational artifact kind mismatch')
+          if handoff.get('sourceKey') != os.environ['SOURCE_KEY']:
+              raise SystemExit('prior operational artifact source mismatch')
+          producer = handoff.get('producer', {})
+          if producer.get('workflow') != 'catalog-refresh.yml':
+              raise SystemExit('prior operational artifact producer workflow mismatch')
+          if producer.get('runId') != os.environ['PRIOR_RUN_ID']:
+              raise SystemExit('prior operational artifact run differs from located run')
+          expected_sha = os.environ.get('PRIOR_HEAD_SHA') or ''
+          if expected_sha and producer.get('commitSha') != expected_sha:
+              raise SystemExit('prior operational artifact commit differs from located run')
+          PY
+            OPERATIONAL_ARGS=(
+              --operational-state "$RUNNER_TEMP/previous-operational/payload/source-refresh-state.json"
+            )
+          fi
+          python3 Tools/catalog_refresh_operational_state.py merge-previous \
+            --accepted-state "${{ steps.paths.outputs.accepted_state }}" \
+            "${OPERATIONAL_ARGS[@]}" \
+            --output "$RUNNER_TEMP/previous-refresh-state.json"
+
       - name: Evaluate deterministic source refresh state and queues
         run: |
           set -euo pipefail
@@ -150,7 +233,7 @@ jobs:
             --evidence "$RUNNER_TEMP/normalized/payload/evidence.json" \
             --quality-report "$RUNNER_TEMP/quality/payload/quality-report.json" \
             --change-report "$RUNNER_TEMP/change/payload/change-report.json" \
-            --previous-state "${{ steps.paths.outputs.accepted_state }}" \
+            --previous-state "$RUNNER_TEMP/previous-refresh-state.json" \
             --evaluated-at "$EVALUATED_AT" \
             --state-output "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
             --report-output "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
@@ -159,7 +242,7 @@ jobs:
             --policy Data/refresh/catalog-refresh-policy-v1.json \
             --state "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
             --report "$RUNNER_TEMP/refresh-report/payload/refresh-report.json" \
-            --previous-state "${{ steps.paths.outputs.accepted_state }}" \
+            --previous-state "$RUNNER_TEMP/previous-refresh-state.json" \
             --state-output "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json" \
             --report-output "$RUNNER_TEMP/refresh-report/payload/refresh-report.json"
           python3 Tools/catalog_refresh_operational_state.py validate-state \

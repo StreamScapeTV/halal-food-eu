@@ -1,4 +1,5 @@
 name: Scheduled catalog refresh
+run-name: Catalog refresh ${{ github.event_name == 'schedule' && github.event.schedule == '41 3 * * 5' && 'open-prices' || github.event_name == 'schedule' && 'open-food-facts' || inputs.source_key }}
 
 on:
   schedule:
@@ -270,9 +271,9 @@ jobs:
       quality_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-quality.outputs.artifact_name || needs.quality.outputs.artifact_name }}
       basic_exclusions_artifact_name: ${{ needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.aggregate-normalize.outputs.basic_exclusions_artifact_name || needs.normalize.outputs.basic_exclusions_artifact_name }}
 
-  promote-primary-refresh-state:
-    if: ${{ always() && needs.trusted-default-branch.outputs.source_key == 'open-food-facts' && needs.refresh.result == 'success' && needs.proposal-gate.result == 'success' }}
-    needs: [trusted-default-branch, refresh, proposal-gate]
+  promote-reviewed-refresh-states:
+    if: ${{ always() && needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true' && needs.refresh.result == 'success' && needs.retailer-refresh.result == 'success' && needs.aggregate-normalize.result == 'success' && needs.proposal-gate.result == 'success' }}
+    needs: [trusted-default-branch, refresh, retailer-refresh, aggregate-normalize, proposal-gate]
     permissions:
       contents: write
     uses: ./.github/workflows/promote-refresh-state.yml
@@ -280,4 +281,8 @@ jobs:
       source_key: open-food-facts
       snapshot_id: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
       refresh_state_artifact_name: ${{ needs.refresh.outputs.state_artifact_name }}
+      retailer_source_key: open-prices
+      retailer_snapshot_id: ${{ needs.trusted-default-branch.outputs.retailer_snapshot_id }}
+      retailer_refresh_state_artifact_name: ${{ needs.retailer-refresh.outputs.state_artifact_name }}
+      normalized_artifact_name: ${{ needs.aggregate-normalize.outputs.normalized_artifact_name }}
       proposal_artifact_name: ${{ needs.proposal-gate.outputs.artifact_name }}

@@ -72,7 +72,13 @@ jobs:
           python3 Tools/catalog_refresh_workflow_status.py \
             --repository "$REPOSITORY" \
             --workflow scheduled-catalog-refresh.yml \
-            --output "$RUNNER_TEMP/health/scheduled-refresh-status.json"
+            --source-key open-food-facts \
+            --output "$RUNNER_TEMP/health/scheduled-off-status.json"
+          python3 Tools/catalog_refresh_workflow_status.py \
+            --repository "$REPOSITORY" \
+            --workflow scheduled-catalog-refresh.yml \
+            --source-key open-prices \
+            --output "$RUNNER_TEMP/health/scheduled-open-prices-status.json"
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           from pathlib import Path
@@ -289,7 +295,8 @@ jobs:
             --refresh-queue "$RUNNER_TEMP/health/daily-refresh-queue.json" \
             --refresh-plan "$RUNNER_TEMP/health/refresh-plan.json" \
             "${REFRESH_ARGS[@]}" \
-            --workflow-status "$RUNNER_TEMP/health/scheduled-refresh-status.json" \
+            --workflow-status "$RUNNER_TEMP/health/scheduled-off-status.json" \
+            --workflow-status "$RUNNER_TEMP/health/scheduled-open-prices-status.json" \
             --output "$RUNNER_TEMP/health/payload/catalog-health.json" \
             --markdown-output "$RUNNER_TEMP/health/catalog-health.md"
           python3 Tools/catalog_refresh_health.py validate \

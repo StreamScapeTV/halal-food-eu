@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Iterator
 from urllib.parse import urlparse
 
-from manufacturer_evidence import project_source_record
+from manufacturer_evidence import METADATA_KEY, project_source_record
 from open_food_facts_common import (
     AdapterError,
     DEFAULT_FIXTURE,

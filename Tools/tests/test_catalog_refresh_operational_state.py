@@ -11,6 +11,7 @@ from catalog_refresh import evaluate, promote_state
 from catalog_refresh_operational_state import (
     OperationalRefreshError,
     apply_operational_clock,
+    digest_without,
     merge_previous_state,
     validate_operational_report,
     validate_operational_state,
@@ -106,31 +107,26 @@ class OperationalRefreshStateTests(unittest.TestCase):
         self.assertTrue(second_report["noFalseFreshness"])
 
     def test_merge_previous_uses_protected_accepted_lineage_and_newer_operational_clock(self):
-        first_state, first_report = applied(metadata())
+        first_state, _ = applied(metadata())
         accepted_first = promote_state(copy.deepcopy(POLICY), first_state)
 
-        changed_state, changed_report = applied(
+        changed_state, _ = applied(
             metadata(snapshot="off-changed", retrieved="2026-09-05T00:00:00Z", digest="b" * 64),
             previous=accepted_first,
         )
         accepted_changed = promote_state(copy.deepcopy(POLICY), changed_state)
         self.assertEqual(accepted_changed["acceptedComplete"]["snapshotID"], "off-changed")
 
-        # A later successful check sees the same accepted formulation bytes and therefore
-        # advances only the operational clock. Its artifact still embeds the older
-        # accepted lineage from the run in which it was produced.
+        # Later unchanged success advances the operational clock, while the artifact
+        # may still embed an accepted lineage older than protected main by the time a
+        # future run starts. Only its operational fields are allowed to survive merge.
         operational_state, _ = applied(
             metadata(snapshot="off-unchanged", retrieved="2026-09-09T00:00:00Z", digest="b" * 64),
             previous=accepted_changed,
         )
         stale_lineage_artifact = copy.deepcopy(operational_state)
         stale_lineage_artifact["acceptedComplete"] = copy.deepcopy(accepted_first["acceptedComplete"])
-        stale_lineage_artifact["stateSha256"] = (
-            __import__("catalog_refresh_operational_state").digest_without(
-                stale_lineage_artifact,
-                "stateSha256",
-            )
-        )
+        stale_lineage_artifact["stateSha256"] = digest_without(stale_lineage_artifact, "stateSha256")
 
         merged = merge_previous_state(
             accepted=accepted_changed,
@@ -174,10 +170,9 @@ class OperationalRefreshStateTests(unittest.TestCase):
             previous=accepted,
         )
         accepted_newer = promote_state(copy.deepcopy(POLICY), newer)
-        older_operational = copy.deepcopy(accepted)
         merged = merge_previous_state(
             accepted=accepted_newer,
-            operational=older_operational,
+            operational=accepted,
         )
         self.assertEqual(merged["lastSuccessfulFullAcquisitionAt"], "2026-09-10T00:00:00Z")
         self.assertEqual(merged["lastSuccessfulFullSnapshotID"], "off-new")
@@ -187,12 +182,7 @@ class OperationalRefreshStateTests(unittest.TestCase):
         accepted = promote_state(copy.deepcopy(POLICY), first_state)
         conflicting = copy.deepcopy(accepted)
         conflicting["lastSuccessfulFullSnapshotID"] = "off-conflict"
-        conflicting["stateSha256"] = (
-            __import__("catalog_refresh_operational_state").digest_without(
-                conflicting,
-                "stateSha256",
-            )
-        )
+        conflicting["stateSha256"] = digest_without(conflicting, "stateSha256")
         with self.assertRaisesRegex(OperationalRefreshError, "different snapshots"):
             merge_previous_state(accepted=accepted, operational=conflicting)
 
@@ -274,6 +264,18 @@ class OperationalRefreshStateTests(unittest.TestCase):
         state["lastSuccessfulFullSnapshotID"] = None
         with self.assertRaises(OperationalRefreshError):
             validate_operational_state(state)
+
+    def test_refresh_workflow_uses_protected_acceptance_plus_prior_operational_artifact(self):
+        workflow = (ROOT / ".github/workflows/catalog-refresh.yml").read_text(encoding="utf-8")
+        scheduled = (ROOT / ".github/workflows/scheduled-catalog-refresh.yml").read_text(encoding="utf-8")
+        self.assertIn("actions: read", workflow)
+        self.assertIn("actions: read", scheduled)
+        self.assertIn("Tools/catalog_refresh_artifact_locator.py", workflow)
+        self.assertIn("latest successful prior operational refresh state", workflow.lower())
+        self.assertIn("--operational-state \"$RUNNER_TEMP/previous-operational/payload/source-refresh-state.json\"", workflow)
+        self.assertIn("Tools/catalog_refresh_operational_state.py merge-previous", workflow)
+        self.assertEqual(workflow.count('--previous-state "$RUNNER_TEMP/previous-refresh-state.json"'), 2)
+        self.assertNotIn('--previous-state "${{ steps.paths.outputs.accepted_state }}"', workflow)
 
 
 if __name__ == "__main__":

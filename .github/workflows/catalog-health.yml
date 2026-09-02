@@ -33,6 +33,7 @@ jobs:
       - name: Validate health contracts and tests
         run: |
           set -euo pipefail
+          python3 -m json.tool Data/health/catalog-health-v1.schema.json >/dev/null
           python3 Tools/catalog_workflow.py validate-contract
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 Tools/catalog_quality.py validate-policy \

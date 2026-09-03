@@ -1,7 +1,7 @@
 # 011 — Testing and acceptance
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-09-03
 
 ## Test layers
 
@@ -12,6 +12,7 @@
 - Lookup use-case found/not-found/error behavior.
 - Freshness boundary calculations.
 - Immutable evidence value decoding/round-trip under Swift 6 strict concurrency.
+- Ingredient OCR immutable values, deterministic reading order, confidence aggregation, and cancellation/supersession state behavior.
 
 ### Evidence-contract tests
 
@@ -46,6 +47,7 @@
 - Product image bytes remain outside the admitted catalog contract.
 - Workflow dependency pins match the reviewed tooling manifest; pull-request validation cannot gain write/secret authority.
 - Bundled iOS catalog lookup rejects manifest/database digest mismatch, unsupported manifest/source-policy schemas, integrity failures, missing required tables, and incompatible SQLite metadata.
+- Ingredient OCR rejects empty, oversized, invalid, too-small, and unsafe-dimension image input before recognition where applicable.
 
 ### Data integration tests
 
@@ -62,7 +64,10 @@
 - Invalid barcode never performs lookup.
 - Found/not-found/failure states are distinct.
 - Status, reason, date, and source accessibility labels/read order are correct.
-- Camera unavailability retains a complete manual path.
+- Camera unavailability retains a complete manual barcode path.
+- Ingredient OCR success, unreadable, failure, editable review, retry, and supersession states are distinct and deterministic.
+- A deterministic synthetic ingredient-label image exercises the real Swift-native Vision OCR implementation on the GitHub-hosted iOS lane.
+- OCR output remains unverified and does not mutate SQLite or create a halal assessment.
 
 ### Catalog tests
 
@@ -87,6 +92,7 @@
 - **HF-TEST-008:** Every push/PR that affects the evidence contract runs its stdlib validator, deterministic projection tests, schema JSON parse, and Swift fixture decoding before merge.
 - **HF-TEST-009:** Every push/PR that affects catalog selection runs the versioned policy/candidate validators, synthetic decision fixtures, deterministic reporting/comparison tests, and image-boundary tests on the GitHub-hosted catalog lane.
 - **HF-TEST-010:** Every push/PR that affects catalog ingestion, workflow trust, dependencies, or runtime integrity runs the adversarial security suite and emits a deterministic reviewed-tooling SBOM.
+- **HF-TEST-011:** The iOS lane for specification 026 selects and verifies the accepted stable Xcode 26.6 toolchain, compiles with Swift 6 complete strict concurrency, and executes the real Vision OCR smoke test plus deterministic OCR unit tests without production retailer data.
 
 ## Definition of done
 

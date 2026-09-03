@@ -1,7 +1,7 @@
 # 009 — Performance and reliability
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-03
 
 ## Performance budgets
 
@@ -14,6 +14,7 @@ Measured on a supported release iPhone with a production-like catalog:
 - **HF-PERF-005:** Search results are paged and bounded; the initial page target is at most 50 rows.
 - **HF-PERF-006:** Result rendering must avoid parsing or normalizing an entire catalog on the UI thread.
 - **HF-PERF-007:** The baseline bundled catalog size target is below 250 MB; exceeding it requires an ADR covering install size, memory mapping, compression, and update strategy.
+- **HF-PERF-008:** Ingredient OCR validates and downsamples bounded image input off `@MainActor` before accurate Vision recognition. It must not decode an unbounded full-resolution image on the UI actor.
 
 ## Concurrency and cancellation
 
@@ -22,6 +23,7 @@ Measured on a supported release iPhone with a production-like catalog:
 - **HF-CONCURRENCY-003:** Database ownership is isolated behind one concurrency-safe component; raw SQLite handles/statements are not shared with UI code.
 - **HF-CONCURRENCY-004:** Superseded lookups are cancelled or their results ignored.
 - **HF-CONCURRENCY-005:** Tasks are structured and tied to feature/view-model lifetime; detached work requires explicit justification.
+- **HF-CONCURRENCY-006:** OCR preprocessing/recognition is isolated behind a concurrency-safe recognizer. Superseded or dismissed OCR work is cancelled or its stale result is ignored before `@MainActor` state publication.
 
 ## Reliability
 
@@ -31,3 +33,4 @@ Measured on a supported release iPhone with a production-like catalog:
 - **HF-RELIABILITY-004:** The app launches to a recoverable error explanation if the catalog cannot open; it must not crash-loop.
 - **HF-RELIABILITY-005:** Integration tests exercise a real SQLite file using the same repository implementation as the app.
 - **HF-RELIABILITY-006:** CI uses a concrete available iOS simulator selected at runtime rather than depending on one hard-coded device name.
+- **HF-RELIABILITY-007:** OCR empty text, invalid image data, unsafe image bounds, recognition failure, camera unavailability, and retry are explicit recoverable states; none may invent ingredient text or mutate the catalog.

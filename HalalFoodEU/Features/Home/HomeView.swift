@@ -2,15 +2,19 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var viewModel: ScannerViewModel
+    @Bindable var ingredientOCRViewModel: IngredientOCRViewModel
     @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
     let additiveReferenceCatalog: AdditiveReferenceCatalog?
+    @State private var isIngredientOCRPresented = false
 
     init(
         viewModel: ScannerViewModel,
+        ingredientOCRViewModel: IngredientOCRViewModel,
         submissionCoordinator: ProductEvidenceSubmissionCoordinator,
         additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
     ) {
         self.viewModel = viewModel
+        self.ingredientOCRViewModel = ingredientOCRViewModel
         self.submissionCoordinator = submissionCoordinator
         self.additiveReferenceCatalog = additiveReferenceCatalog
     }
@@ -27,6 +31,20 @@ struct HomeView: View {
                     }
                     .accessibilityHint("Opens the camera barcode scanner.")
 
+                    Button {
+                        ingredientOCRViewModel.reset()
+                        isIngredientOCRPresented = true
+                    } label: {
+                        Label(
+                            String(localized: "Scan ingredients", table: "IngredientOCR"),
+                            systemImage: "text.viewfinder"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .accessibilityHint(
+                        String(localized: "Opens an on-device ingredient text scanner.", table: "IngredientOCR")
+                    )
+
                     TextField("EAN, UPC, or GTIN", text: $viewModel.manualBarcode)
                         .keyboardType(.numberPad)
                         .textContentType(.none)
@@ -40,7 +58,7 @@ struct HomeView: View {
                 } header: {
                     Text("Check a packaged food")
                 } footer: {
-                    Text("Scanning and lookup use the catalog bundled with the app and work without a network connection.")
+                    Text(String(localized: "Barcode lookup uses the catalog bundled with the app. Ingredient OCR also runs on device; neither requires a network connection.", table: "IngredientOCR"))
                 }
 
                 LookupStateContent(
@@ -72,6 +90,9 @@ struct HomeView: View {
             .navigationTitle("Halal Food EU")
             .sheet(isPresented: $viewModel.isScannerPresented) {
                 ScannerSheet(onScan: viewModel.acceptScan)
+            }
+            .sheet(isPresented: $isIngredientOCRPresented) {
+                IngredientOCRView(viewModel: ingredientOCRViewModel)
             }
             .sheet(
                 isPresented: Binding(
@@ -126,14 +147,8 @@ private struct LookupStateContent: View {
                 .accessibilityLabel("Looking up the offline product catalog")
             }
         case let .found(product):
-            ProductResultView(
-                product: product,
-                submissionCoordinator: submissionCoordinator
-            )
-            AdditiveReferenceSection(
-                product: product,
-                catalog: additiveReferenceCatalog
-            )
+            ProductResultView(product: product, submissionCoordinator: submissionCoordinator)
+            AdditiveReferenceSection(product: product, catalog: additiveReferenceCatalog)
         case let .notFound(barcode):
             Section {
                 ContentUnavailableView(

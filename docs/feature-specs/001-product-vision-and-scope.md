@@ -1,11 +1,13 @@
 # 001 — Product vision and scope
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-09-03
 
 ## Vision
 
 A person in Europe should be able to point an iPhone at a packaged-food barcode and receive a quick, offline, evidence-based explanation of whether the exact cataloged formulation is halal, not halal, questionable, or unknown—and how recent that evidence is.
+
+The app may also help the user read an ingredient panel locally through specification 026. OCR is assistive and unverified; it is not a replacement for catalog evidence or human review.
 
 ## Users
 
@@ -33,6 +35,7 @@ The application does not require an account and does not assume one jurisprudent
 - **HF-PRODUCT-013:** The production detailed catalog prioritizes packaged/processed foods where formulation, processing, certification, or evidence can materially affect the result; it is not required to mirror every upstream whole-food record.
 - **HF-PRODUCT-014:** An approved basic-food exclusion is a catalog-focus decision, not a halal assessment. Omission must never create or imply `halal-certified` or `halal-reviewed`.
 - **HF-PRODUCT-015:** Product presentation images are optional remote metadata and are never required for offline lookup, assessment, or evidence explanation.
+- **HF-PRODUCT-016:** Application feature development must not depend on completion of retailer coverage when deterministic synthetic/runtime-shaped fixtures can prove the feature contract. Production catalog breadth is a content/release concern, not a prerequisite for barcode, OCR, UI, accessibility, or offline application behavior.
 
 ## Initial release boundary
 
@@ -40,10 +43,11 @@ The initial production slice consists of:
 
 1. camera scan and manual barcode entry;
 2. local lookup in the bundled catalog;
-3. not-found handling;
-4. product identity, ingredients, assessment, reason list, source, and dates;
-5. catalog version/integrity information; and
-6. accessible native UI.
+3. explicit on-device ingredient OCR with editable unverified text;
+4. not-found handling;
+5. product identity, ingredients, assessment, reason list, source, and dates;
+6. catalog version/integrity information; and
+7. accessible native UI.
 
 Search, favorites, scan history, user submissions, and delta catalog updates are specified but may be delivered after the initial slice if their requirements remain respected.
 
@@ -55,4 +59,6 @@ Search, favorites, scan history, user submissions, and delta catalog updates are
 - Guaranteeing absence of cross-contamination, processing aids, alcohol traces, allergens, or supply-chain changes.
 - Scraping public retailer pages without redistribution permission.
 - Depending on a live remote API at scan time.
+- Treating OCR text as canonical evidence without an explicit later review/admission flow.
+- Generic file/photo import for ingredient OCR in the initial scope.
 - Monetization, ads, tracking, or a hosted clone in the current repository license.

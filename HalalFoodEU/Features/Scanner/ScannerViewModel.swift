@@ -35,6 +35,11 @@ final class ScannerViewModel {
         submit(scan.payload, symbology: scan.symbology)
     }
 
+    func lookup(_ barcode: Barcode) {
+        manualBarcode = barcode.rawValue
+        submit(barcode.rawValue, symbology: .retail)
+    }
+
     func tryDemoBarcode(_ barcode: String) {
         manualBarcode = barcode
         submit(barcode, symbology: .retail)

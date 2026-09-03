@@ -15,6 +15,9 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable
 
+APPLICATION_ID = 1_212_564_821  # ASCII "HFEU"
+CATALOG_SCHEMA_VERSION = 2
+MANIFEST_SCHEMA_VERSION = 3
 SEARCH_INDEX_SCHEMA_VERSION = 1
 MAX_PAGE_SIZE = 50
 FTS_TABLE = "product_search"
@@ -39,6 +42,18 @@ def _load_manifest(path: Path) -> dict:
     if not isinstance(value, dict):
         raise ValueError("production manifest must be a JSON object")
     return value
+
+
+def _validate_manifest_shape(manifest: dict) -> None:
+    if manifest.get("manifestSchemaVersion") != MANIFEST_SCHEMA_VERSION:
+        raise ValueError("production manifest schema is unsupported for search indexing")
+    if manifest.get("schemaVersion") != CATALOG_SCHEMA_VERSION:
+        raise ValueError("production catalog schema is unsupported for search indexing")
+    if not isinstance(manifest.get("databaseBytes"), int) or manifest["databaseBytes"] <= 0:
+        raise ValueError("production manifest databaseBytes is invalid")
+    digest = manifest.get("sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("production manifest database SHA-256 is invalid")
 
 
 def search_manifest() -> dict:
@@ -82,6 +97,28 @@ def _update_release_notes(path: Path, *, database_bytes: int, sha256: str) -> No
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _validate_database_identity(connection: sqlite3.Connection) -> None:
+    if connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
+        raise ValueError("unexpected SQLite application_id while validating search index")
+    if connection.execute("PRAGMA user_version").fetchone()[0] != CATALOG_SCHEMA_VERSION:
+        raise ValueError("unexpected SQLite user_version while validating search index")
+
+
+def _enforce_database_budget(manifest: dict, database_bytes: int) -> None:
+    budgets = manifest.get("budgets")
+    if budgets is None:
+        return
+    if not isinstance(budgets, dict):
+        raise ValueError("production manifest budgets must be a JSON object")
+    maximum = budgets.get("databaseBytesLessThan")
+    if not isinstance(maximum, int) or maximum <= 0:
+        raise ValueError("production manifest database size budget is invalid")
+    if database_bytes >= maximum:
+        raise ValueError(
+            f"catalog database size {database_bytes} exceeds reviewed budget {maximum} after search indexing"
+        )
+
+
 def install_search_index(
     *,
     database_path: Path,
@@ -91,9 +128,12 @@ def install_search_index(
     if not database_path.is_file():
         raise ValueError("production catalog database is missing")
     manifest = _load_manifest(manifest_path)
+    _validate_manifest_shape(manifest)
     current_digest = file_sha256(database_path)
     if manifest.get("sha256") != current_digest:
         raise ValueError("production manifest/database SHA-256 mismatch before search indexing")
+    if manifest.get("databaseBytes") != database_path.stat().st_size:
+        raise ValueError("production manifest databaseBytes differs from SQLite before search indexing")
     if "searchIndex" in manifest:
         validate_search_index(database_path=database_path, manifest_path=manifest_path)
         return manifest
@@ -103,6 +143,7 @@ def install_search_index(
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA journal_mode=OFF")
         connection.execute("PRAGMA synchronous=OFF")
+        _validate_database_identity(connection)
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("production SQLite integrity_check failed before search indexing")
         if connection.execute("PRAGMA foreign_key_check").fetchall():
@@ -154,6 +195,7 @@ def install_search_index(
 
     digest = file_sha256(database_path)
     database_bytes = database_path.stat().st_size
+    _enforce_database_budget(manifest, database_bytes)
     manifest["databaseBytes"] = database_bytes
     manifest["sha256"] = digest
     manifest["searchIndex"] = search_manifest()
@@ -169,16 +211,19 @@ def install_search_index(
 
 def validate_search_index(*, database_path: Path, manifest_path: Path) -> None:
     manifest = _load_manifest(manifest_path)
+    _validate_manifest_shape(manifest)
     if manifest.get("sha256") != file_sha256(database_path):
         raise ValueError("production manifest/database SHA-256 mismatch")
     if manifest.get("databaseBytes") != database_path.stat().st_size:
         raise ValueError("production manifest databaseBytes differs from SQLite")
+    _enforce_database_budget(manifest, database_path.stat().st_size)
     if manifest.get("searchIndex") != search_manifest():
         raise ValueError("production manifest search-index binding is missing or unsupported")
 
     uri = f"file:{database_path.resolve()}?mode=ro&immutable=1"
     connection = sqlite3.connect(uri, uri=True)
     try:
+        _validate_database_identity(connection)
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("production SQLite integrity_check failed")
         if connection.execute("PRAGMA foreign_key_check").fetchall():

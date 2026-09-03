@@ -301,6 +301,7 @@ def build_from_request(*, request_path: Path, root: Path, workflow_contract_path
         selection_policy_version=request["selectionPolicyVersion"],
     )
 
+    import product_search_index
     import production_catalog
     import production_catalog_logical
 
@@ -321,6 +322,15 @@ def build_from_request(*, request_path: Path, root: Path, workflow_contract_path
         release_notes_path=resolved.get("releaseNotesOutputPath"),
         previous_manifest_path=resolved.get("previousManifestPath"),
         max_database_bytes=request["maxDatabaseBytes"],
+    )
+    manifest = product_search_index.install_search_index(
+        database_path=resolved["databaseOutputPath"],
+        manifest_path=resolved["manifestOutputPath"],
+        release_notes_path=resolved.get("releaseNotesOutputPath"),
+    )
+    product_search_index.validate_search_index(
+        database_path=resolved["databaseOutputPath"],
+        manifest_path=resolved["manifestOutputPath"],
     )
     try:
         logical_identity = production_catalog_logical.bind_manifest(

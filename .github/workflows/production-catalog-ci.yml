@@ -34,6 +34,7 @@ jobs:
             Tools/basic_exclusions.py \
             Tools/build_production_fixture.py \
             Tools/github_catalog_proposal.py \
+            Tools/product_search_index.py \
             Tools/production_catalog_aggregate.py \
             Tools/production_catalog_gate.py \
             Tools/production_catalog.py \
@@ -42,6 +43,7 @@ jobs:
             Tools/production_catalog_proposal.py \
             Tools/production_catalog_release_input.py \
             Tools/tests/test_basic_exclusions.py \
+            Tools/tests/test_product_search_index.py \
             Tools/tests/test_production_build_workflow.py \
             Tools/tests/test_production_catalog_aggregate.py \
             Tools/tests/test_production_catalog_gate.py \
@@ -58,6 +60,7 @@ jobs:
             -v
           PYTHONPATH=Tools python3 -m unittest \
             Tools.tests.test_basic_exclusions \
+            Tools.tests.test_product_search_index \
             -v
 
       - name: Build the exact production-schema iOS fixture
@@ -69,5 +72,8 @@ jobs:
             --source-commit "${GITHUB_SHA}" \
             --workflow-run "${GITHUB_RUN_ID}"
           python3 Tools/production_catalog.py validate \
+            --database "${RUNNER_TEMP}/catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/catalog-manifest.json"
+          python3 Tools/product_search_index.py validate \
             --database "${RUNNER_TEMP}/catalog.sqlite3" \
             --manifest "${RUNNER_TEMP}/catalog-manifest.json"

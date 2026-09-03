@@ -1,6 +1,7 @@
 "Search products" = "Produkte suchen";
 "Search the bundled catalog" = "Im integrierten Katalog suchen";
 "Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device." = "Gib einen Produktnamen, eine Marke, EAN, UPC oder GTIN ein. Die Suche bleibt auf diesem Gerät.";
+"Searches the bundled catalog by product name, brand, or barcode." = "Durchsucht den integrierten Katalog nach Produktname, Marke oder Barcode.";
 "Searching the offline catalog…" = "Offline-Katalog wird durchsucht…";
 "Load more" = "Mehr laden";
 "Loading more…" = "Weitere Ergebnisse werden geladen…";

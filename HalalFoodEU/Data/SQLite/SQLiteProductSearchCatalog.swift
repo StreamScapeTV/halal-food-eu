@@ -36,8 +36,8 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
     static let supportedManifestSchemaVersion = 3
     static let supportedSchemaVersion = 2
     static let supportedSearchIndexSchemaVersion = 1
-    static let expectedApplicationID: Int32 = 1_212_564_821 // ASCII "HFEU"
-    static let expectedSearchIndex = ProductSearchCatalogManifest.SearchIndex(
+    static let expectedApplicationID = 1_212_564_821 // ASCII "HFEU"
+    private static let expectedSearchIndex = ProductSearchCatalogManifest.SearchIndex(
         schemaVersion: supportedSearchIndexSchemaVersion,
         engine: "sqlite-fts5",
         ftsTable: "product_search",
@@ -278,7 +278,7 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
         guard schemaVersion == Self.supportedSchemaVersion else {
             throw ProductCatalogError.incompatibleSchema(
                 expected: Self.supportedSchemaVersion,
-                actual: Int(schemaVersion)
+                actual: schemaVersion
             )
         }
         let searchObjects = try readCount(
@@ -416,13 +416,13 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
     private func readIntegerPragma(
         _ name: String,
         connection: ProductSearchSQLiteConnection
-    ) throws -> Int32 {
+    ) throws -> Int {
         let statement = try pragmaStatement(name, connection: connection)
         defer { sqlite3_finalize(statement) }
         guard sqlite3_step(statement) == SQLITE_ROW else {
             throw queryError(connection: connection)
         }
-        return sqlite3_column_int(statement, 0)
+        return Int(sqlite3_column_int(statement, 0))
     }
 
     private func pragmaStatement(

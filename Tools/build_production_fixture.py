@@ -11,6 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import product_search_index
 import production_catalog
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,7 +114,15 @@ def main() -> None:
             source_commit=args.source_commit,
             workflow_run=str(args.workflow_run),
         )
+        product_search_index.install_search_index(
+            database_path=args.database,
+            manifest_path=args.manifest,
+        )
         production_catalog.validate_catalog(args.database, args.manifest)
+        product_search_index.validate_search_index(
+            database_path=args.database,
+            manifest_path=args.manifest,
+        )
 
     print(f"Built production fixture: {args.database}")
 

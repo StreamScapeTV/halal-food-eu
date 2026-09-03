@@ -29,9 +29,10 @@ struct SearchProductsTests {
         let search = SearchProducts(catalog: catalog)
 
         let page = try await search(" \n\t ")
+        let requests = await catalog.requests
 
         #expect(page == .empty)
-        #expect(await catalog.requests.isEmpty)
+        #expect(requests.isEmpty)
     }
 
     @Test("Search bounds reject oversized query, page, and negative offset")
@@ -99,7 +100,7 @@ struct ProductSearchViewModelTests {
 
         viewModel.query = "first"
         viewModel.submit()
-        try await waitUntil { await catalog.startedQueries.contains("first") }
+        try await waitUntil { (await catalog.startedQueries).contains("first") }
 
         viewModel.query = "second"
         viewModel.submit()
@@ -127,8 +128,9 @@ struct ProductSearchViewModelTests {
         viewModel.loadMore()
         try await waitUntil { !viewModel.isLoadingMore && !viewModel.hasMore }
 
+        let offsets = await catalog.offsets
         #expect(viewModel.results.map(\.name) == ["Alpha", "Beta", "Gamma"])
-        #expect(await catalog.offsets == [0, 2])
+        #expect(offsets == [0, 2])
     }
 
     @Test("Search failure remains distinct from no results")
@@ -162,7 +164,7 @@ struct ProductSearchViewModelTests {
 
         viewModel.query = "first"
         viewModel.submit()
-        try await waitUntil { await catalog.startedQueries.contains("first") }
+        try await waitUntil { (await catalog.startedQueries).contains("first") }
         viewModel.reset()
 
         try await Task.sleep(for: .milliseconds(300))

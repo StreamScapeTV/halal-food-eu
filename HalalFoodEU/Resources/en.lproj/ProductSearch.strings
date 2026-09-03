@@ -1,6 +1,7 @@
 "Search products" = "Search products";
 "Search the bundled catalog" = "Search the bundled catalog";
 "Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device." = "Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device.";
+"Searches the bundled catalog by product name, brand, or barcode." = "Searches the bundled catalog by product name, brand, or barcode.";
 "Searching the offline catalog…" = "Searching the offline catalog…";
 "Load more" = "Load more";
 "Loading more…" = "Loading more…";

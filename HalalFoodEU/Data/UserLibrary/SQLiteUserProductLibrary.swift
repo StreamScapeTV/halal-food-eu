@@ -16,7 +16,6 @@ private final class UserLibrarySQLiteConnection: @unchecked Sendable {
 actor SQLiteUserProductLibrary: UserProductLibraryStore {
     static let supportedSchemaVersion = 1
     static let expectedApplicationID: Int32 = 1_212_568_900 // ASCII "HFUD"
-    static let maximumHistoryEntries = 200
 
     private let databaseURL: URL
     private var connection: UserLibrarySQLiteConnection?
@@ -37,7 +36,11 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
         guard sqlite3_step(statement) == SQLITE_ROW else {
             throw UserProductLibraryError.invalidRecord("history opt-in setting is missing")
         }
-        return sqlite3_column_int(statement, 0) == 1
+        let value = sqlite3_column_int(statement, 0)
+        guard value == 0 || value == 1 else {
+            throw UserProductLibraryError.invalidRecord("history opt-in setting is invalid")
+        }
+        return value == 1
     }
 
     func setHistoryEnabled(_ enabled: Bool) async throws {
@@ -51,6 +54,9 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
         guard sqlite3_bind_int(statement, 1, enabled ? 1 : 0) == SQLITE_OK,
               sqlite3_step(statement) == SQLITE_DONE else {
             throw queryError(connection: connection)
+        }
+        guard sqlite3_changes(connection.handle) == 1 else {
+            throw UserProductLibraryError.invalidRecord("history opt-in setting is missing")
         }
     }
 
@@ -67,43 +73,50 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
         let connection = try openIfNeeded()
         guard try historyEnabled(connection: connection) else { return }
 
-        let statement = try prepare(
-            """
-            INSERT INTO scan_history(gtin, scanned_at, catalog_version, version_marker_json)
-            VALUES (?, ?, ?, ?);
-            """,
-            connection: connection
-        )
-        defer { sqlite3_finalize(statement) }
-        try bind(barcode.rawValue, at: 1, to: statement, connection: connection)
-        try bind(Self.dateString(scannedAt), at: 2, to: statement, connection: connection)
-        try bind(catalogVersion, at: 3, to: statement, connection: connection)
-        try bind(try Self.markerJSON(versionMarker), at: 4, to: statement, connection: connection)
-        guard sqlite3_step(statement) == SQLITE_DONE else {
-            throw queryError(connection: connection)
-        }
+        try execute("BEGIN IMMEDIATE;", connection: connection)
+        do {
+            let statement = try prepare(
+                """
+                INSERT INTO scan_history(gtin, scanned_at, catalog_version, version_marker_json)
+                VALUES (?, ?, ?, ?);
+                """,
+                connection: connection
+            )
+            defer { sqlite3_finalize(statement) }
+            try bind(barcode.rawValue, at: 1, to: statement, connection: connection)
+            try bind(Self.dateString(scannedAt), at: 2, to: statement, connection: connection)
+            try bind(catalogVersion, at: 3, to: statement, connection: connection)
+            try bind(try Self.markerJSON(versionMarker), at: 4, to: statement, connection: connection)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw queryError(connection: connection)
+            }
 
-        let trim = try prepare(
-            """
-            DELETE FROM scan_history
-            WHERE id IN (
-                SELECT id
-                FROM scan_history
-                ORDER BY scanned_at DESC, id DESC
-                LIMIT -1 OFFSET ?
-            );
-            """,
-            connection: connection
-        )
-        defer { sqlite3_finalize(trim) }
-        guard sqlite3_bind_int(trim, 1, Int32(Self.maximumHistoryEntries)) == SQLITE_OK,
-              sqlite3_step(trim) == SQLITE_DONE else {
-            throw queryError(connection: connection)
+            let trim = try prepare(
+                """
+                DELETE FROM scan_history
+                WHERE id IN (
+                    SELECT id
+                    FROM scan_history
+                    ORDER BY scanned_at DESC, id DESC
+                    LIMIT -1 OFFSET ?
+                );
+                """,
+                connection: connection
+            )
+            defer { sqlite3_finalize(trim) }
+            guard sqlite3_bind_int(trim, 1, Int32(UserProductLibraryPolicy.maximumHistoryEntries)) == SQLITE_OK,
+                  sqlite3_step(trim) == SQLITE_DONE else {
+                throw queryError(connection: connection)
+            }
+            try execute("COMMIT;", connection: connection)
+        } catch {
+            try? execute("ROLLBACK;", connection: connection)
+            throw error
         }
     }
 
-    func history(limit: Int = SQLiteUserProductLibrary.maximumHistoryEntries) async throws -> [ScanHistoryEntry] {
-        guard (1...Self.maximumHistoryEntries).contains(limit) else {
+    func history(limit: Int = UserProductLibraryPolicy.maximumHistoryEntries) async throws -> [ScanHistoryEntry] {
+        guard (1...UserProductLibraryPolicy.maximumHistoryEntries).contains(limit) else {
             throw UserProductLibraryError.invalidRecord("history page limit is outside supported bounds")
         }
         try Task.checkCancellation()
@@ -401,7 +414,11 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
         guard sqlite3_step(statement) == SQLITE_ROW else {
             throw UserProductLibraryError.invalidRecord("history opt-in setting is missing")
         }
-        return sqlite3_column_int(statement, 0) == 1
+        let value = sqlite3_column_int(statement, 0)
+        guard value == 0 || value == 1 else {
+            throw UserProductLibraryError.invalidRecord("history opt-in setting is invalid")
+        }
+        return value == 1
     }
 
     private func prepare(

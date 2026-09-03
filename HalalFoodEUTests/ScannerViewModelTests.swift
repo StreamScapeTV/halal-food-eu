@@ -71,8 +71,9 @@ struct ScannerViewModelTests {
             }
             return false
         }
+        let lookups = await catalog.lookups
         #expect(viewModel.manualBarcode == selected.rawValue)
-        #expect(await catalog.lookups == [selected.rawValue])
+        #expect(lookups == [selected.rawValue])
     }
 
     private func waitUntilLookupStarted(
@@ -81,7 +82,7 @@ struct ScannerViewModelTests {
         attempts: Int = 100
     ) async throws {
         for _ in 0..<attempts {
-            if await catalog.startedLookups.contains(barcode) { return }
+            if (await catalog.startedLookups).contains(barcode) { return }
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for lookup to start")

@@ -13,6 +13,7 @@
 - Freshness boundary calculations.
 - Immutable evidence value decoding/round-trip under Swift 6 strict concurrency.
 - Ingredient OCR immutable values, deterministic reading order, confidence aggregation, and cancellation/supersession state behavior.
+- Local history/favorite immutable values, bounded versioned product fingerprinting, current-catalog comparison states, and separation between catalog-version change and material product-record change.
 
 ### Evidence-contract tests
 
@@ -48,6 +49,7 @@
 - Workflow dependency pins match the reviewed tooling manifest; pull-request validation cannot gain write/secret authority.
 - Bundled iOS catalog lookup rejects manifest/database digest mismatch, unsupported manifest/source-policy schemas, integrity failures, missing required tables, and incompatible SQLite metadata.
 - Ingredient OCR rejects empty, oversized, invalid, too-small, and unsafe-dimension image input before recognition where applicable.
+- The separate writable local history/favorites SQLite store rejects incompatible application/schema IDs and malformed/corrupt records, uses parameterized SQL, and cannot mutate or weaken the read-only catalog.
 
 ### Data integration tests
 
@@ -57,6 +59,7 @@
 - Reject unsupported status/schema fixtures.
 - Validate source/date/methodology mapping.
 - Confirm exact lookup uses an index in catalog validation.
+- Open/reopen the separate local user-data SQLite fixture and prove default-off history, explicit opt-in, canonical GTIN persistence, newest-first ordering, 200-entry retention, individual deletion, clear-all, explicit favorite add/remove, and fail-closed corruption behavior.
 
 ### Feature/UI tests
 
@@ -68,6 +71,9 @@
 - Ingredient OCR success, unreadable, failure, editable review, retry, and supersession states are distinct and deterministic.
 - A deterministic synthetic ingredient-label image exercises the real Swift-native Vision OCR implementation on the GitHub-hosted iOS lane.
 - OCR output remains unverified and does not mutate SQLite or create a halal assessment.
+- Local scan history defaults off; only a successfully normalized physical camera-scan event can hand off a history record. Manual lookup, product-search selection, demo lookup, OCR, retry, and correction/submission flows do not create history.
+- Favorites work independently of history opt-in; saved items reopen through the current exact catalog path and expose unchanged/changed/missing/newly-available states without presenting stale saved product truth.
+- History/favorites load, opt-in rollback, delete, clear, favorite toggle, persistence failure, cancellation, EN/DE localization, Dynamic Type, and VoiceOver behavior are deterministic.
 
 ### Catalog tests
 
@@ -93,6 +99,7 @@
 - **HF-TEST-009:** Every push/PR that affects catalog selection runs the versioned policy/candidate validators, synthetic decision fixtures, deterministic reporting/comparison tests, and image-boundary tests on the GitHub-hosted catalog lane.
 - **HF-TEST-010:** Every push/PR that affects catalog ingestion, workflow trust, dependencies, or runtime integrity runs the adversarial security suite and emits a deterministic reviewed-tooling SBOM.
 - **HF-TEST-011:** The iOS lane for specification 026 selects and verifies the accepted stable Xcode 26.6 toolchain, compiles with Swift 6 complete strict concurrency, and executes the real Vision OCR smoke test plus deterministic OCR unit tests without production retailer data.
+- **HF-TEST-012:** Changes to specification-006 local history/favorites must pass the real separate-SQLite persistence suite, camera-only history boundary tests, current-catalog comparison tests, EN/DE resource validation, and the existing barcode/search/OCR/evidence/submission/catalog regression suites under Xcode 26.6 / Swift 6 strict concurrency.
 
 ## Definition of done
 

@@ -12,11 +12,11 @@ This feature is deliberately independent of retailer catalog coverage. Developme
 ## Capture and recognition
 
 - **HF-OCR-001:** Ingredient OCR is an explicit user-initiated camera flow. Generic file/photo-library import is outside the initial scope.
-- **HF-OCR-002:** Recognition runs entirely on device using the Swift-native Vision `RecognizeTextRequest` available from iOS 18.
-- **HF-OCR-003:** The request uses `.accurate` recognition and `usesLanguageCorrection = false` so package spellings, additive codes, punctuation, and uncertain text are not silently rewritten by a language model.
-- **HF-OCR-004:** German (`de-DE`) and English (`en-US`) are supplied in that priority order when the active Vision revision reports them as supported. If neither is supported, Vision may fall back to automatic language detection rather than failing the feature solely on the hint list.
+- **HF-OCR-002:** Recognition runs entirely on device using Apple Vision. On iOS 26 and newer, the implementation uses the Swift-native `RecognizeTextRequest`; on iOS 18 through iOS 25, it uses the supported native `VNRecognizeTextRequest` compatibility path because the Swift-native ordered `recognitionLanguages` setter is not available there. No network or third-party OCR path is permitted.
+- **HF-OCR-003:** Both Vision paths use `.accurate` recognition and `usesLanguageCorrection = false` so package spellings, additive codes, punctuation, and uncertain text are not silently rewritten by a language model.
+- **HF-OCR-004:** German (`de-DE`) and English (`en-US`) are supplied in that priority order when the active Vision request reports them as supported. If neither is supported, Vision may fall back to automatic language detection rather than failing the feature solely on the hint list.
 - **HF-OCR-005:** Input bytes are bounded before decoding. Source dimensions and decoded pixel count are bounded, orientation is normalized, and oversized images are downsampled before recognition.
-- **HF-OCR-006:** Recognition returns immutable `Sendable` values containing the Vision request revision, effective language hints, line text, confidence, detected line languages, and normalized bounding boxes.
+- **HF-OCR-006:** Recognition returns immutable `Sendable` values containing the Vision request revision, effective language hints, line text, confidence, normalized bounding boxes, and detected line languages when the active Vision API exposes that metadata. On the iOS 18–25 compatibility path, per-line detected-language metadata is unavailable and is represented by an empty list rather than inferred from the request hints.
 - **HF-OCR-007:** Recognized lines are projected into a deterministic top-to-bottom, then left-to-right reading order suitable for ordinary ingredient panels.
 
 ## User review and safety

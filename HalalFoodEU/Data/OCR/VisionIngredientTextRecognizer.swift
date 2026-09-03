@@ -18,6 +18,24 @@ actor VisionIngredientTextRecognizer: IngredientTextRecognizing {
         let image = try prepareImage(from: imageData)
         try Task.checkCancellation()
 
+        if #available(iOS 26.0, *) {
+            return try await recognizeWithSwiftVision(
+                image: image,
+                preferredLanguages: preferredLanguages
+            )
+        }
+
+        return try recognizeWithLegacyVision(
+            image: image,
+            preferredLanguages: preferredLanguages
+        )
+    }
+
+    @available(iOS 26.0, *)
+    private func recognizeWithSwiftVision(
+        image: CGImage,
+        preferredLanguages: [String]
+    ) async throws -> IngredientOCRResult {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
@@ -66,6 +84,62 @@ actor VisionIngredientTextRecognizer: IngredientTextRecognizing {
             effectiveRecognitionLanguages: effective.map(\.0),
             lines: IngredientOCRReadingOrder.sorted(lines)
         )
+    }
+
+    private func recognizeWithLegacyVision(
+        image: CGImage,
+        preferredLanguages: [String]
+    ) throws -> IngredientOCRResult {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        request.automaticallyDetectsLanguage = false
+
+        let supportedLanguages = (try? request.supportedRecognitionLanguages()) ?? []
+        let supportedIdentifiers = Set(supportedLanguages.map(Self.normalizedLanguageIdentifier))
+        let effective = preferredLanguages.filter { identifier in
+            supportedIdentifiers.contains(Self.normalizedLanguageIdentifier(identifier))
+        }
+
+        if effective.isEmpty {
+            request.automaticallyDetectsLanguage = true
+        } else {
+            request.recognitionLanguages = effective
+        }
+
+        try Task.checkCancellation()
+        let handler = VNImageRequestHandler(cgImage: image, orientation: .up)
+        try handler.perform([request])
+        try Task.checkCancellation()
+
+        let lines = (request.results ?? []).compactMap { observation -> IngredientOCRLine? in
+            guard let candidate = observation.topCandidates(1).first else { return nil }
+            let text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+
+            let rect = observation.boundingBox
+            return IngredientOCRLine(
+                text: text,
+                confidence: Double(candidate.confidence),
+                languages: [],
+                boundingBox: IngredientOCRBoundingBox(
+                    x: Double(rect.origin.x),
+                    y: Double(rect.origin.y),
+                    width: Double(rect.width),
+                    height: Double(rect.height)
+                )
+            )
+        }
+
+        return IngredientOCRResult(
+            visionRevision: String(request.revision),
+            effectiveRecognitionLanguages: effective,
+            lines: IngredientOCRReadingOrder.sorted(lines)
+        )
+    }
+
+    private static func normalizedLanguageIdentifier(_ identifier: String) -> String {
+        identifier.replacingOccurrences(of: "_", with: "-").lowercased()
     }
 
     private func prepareImage(from data: Data) throws -> CGImage {

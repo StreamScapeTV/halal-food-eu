@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
+import product_search_index
 import production_catalog_logical
 import production_catalog_request
 
@@ -58,13 +59,17 @@ class LogicalBuildRequestTests(unittest.TestCase):
         with self.assertRaisesRegex(production_catalog_request.BuildRequestError, "exact lowercase SHA-256"):
             production_catalog_request.validate_request(bad)
 
-    def test_build_binds_manifest_and_passes_reviewed_expected_identity(self) -> None:
-        fake_catalog = types.SimpleNamespace(
-            build_catalog=lambda **kwargs: {
-                "catalogVersion": self.request["catalogVersion"],
-                "sha256": "1" * 64,
-            }
-        )
+    def test_build_binds_search_index_then_manifest_and_passes_reviewed_expected_identity(self) -> None:
+        base_manifest = {
+            "catalogVersion": self.request["catalogVersion"],
+            "sha256": "1" * 64,
+        }
+        indexed_manifest = {
+            **base_manifest,
+            "sha256": "2" * 64,
+            "searchIndex": {"schemaVersion": 1},
+        }
+        fake_catalog = types.SimpleNamespace(build_catalog=lambda **kwargs: base_manifest)
         identity = {"schemaVersion": 1, "sha256": "5" * 64}
         payloads = (
             self.root / "normalized/payload/evidence.json",
@@ -76,6 +81,13 @@ class LogicalBuildRequestTests(unittest.TestCase):
             "validate_build_handoffs",
             return_value=payloads,
         ), patch.object(
+            product_search_index,
+            "install_search_index",
+            return_value=indexed_manifest,
+        ) as installer, patch.object(
+            product_search_index,
+            "validate_search_index",
+        ) as search_validator, patch.object(
             production_catalog_logical,
             "bind_manifest",
             return_value=identity,
@@ -85,20 +97,34 @@ class LogicalBuildRequestTests(unittest.TestCase):
                 root=self.root,
                 workflow_contract_path=self.root / "contract.json",
             )
+        installer.assert_called_once_with(
+            database_path=self.root / "output/catalog.sqlite3",
+            manifest_path=self.root / "output/manifest.json",
+            release_notes_path=None,
+        )
+        search_validator.assert_called_once_with(
+            database_path=self.root / "output/catalog.sqlite3",
+            manifest_path=self.root / "output/manifest.json",
+        )
         binder.assert_called_once_with(
             database_path=self.root / "output/catalog.sqlite3",
             manifest_path=self.root / "output/manifest.json",
             expected_sha256="5" * 64,
         )
+        self.assertEqual(manifest["searchIndex"], {"schemaVersion": 1})
         self.assertEqual(manifest["logicalCatalog"], identity)
 
     def test_unreviewed_build_still_binds_identity_without_expected_digest(self) -> None:
         request = dict(self.request)
         request.pop("expectedLogicalCatalogSha256")
         self.request_path.write_text(json.dumps(request) + "\n", encoding="utf-8")
-        fake_catalog = types.SimpleNamespace(
-            build_catalog=lambda **kwargs: {"catalogVersion": "1.0.0", "sha256": "1" * 64}
-        )
+        base_manifest = {"catalogVersion": "1.0.0", "sha256": "1" * 64}
+        indexed_manifest = {
+            **base_manifest,
+            "sha256": "2" * 64,
+            "searchIndex": {"schemaVersion": 1},
+        }
+        fake_catalog = types.SimpleNamespace(build_catalog=lambda **kwargs: base_manifest)
         payloads = (
             self.root / "normalized/payload/evidence.json",
             self.root / "quality/payload/quality-report.json",
@@ -108,6 +134,13 @@ class LogicalBuildRequestTests(unittest.TestCase):
             production_catalog_request,
             "validate_build_handoffs",
             return_value=payloads,
+        ), patch.object(
+            product_search_index,
+            "install_search_index",
+            return_value=indexed_manifest,
+        ), patch.object(
+            product_search_index,
+            "validate_search_index",
         ), patch.object(
             production_catalog_logical,
             "bind_manifest",

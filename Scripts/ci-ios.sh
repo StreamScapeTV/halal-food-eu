@@ -9,9 +9,27 @@ command -v xcodegen >/dev/null 2>&1 || {
   exit 1
 }
 
+EXPECTED_XCODE_VERSION="${HFEU_EXPECTED_XCODE_VERSION:-26.6}"
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  EXPECTED_XCODE_APP="/Applications/Xcode_${EXPECTED_XCODE_VERSION}.app"
+  if [[ ! -d "$EXPECTED_XCODE_APP" ]]; then
+    echo "Required stable Xcode ${EXPECTED_XCODE_VERSION} is not installed at ${EXPECTED_XCODE_APP}." >&2
+    exit 1
+  fi
+  export DEVELOPER_DIR="${EXPECTED_XCODE_APP}/Contents/Developer"
+fi
+
 xcodebuild -version
 swift --version
 xcodegen --version
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  ACTUAL_XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+  if [[ "$ACTUAL_XCODE_VERSION" != "$EXPECTED_XCODE_VERSION" ]]; then
+    echo "Expected Xcode ${EXPECTED_XCODE_VERSION}, got ${ACTUAL_XCODE_VERSION}." >&2
+    exit 1
+  fi
+fi
 
 PREBUILT_DATABASE="${HFEU_PREBUILT_CATALOG_DATABASE:-}"
 PREBUILT_MANIFEST="${HFEU_PREBUILT_CATALOG_MANIFEST:-}"

@@ -7,7 +7,7 @@ options:
   developmentLanguage: en
   deploymentTarget:
     iOS: "18.0"
-  xcodeVersion: "26.0"
+  xcodeVersion: "26.6"
   projectFormat: xcode16_0
 
 settings:
@@ -68,7 +68,7 @@ targets:
         PRODUCT_NAME: HalalFoodEU
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Halal Food EU
-        INFOPLIST_KEY_NSCameraUsageDescription: Scan packaged-food barcodes and, only when you choose, capture package photos for an evidence submission.
+        INFOPLIST_KEY_NSCameraUsageDescription: Scan packaged-food barcodes and, when you choose, photograph ingredients or package evidence for on-device recognition and evidence submission.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone:

@@ -79,6 +79,10 @@ struct AppContainer {
         ScannerViewModel(lookupProduct: LookupProductByBarcode(catalog: catalog))
     }
 
+    func makeIngredientOCRViewModel() -> IngredientOCRViewModel {
+        IngredientOCRViewModel(recognizer: VisionIngredientTextRecognizer())
+    }
+
     func makeAdditiveReferenceCatalog() -> AdditiveReferenceCatalog? {
         additiveReferenceCatalog
     }

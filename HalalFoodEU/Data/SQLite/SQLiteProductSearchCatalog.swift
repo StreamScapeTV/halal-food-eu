@@ -25,12 +25,15 @@ private struct ProductSearchCatalogManifest: Decodable, Sendable {
         let maxPageSize: Int
     }
 
+    let manifestSchemaVersion: Int
     let schemaVersion: Int
+    let databaseBytes: Int
     let sha256: String
     let searchIndex: SearchIndex?
 }
 
 actor SQLiteProductSearchCatalog: ProductSearchCatalog {
+    static let supportedManifestSchemaVersion = 3
     static let supportedSchemaVersion = 2
     static let supportedSearchIndexSchemaVersion = 1
     static let expectedApplicationID: Int32 = 1_212_564_821 // ASCII "HFEU"
@@ -221,10 +224,15 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
 
         let manifest: ProductSearchCatalogManifest
         do {
-            let data = try Data(contentsOf: manifestURL)
+            let data = try Data(contentsOf: manifestURL, options: [.mappedIfSafe])
             manifest = try JSONDecoder().decode(ProductSearchCatalogManifest.self, from: data)
         } catch {
             throw ProductCatalogError.unavailable("catalog-manifest.json cannot be decoded for search")
+        }
+        guard manifest.manifestSchemaVersion == Self.supportedManifestSchemaVersion else {
+            throw ProductCatalogError.invalidRecord(
+                "catalog manifest schema \(manifest.manifestSchemaVersion) is unsupported for search"
+            )
         }
         guard manifest.schemaVersion == Self.supportedSchemaVersion else {
             throw ProductCatalogError.incompatibleSchema(
@@ -234,6 +242,15 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
         }
         guard manifest.searchIndex == Self.expectedSearchIndex else {
             throw ProductCatalogError.invalidRecord("bundled catalog search-index metadata is missing or unsupported")
+        }
+        let resourceValues: URLResourceValues
+        do {
+            resourceValues = try databaseURL.resourceValues(forKeys: [.fileSizeKey])
+        } catch {
+            throw ProductCatalogError.unavailable("catalog.sqlite3 size cannot be read for search")
+        }
+        guard resourceValues.fileSize == manifest.databaseBytes else {
+            throw ProductCatalogError.invalidRecord("bundled catalog byte size does not match its manifest")
         }
         let actualDigest = try Self.fileSHA256(databaseURL)
         guard manifest.sha256 == actualDigest else {
@@ -252,9 +269,6 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
         let openedConnection = ProductSearchSQLiteConnection(handle: openedDatabase)
         guard sqlite3_exec(openedDatabase, "PRAGMA query_only = ON;", nil, nil, nil) == SQLITE_OK else {
             throw queryError(connection: openedConnection)
-        }
-        guard sqlite3_column_count(try pragmaStatement("application_id", connection: openedConnection)) >= 0 else {
-            throw ProductCatalogError.invalidRecord("SQLite application identifier cannot be read")
         }
         let applicationID = try readIntegerPragma("application_id", connection: openedConnection)
         guard applicationID == Self.expectedApplicationID else {
@@ -282,6 +296,13 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
         let searchCount = try readCount("SELECT COUNT(*) FROM product_search;", connection: openedConnection)
         guard productCount == searchCount else {
             throw ProductCatalogError.invalidRecord("bundled catalog search-index row count differs from products")
+        }
+        let canonicalAliasCount = try readCount(
+            "SELECT COUNT(*) FROM product_barcode_aliases WHERE length(alias)=14;",
+            connection: openedConnection
+        )
+        guard productCount == canonicalAliasCount else {
+            throw ProductCatalogError.invalidRecord("bundled catalog barcode-alias coverage differs from products")
         }
 
         connection = openedConnection
@@ -357,7 +378,13 @@ actor SQLiteProductSearchCatalog: ProductSearchCatalog {
         connection: ProductSearchSQLiteConnection
     ) throws {
         let result = value.withCString { pointer in
-            sqlite3_bind_text(statement, index, pointer, -1, SQLITE_TRANSIENT)
+            sqlite3_bind_text(
+                statement,
+                index,
+                pointer,
+                -1,
+                unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            )
         }
         guard result == SQLITE_OK else { throw queryError(connection: connection) }
     }

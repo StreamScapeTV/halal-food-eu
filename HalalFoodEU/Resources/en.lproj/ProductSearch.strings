@@ -1,0 +1,13 @@
+"Search products" = "Search products";
+"Search the bundled catalog" = "Search the bundled catalog";
+"Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device." = "Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device.";
+"Searches the bundled catalog by product name, brand, or barcode." = "Searches the bundled catalog by product name, brand, or barcode.";
+"Searching the offline catalog…" = "Searching the offline catalog…";
+"Load more" = "Load more";
+"Loading more…" = "Loading more…";
+"Text matches are suggestions only. Selecting a result performs an exact barcode lookup before any product status or evidence is shown." = "Text matches are suggestions only. Selecting a result performs an exact barcode lookup before any product status or evidence is shown.";
+"No matching products" = "No matching products";
+"Try a different product name, brand, or barcode. A missing search result does not imply a halal status." = "Try a different product name, brand, or barcode. A missing search result does not imply a halal status.";
+"Search unavailable" = "Search unavailable";
+"Name, brand, or barcode" = "Name, brand, or barcode";
+"Opens this exact barcode in the bundled catalog." = "Opens this exact barcode in the bundled catalog.";

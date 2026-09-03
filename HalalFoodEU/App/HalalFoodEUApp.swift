@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct HalalFoodEUApp: App {
     @State private var scannerViewModel: ScannerViewModel
+    @State private var productSearchViewModel: ProductSearchViewModel
     @State private var ingredientOCRViewModel: IngredientOCRViewModel
     @State private var submissionCoordinator: ProductEvidenceSubmissionCoordinator
     private let additiveReferenceCatalog: AdditiveReferenceCatalog?
@@ -11,6 +12,7 @@ struct HalalFoodEUApp: App {
     init() {
         let container = AppContainer.live()
         _scannerViewModel = State(initialValue: container.makeScannerViewModel())
+        _productSearchViewModel = State(initialValue: container.makeProductSearchViewModel())
         _ingredientOCRViewModel = State(initialValue: container.makeIngredientOCRViewModel())
         _submissionCoordinator = State(initialValue: container.makeSubmissionCoordinator())
         additiveReferenceCatalog = container.makeAdditiveReferenceCatalog()
@@ -20,6 +22,7 @@ struct HalalFoodEUApp: App {
         WindowGroup {
             HomeView(
                 viewModel: scannerViewModel,
+                productSearchViewModel: productSearchViewModel,
                 ingredientOCRViewModel: ingredientOCRViewModel,
                 submissionCoordinator: submissionCoordinator,
                 additiveReferenceCatalog: additiveReferenceCatalog

@@ -55,13 +55,34 @@ struct ScannerViewModelTests {
         }
     }
 
+    @Test("Selecting a search summary performs the existing exact barcode lookup")
+    func searchSelectionUsesExactLookupPath() async throws {
+        let catalog = CapturingCatalog()
+        let viewModel = ScannerViewModel(
+            lookupProduct: LookupProductByBarcode(catalog: catalog)
+        )
+        let selected = try Barcode(validating: "0200000000004")
+
+        viewModel.lookup(selected)
+
+        try await waitUntil {
+            if case let .notFound(barcode) = viewModel.lookupState {
+                return barcode == selected
+            }
+            return false
+        }
+        let lookups = await catalog.lookups
+        #expect(viewModel.manualBarcode == selected.rawValue)
+        #expect(lookups == [selected.rawValue])
+    }
+
     private func waitUntilLookupStarted(
         _ barcode: String,
         in catalog: DelayedCatalog,
         attempts: Int = 100
     ) async throws {
         for _ in 0..<attempts {
-            if await catalog.startedLookups.contains(barcode) { return }
+            if (await catalog.startedLookups).contains(barcode) { return }
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for lookup to start")
@@ -103,5 +124,14 @@ private actor DelayedCatalog: ProductCatalog {
 private actor FailingCatalog: ProductCatalog {
     func product(for barcode: Barcode) async throws -> ProductRecord? {
         throw ProductCatalogError.unavailable("fixture catalog unavailable")
+    }
+}
+
+private actor CapturingCatalog: ProductCatalog {
+    private(set) var lookups: [String] = []
+
+    func product(for barcode: Barcode) async throws -> ProductRecord? {
+        lookups.append(barcode.rawValue)
+        return nil
     }
 }

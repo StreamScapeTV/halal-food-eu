@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 struct AppContainer {
     private let catalog: any ProductCatalog
+    private let productSearchCatalog: any ProductSearchCatalog
     private let additiveReferenceCatalog: AdditiveReferenceCatalog?
     private let submissionConfiguration: ProductEvidenceSubmissionRuntimeConfiguration?
     private let submissionConfigurationError: String?
@@ -10,9 +11,13 @@ struct AppContainer {
 
     init(
         catalog: any ProductCatalog,
+        productSearchCatalog: (any ProductSearchCatalog)? = nil,
         additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
     ) {
         self.catalog = catalog
+        self.productSearchCatalog = productSearchCatalog ?? UnavailableProductSearchCatalog(
+            message: "product search is unavailable in this test configuration"
+        )
         self.additiveReferenceCatalog = additiveReferenceCatalog
         submissionConfiguration = nil
         submissionConfigurationError = String(localized: "Product evidence submission is unavailable in this test configuration.")
@@ -21,12 +26,14 @@ struct AppContainer {
 
     private init(
         catalog: any ProductCatalog,
+        productSearchCatalog: any ProductSearchCatalog,
         additiveReferenceCatalog: AdditiveReferenceCatalog?,
         submissionConfiguration: ProductEvidenceSubmissionRuntimeConfiguration?,
         submissionConfigurationError: String?,
         submissionComposer: any ProductEvidenceComposer
     ) {
         self.catalog = catalog
+        self.productSearchCatalog = productSearchCatalog
         self.additiveReferenceCatalog = additiveReferenceCatalog
         self.submissionConfiguration = submissionConfiguration
         self.submissionConfigurationError = submissionConfigurationError
@@ -38,8 +45,10 @@ struct AppContainer {
         let additiveReferenceCatalog = try? AdditiveReferenceCatalogLoader.load(bundle: bundle)
 
         guard let databaseURL = bundle.url(forResource: "catalog", withExtension: "sqlite3") else {
+            let message = "catalog.sqlite3 is missing from the application bundle"
             return AppContainer(
-                catalog: UnavailableProductCatalog(message: "catalog.sqlite3 is missing from the application bundle"),
+                catalog: UnavailableProductCatalog(message: message),
+                productSearchCatalog: UnavailableProductSearchCatalog(message: message),
                 additiveReferenceCatalog: additiveReferenceCatalog,
                 submissionConfiguration: nil,
                 submissionConfigurationError: String(localized: "Product evidence submission is unavailable because the bundled catalog is missing."),
@@ -47,8 +56,10 @@ struct AppContainer {
             )
         }
         guard let manifestURL = bundle.url(forResource: "catalog-manifest", withExtension: "json") else {
+            let message = "catalog-manifest.json is missing from the application bundle"
             return AppContainer(
-                catalog: UnavailableProductCatalog(message: "catalog-manifest.json is missing from the application bundle"),
+                catalog: UnavailableProductCatalog(message: message),
+                productSearchCatalog: UnavailableProductSearchCatalog(message: message),
                 additiveReferenceCatalog: additiveReferenceCatalog,
                 submissionConfiguration: nil,
                 submissionConfigurationError: String(localized: "Product evidence submission is unavailable because the bundled catalog manifest is missing."),
@@ -68,6 +79,10 @@ struct AppContainer {
                 databaseURL: databaseURL,
                 manifestURL: manifestURL
             ),
+            productSearchCatalog: SQLiteProductSearchCatalog(
+                databaseURL: databaseURL,
+                manifestURL: manifestURL
+            ),
             additiveReferenceCatalog: additiveReferenceCatalog,
             submissionConfiguration: try? submissionResult.get(),
             submissionConfigurationError: submissionResult.failure?.localizedDescription,
@@ -77,6 +92,12 @@ struct AppContainer {
 
     func makeScannerViewModel() -> ScannerViewModel {
         ScannerViewModel(lookupProduct: LookupProductByBarcode(catalog: catalog))
+    }
+
+    func makeProductSearchViewModel() -> ProductSearchViewModel {
+        ProductSearchViewModel(
+            searchProducts: SearchProducts(catalog: productSearchCatalog)
+        )
     }
 
     func makeIngredientOCRViewModel() -> IngredientOCRViewModel {
@@ -104,6 +125,18 @@ private actor UnavailableProductCatalog: ProductCatalog {
     }
 
     func product(for barcode: Barcode) async throws -> ProductRecord? {
+        throw ProductCatalogError.unavailable(message)
+    }
+}
+
+private actor UnavailableProductSearchCatalog: ProductSearchCatalog {
+    let message: String
+
+    init(message: String) {
+        self.message = message
+    }
+
+    func search(query: String, limit: Int, offset: Int) async throws -> ProductSearchPage {
         throw ProductCatalogError.unavailable(message)
     }
 }

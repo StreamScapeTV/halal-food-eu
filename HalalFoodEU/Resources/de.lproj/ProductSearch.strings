@@ -1,0 +1,13 @@
+"Search products" = "Produkte suchen";
+"Search the bundled catalog" = "Im integrierten Katalog suchen";
+"Enter a product name, brand, EAN, UPC, or GTIN. Search stays on this device." = "Gib einen Produktnamen, eine Marke, EAN, UPC oder GTIN ein. Die Suche bleibt auf diesem Gerät.";
+"Searches the bundled catalog by product name, brand, or barcode." = "Durchsucht den integrierten Katalog nach Produktname, Marke oder Barcode.";
+"Searching the offline catalog…" = "Offline-Katalog wird durchsucht…";
+"Load more" = "Mehr laden";
+"Loading more…" = "Weitere Ergebnisse werden geladen…";
+"Text matches are suggestions only. Selecting a result performs an exact barcode lookup before any product status or evidence is shown." = "Texttreffer sind nur Vorschläge. Nach der Auswahl wird zuerst der exakte Barcode im integrierten Katalog nachgeschlagen, bevor Produktstatus oder Nachweise angezeigt werden.";
+"No matching products" = "Keine passenden Produkte";
+"Try a different product name, brand, or barcode. A missing search result does not imply a halal status." = "Versuche einen anderen Produktnamen, eine andere Marke oder einen Barcode. Ein fehlender Suchtreffer sagt nichts über den Halal-Status aus.";
+"Search unavailable" = "Suche nicht verfügbar";
+"Name, brand, or barcode" = "Name, Marke oder Barcode";
+"Opens this exact barcode in the bundled catalog." = "Öffnet diesen exakten Barcode im integrierten Katalog.";

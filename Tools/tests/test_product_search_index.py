@@ -51,9 +51,11 @@ class ProductSearchIndexTests(unittest.TestCase):
         self.manifest.write_text(
             json.dumps(
                 {
+                    "manifestSchemaVersion": 3,
                     "databaseBytes": self.database.stat().st_size,
                     "schemaVersion": 2,
                     "sha256": digest,
+                    "budgets": {"databaseBytesLessThan": 10_000_000},
                 }
             )
             + "\n",
@@ -129,6 +131,7 @@ class ProductSearchIndexTests(unittest.TestCase):
             manifest["sha256"],
             hashlib.sha256(self.database.read_bytes()).hexdigest(),
         )
+        self.assertEqual(manifest["databaseBytes"], self.database.stat().st_size)
         self.assertIn(manifest["sha256"], self.release_notes.read_text(encoding="utf-8"))
 
     def test_gtin14_aliases_preserve_common_retail_display_forms(self) -> None:
@@ -154,6 +157,55 @@ class ProductSearchIndexTests(unittest.TestCase):
                 database_path=self.database,
                 manifest_path=self.manifest,
             )
+
+    def test_install_refuses_wrong_catalog_identity(self) -> None:
+        connection = sqlite3.connect(self.database)
+        connection.execute("PRAGMA application_id=0")
+        connection.commit()
+        connection.close()
+        self._refresh_physical_binding()
+
+        with self.assertRaisesRegex(ValueError, "unexpected SQLite application_id"):
+            product_search_index.install_search_index(
+                database_path=self.database,
+                manifest_path=self.manifest,
+            )
+
+    def test_search_index_must_fit_existing_catalog_budget(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["budgets"] = {
+            "databaseBytesLessThan": self.database.stat().st_size + 1
+        }
+        self.manifest.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "exceeds reviewed budget .* after search indexing"):
+            product_search_index.install_search_index(
+                database_path=self.database,
+                manifest_path=self.manifest,
+            )
+
+    def test_install_is_idempotent_after_valid_binding(self) -> None:
+        first = product_search_index.install_search_index(
+            database_path=self.database,
+            manifest_path=self.manifest,
+        )
+        first_bytes = self.database.read_bytes()
+        first_manifest = self.manifest.read_bytes()
+
+        second = product_search_index.install_search_index(
+            database_path=self.database,
+            manifest_path=self.manifest,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first_bytes, self.database.read_bytes())
+        self.assertEqual(first_manifest, self.manifest.read_bytes())
+
+    def _refresh_physical_binding(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["databaseBytes"] = self.database.stat().st_size
+        manifest["sha256"] = hashlib.sha256(self.database.read_bytes()).hexdigest()
+        self.manifest.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

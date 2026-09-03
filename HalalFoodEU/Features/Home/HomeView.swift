@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @Bindable var viewModel: ScannerViewModel
     @Bindable var productSearchViewModel: ProductSearchViewModel
+    @Bindable var userProductLibraryViewModel: UserProductLibraryViewModel
     @Bindable var ingredientOCRViewModel: IngredientOCRViewModel
     @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
     let additiveReferenceCatalog: AdditiveReferenceCatalog?
@@ -11,12 +12,14 @@ struct HomeView: View {
     init(
         viewModel: ScannerViewModel,
         productSearchViewModel: ProductSearchViewModel,
+        userProductLibraryViewModel: UserProductLibraryViewModel,
         ingredientOCRViewModel: IngredientOCRViewModel,
         submissionCoordinator: ProductEvidenceSubmissionCoordinator,
         additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
     ) {
         self.viewModel = viewModel
         self.productSearchViewModel = productSearchViewModel
+        self.userProductLibraryViewModel = userProductLibraryViewModel
         self.ingredientOCRViewModel = ingredientOCRViewModel
         self.submissionCoordinator = submissionCoordinator
         self.additiveReferenceCatalog = additiveReferenceCatalog
@@ -52,6 +55,25 @@ struct HomeView: View {
                         )
                     )
 
+                    NavigationLink {
+                        UserProductLibraryView(
+                            viewModel: userProductLibraryViewModel,
+                            submissionCoordinator: submissionCoordinator,
+                            additiveReferenceCatalog: additiveReferenceCatalog
+                        )
+                    } label: {
+                        Label(
+                            String(localized: "Saved products", table: "UserLibrary"),
+                            systemImage: "star"
+                        )
+                    }
+                    .accessibilityHint(
+                        String(
+                            localized: "Opens your local favorites and optional camera scan history.",
+                            table: "UserLibrary"
+                        )
+                    )
+
                     Button {
                         ingredientOCRViewModel.reset()
                         isIngredientOCRPresented = true
@@ -84,6 +106,7 @@ struct HomeView: View {
 
                 LookupStateContent(
                     viewModel: viewModel,
+                    userProductLibraryViewModel: userProductLibraryViewModel,
                     submissionCoordinator: submissionCoordinator,
                     additiveReferenceCatalog: additiveReferenceCatalog
                 )
@@ -109,6 +132,7 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Halal Food EU")
+            .task { await userProductLibraryViewModel.load() }
             .sheet(isPresented: $viewModel.isScannerPresented) {
                 ScannerSheet(onScan: viewModel.acceptScan)
             }
@@ -139,12 +163,26 @@ struct HomeView: View {
             } message: {
                 Text(submissionCoordinator.alertMessage ?? "Product evidence submission is unavailable.")
             }
+            .alert(
+                String(localized: "Local history unavailable", table: "UserLibrary"),
+                isPresented: Binding(
+                    get: { userProductLibraryViewModel.errorMessage != nil },
+                    set: { if !$0 { userProductLibraryViewModel.errorMessage = nil } }
+                )
+            ) {
+                Button(String(localized: "OK", table: "UserLibrary"), role: .cancel) {
+                    userProductLibraryViewModel.errorMessage = nil
+                }
+            } message: {
+                Text(userProductLibraryViewModel.errorMessage ?? "")
+            }
         }
     }
 }
 
 private struct LookupStateContent: View {
     let viewModel: ScannerViewModel
+    @Bindable var userProductLibraryViewModel: UserProductLibraryViewModel
     let submissionCoordinator: ProductEvidenceSubmissionCoordinator
     let additiveReferenceCatalog: AdditiveReferenceCatalog?
 
@@ -168,6 +206,24 @@ private struct LookupStateContent: View {
                 .accessibilityLabel("Looking up the offline product catalog")
             }
         case let .found(product):
+            Section {
+                Button {
+                    Task { await userProductLibraryViewModel.toggleFavorite(product) }
+                } label: {
+                    Label(
+                        userProductLibraryViewModel.isFavorite(product.barcode)
+                            ? String(localized: "Remove from Favorites", table: "UserLibrary")
+                            : String(localized: "Add to Favorites", table: "UserLibrary"),
+                        systemImage: userProductLibraryViewModel.isFavorite(product.barcode) ? "star.fill" : "star"
+                    )
+                }
+                .accessibilityHint(
+                    String(
+                        localized: "Favorites stay on this device and do not enable scan history.",
+                        table: "UserLibrary"
+                    )
+                )
+            }
             ProductResultView(product: product, submissionCoordinator: submissionCoordinator)
             AdditiveReferenceSection(product: product, catalog: additiveReferenceCatalog)
         case let .notFound(barcode):

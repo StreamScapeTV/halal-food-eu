@@ -12,14 +12,16 @@ struct UserProductLibraryTests {
         let marker = SavedProductVersionMarker(product: nil)
         let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
 
-        #expect(try await store.isHistoryEnabled() == false)
+        let initiallyEnabled = try await store.isHistoryEnabled()
+        #expect(initiallyEnabled == false)
         try await store.recordScan(
             barcode: barcode,
             scannedAt: firstDate,
             catalogVersion: "fixture-v1",
             versionMarker: marker
         )
-        #expect(try await store.history(limit: 10).isEmpty)
+        let initialHistory = try await store.history(limit: 10)
+        #expect(initialHistory.isEmpty)
 
         try await store.setHistoryEnabled(true)
         try await store.recordScan(
@@ -62,8 +64,10 @@ struct UserProductLibraryTests {
         }
 
         let reopened = SQLiteUserProductLibrary(databaseURL: fixture.databaseURL)
-        #expect(try await reopened.isHistoryEnabled())
-        #expect(try await reopened.history(limit: 10).count == 1)
+        let reopenedEnabled = try await reopened.isHistoryEnabled()
+        #expect(reopenedEnabled)
+        let reopenedHistory = try await reopened.history(limit: 10)
+        #expect(reopenedHistory.count == 1)
         let favorite = try await reopened.favorite(for: barcode)
         #expect(favorite?.barcode == barcode)
         #expect(favorite?.versionMarker == marker)
@@ -91,7 +95,8 @@ struct UserProductLibraryTests {
         entries = try await store.history(limit: 10)
         #expect(entries.count == 1)
         try await store.clearHistory()
-        #expect(try await store.history(limit: 10).isEmpty)
+        let clearedHistory = try await store.history(limit: 10)
+        #expect(clearedHistory.isEmpty)
     }
 
     @Test("Favorites are explicit and independent from history opt-in")
@@ -102,7 +107,8 @@ struct UserProductLibraryTests {
         let product = makeProduct(barcode: barcode, name: "Fixture Oat Drink")
         let marker = SavedProductVersionMarker(product: product)
 
-        #expect(try await store.isHistoryEnabled() == false)
+        let historyInitiallyDisabled = try await store.isHistoryEnabled()
+        #expect(historyInitiallyDisabled == false)
         try await store.setFavorite(
             barcode: barcode,
             savedAt: Date(timeIntervalSince1970: 1_700_002_000),
@@ -110,8 +116,10 @@ struct UserProductLibraryTests {
             versionMarker: marker,
             isFavorite: true
         )
-        #expect(try await store.favorites().map(\.barcode) == [barcode])
-        #expect(try await store.isHistoryEnabled() == false)
+        let savedFavorites = try await store.favorites()
+        #expect(savedFavorites.map(\.barcode) == [barcode])
+        let historyStillDisabled = try await store.isHistoryEnabled()
+        #expect(historyStillDisabled == false)
 
         try await store.setFavorite(
             barcode: barcode,
@@ -120,7 +128,8 @@ struct UserProductLibraryTests {
             versionMarker: marker,
             isFavorite: false
         )
-        #expect(try await store.favorites().isEmpty)
+        let removedFavorites = try await store.favorites()
+        #expect(removedFavorites.isEmpty)
     }
 
     @Test("History retention is bounded to the newest 200 scans")
@@ -139,8 +148,8 @@ struct UserProductLibraryTests {
             )
         }
 
-        let entries = try await store.history(limit: 200)
-        #expect(entries.count == 200)
+        let entries = try await store.history(limit: UserProductLibraryPolicy.maximumHistoryEntries)
+        #expect(entries.count == UserProductLibraryPolicy.maximumHistoryEntries)
         #expect(entries.first?.scannedAt == Date(timeIntervalSince1970: 1_700_010_204))
         #expect(entries.last?.scannedAt == Date(timeIntervalSince1970: 1_700_010_005))
     }
@@ -153,6 +162,7 @@ struct UserProductLibraryTests {
         let changed = makeProduct(barcode: barcode, name: "Changed Oat Drink", catalogVersion: "v2")
         let marker = SavedProductVersionMarker(product: original)
 
+        #expect(marker.recordFingerprint?.count == 64)
         #expect(marker.comparison(with: sameRecordNewCatalog) == .unchanged)
         #expect(marker.comparison(with: changed) == .changed)
         #expect(marker.comparison(with: nil) == .noLongerPresent)

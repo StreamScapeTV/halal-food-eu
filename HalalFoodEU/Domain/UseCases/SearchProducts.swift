@@ -16,11 +16,11 @@ struct SearchProducts: Sendable {
         limit: Int = defaultPageSize,
         offset: Int = 0
     ) async throws -> ProductSearchPage {
-        let normalizedQuery = query
+        let whitespaceNormalized = query
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
 
-        guard normalizedQuery.count <= Self.maximumQueryCharacters else {
+        guard whitespaceNormalized.count <= Self.maximumQueryCharacters else {
             throw ProductSearchError.queryTooLong(maxCharacters: Self.maximumQueryCharacters)
         }
         guard (1...Self.maximumPageSize).contains(limit) else {
@@ -29,13 +29,21 @@ struct SearchProducts: Sendable {
         guard offset >= 0 else {
             throw ProductSearchError.invalidOffset
         }
-        guard !normalizedQuery.isEmpty else {
+        guard !whitespaceNormalized.isEmpty else {
             return .empty
         }
 
+        // An exact, checksum-valid retail barcode uses the same normalization as
+        // scanner/manual lookup before reaching the search repository. This keeps
+        // leading-zero, EAN/UPC/GTIN and UPC-E semantics in one reviewed domain
+        // implementation. Shorter/invalid numeric input remains a provisional
+        // prefix search rather than being rejected as an exact identity.
+        let repositoryQuery = (try? Barcode(validating: whitespaceNormalized))?.rawValue
+            ?? whitespaceNormalized
+
         try Task.checkCancellation()
         return try await catalog.search(
-            query: normalizedQuery,
+            query: repositoryQuery,
             limit: limit,
             offset: offset
         )

@@ -43,25 +43,38 @@ struct VisionIngredientTextRecognizerTests {
         }
     }
 
-    @Test("Invalid and tiny images are rejected explicitly")
-    func rejectsUnreadableAndTinyImages() async throws {
+    @Test("Invalid image bytes are rejected explicitly")
+    func rejectsUnreadableImages() async {
         let recognizer = VisionIngredientTextRecognizer()
 
         await #expect(throws: IngredientTextRecognitionError.unreadableImage) {
-            try await recognizer.recognize(imageData: Data("not-an-image".utf8), preferredLanguages: ["de-DE"])
+            try await recognizer.recognize(
+                imageData: Data("not-an-image".utf8),
+                preferredLanguages: ["de-DE"]
+            )
         }
+    }
 
-        let tinyData = try await MainActor.run { () throws -> Data in
-            let tiny = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
-                UIColor.white.setFill()
-                context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
-            }
-            return try #require(tiny.jpegData(compressionQuality: 0.9))
-        }
+    @Test("Tiny pixel images are rejected explicitly")
+    func rejectsTinyImages() async throws {
+        let recognizer = VisionIngredientTextRecognizer()
+        let tinyData = try await MainActor.run { try makeTinyJPEG() }
 
         await #expect(throws: IngredientTextRecognitionError.imageTooSmall) {
             try await recognizer.recognize(imageData: tinyData, preferredLanguages: ["de-DE"])
         }
+    }
+
+    @MainActor
+    private func makeTinyJPEG() throws -> Data {
+        let size = CGSize(width: 64, height: 64)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let tiny = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        return try #require(tiny.jpegData(compressionQuality: 0.9))
     }
 
     @MainActor

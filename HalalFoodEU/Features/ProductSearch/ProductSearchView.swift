@@ -96,9 +96,7 @@ struct ProductSearchView: View {
             viewModel.submit()
         }
         .onDisappear {
-            if viewModel.query.isEmpty {
-                viewModel.reset()
-            }
+            viewModel.reset()
         }
     }
 }

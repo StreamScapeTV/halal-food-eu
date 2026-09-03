@@ -253,7 +253,7 @@ def validate_search_index(*, database_path: Path, manifest_path: Path) -> None:
                     SELECT p.gtin
                     FROM {FTS_TABLE} AS search
                     JOIN products AS p ON p.gtin=search.gtin
-                    WHERE {FTS_TABLE} MATCH ?1
+                    WHERE {FTS_TABLE} MATCH ?
                     ORDER BY bm25({FTS_TABLE}), p.gtin
                     LIMIT 10
                     """,
@@ -270,7 +270,7 @@ def validate_search_index(*, database_path: Path, manifest_path: Path) -> None:
                     EXPLAIN QUERY PLAN
                     SELECT a.gtin
                     FROM {BARCODE_ALIAS_TABLE} AS a
-                    WHERE a.alias >= ?1 AND a.alias < ?2
+                    WHERE a.alias >= ? AND a.alias < ?
                     ORDER BY a.alias, a.gtin
                     LIMIT 10
                     """,

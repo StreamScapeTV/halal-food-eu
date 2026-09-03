@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Bindable var viewModel: ScannerViewModel
+    @Bindable var productSearchViewModel: ProductSearchViewModel
     @Bindable var ingredientOCRViewModel: IngredientOCRViewModel
     @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
     let additiveReferenceCatalog: AdditiveReferenceCatalog?
@@ -9,11 +10,13 @@ struct HomeView: View {
 
     init(
         viewModel: ScannerViewModel,
+        productSearchViewModel: ProductSearchViewModel,
         ingredientOCRViewModel: IngredientOCRViewModel,
         submissionCoordinator: ProductEvidenceSubmissionCoordinator,
         additiveReferenceCatalog: AdditiveReferenceCatalog? = nil
     ) {
         self.viewModel = viewModel
+        self.productSearchViewModel = productSearchViewModel
         self.ingredientOCRViewModel = ingredientOCRViewModel
         self.submissionCoordinator = submissionCoordinator
         self.additiveReferenceCatalog = additiveReferenceCatalog
@@ -30,6 +33,24 @@ struct HomeView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                     .accessibilityHint("Opens the camera barcode scanner.")
+
+                    NavigationLink {
+                        ProductSearchView(
+                            viewModel: productSearchViewModel,
+                            onSelect: viewModel.lookup
+                        )
+                    } label: {
+                        Label(
+                            String(localized: "Search products", table: "ProductSearch"),
+                            systemImage: "magnifyingglass"
+                        )
+                    }
+                    .accessibilityHint(
+                        String(
+                            localized: "Searches the bundled catalog by product name, brand, or barcode.",
+                            table: "ProductSearch"
+                        )
+                    )
 
                     Button {
                         ingredientOCRViewModel.reset()
@@ -134,7 +155,7 @@ private struct LookupStateContent: View {
                 ContentUnavailableView(
                     "Ready to scan",
                     systemImage: "barcode",
-                    description: Text("Scan a barcode or enter one manually.")
+                    description: Text("Scan a barcode, search the catalog, or enter one manually.")
                 )
             }
         case .lookingUp:

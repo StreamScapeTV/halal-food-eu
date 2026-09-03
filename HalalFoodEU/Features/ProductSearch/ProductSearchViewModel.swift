@@ -56,18 +56,22 @@ final class ProductSearchViewModel {
                     offset: offset
                 )
                 try Task.checkCancellation()
-                guard let self, generation == requestGeneration else { return }
-                var known = Set(results.map(\.barcode.rawValue))
-                results.append(contentsOf: page.results.filter { known.insert($0.barcode.rawValue).inserted })
-                hasMore = page.hasMore
-                isLoadingMore = false
-                state = results.isEmpty ? .empty : .results
+                guard let self, self.generation == requestGeneration else { return }
+                var known = Set(self.results.map(\.barcode.rawValue))
+                self.results.append(
+                    contentsOf: page.results.filter {
+                        known.insert($0.barcode.rawValue).inserted
+                    }
+                )
+                self.hasMore = page.hasMore
+                self.isLoadingMore = false
+                self.state = self.results.isEmpty ? .empty : .results
             } catch is CancellationError {
                 return
             } catch {
-                guard let self, generation == requestGeneration else { return }
-                isLoadingMore = false
-                state = .failed(error.localizedDescription)
+                guard let self, self.generation == requestGeneration else { return }
+                self.isLoadingMore = false
+                self.state = .failed(error.localizedDescription)
             }
         }
     }
@@ -105,15 +109,15 @@ final class ProductSearchViewModel {
                 }
                 let page = try await searchProducts(requestedQuery)
                 try Task.checkCancellation()
-                guard let self, generation == requestGeneration else { return }
-                results = page.results
-                hasMore = page.hasMore
-                state = page.results.isEmpty ? .empty : .results
+                guard let self, self.generation == requestGeneration else { return }
+                self.results = page.results
+                self.hasMore = page.hasMore
+                self.state = page.results.isEmpty ? .empty : .results
             } catch is CancellationError {
                 return
             } catch {
-                guard let self, generation == requestGeneration else { return }
-                state = .failed(error.localizedDescription)
+                guard let self, self.generation == requestGeneration else { return }
+                self.state = .failed(error.localizedDescription)
             }
         }
     }

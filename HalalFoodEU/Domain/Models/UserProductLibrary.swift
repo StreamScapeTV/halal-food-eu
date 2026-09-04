@@ -80,11 +80,9 @@ struct SavedProductVersionMarker: Codable, Equatable, Sendable {
             builder.append(observation.source.kind)
             builder.append(observation.source.reference)
             builder.append(observation.source.license)
-            builder.append(observation.source.retrievedAt)
             builder.append(observation.source.attribution)
             builder.append(observation.details?.allergensText)
             builder.append(observation.details?.tracesText)
-            builder.append(observation.details?.retrievedAt)
             builder.append(observation.details?.verificationState.rawValue)
         } else {
             builder.append(false)
@@ -107,8 +105,7 @@ struct SavedProductVersionMarker: Codable, Equatable, Sendable {
             let validFrom = $0.validFrom.map(Self.dateToken) ?? ""
             let validUntil = $0.validUntil.map(Self.dateToken) ?? ""
             let checked = $0.lastCheckedAt.map(Self.dateToken) ?? ""
-            let retrieved = Self.dateToken($0.source.retrievedAt)
-            return "\($0.certifyingBody)|\($0.scheme ?? "")|\($0.certificateReference)|\($0.scope)|\(validFrom)|\(validUntil)|\(checked)|\($0.source.name)|\($0.source.kind)|\($0.source.reference)|\($0.source.license)|\(retrieved)|\($0.source.attribution ?? "")"
+            return "\($0.certifyingBody)|\($0.scheme ?? "")|\($0.certificateReference)|\($0.scope)|\(validFrom)|\(validUntil)|\(checked)|\($0.source.name)|\($0.source.kind)|\($0.source.reference)|\($0.source.license)|\($0.source.attribution ?? "")"
         }.sorted()
         builder.append(certifications)
 
@@ -121,8 +118,7 @@ struct SavedProductVersionMarker: Codable, Equatable, Sendable {
             let retailerEvidence = details.retailerEvidence.map {
                 let observed = $0.observedAt.map(Self.dateToken) ?? ""
                 let snapshot = $0.snapshotAt.map(Self.dateToken) ?? ""
-                let retrieved = Self.dateToken($0.source.retrievedAt)
-                return "\($0.kind.rawValue)|\($0.retailerKey)|\(observed)|\(snapshot)|\($0.scope ?? "")|\($0.locationID ?? "")|\($0.limitations)|\($0.source.name)|\($0.source.kind)|\($0.source.reference)|\($0.source.license)|\(retrieved)|\($0.source.attribution ?? "")"
+                return "\($0.kind.rawValue)|\($0.retailerKey)|\(observed)|\(snapshot)|\($0.scope ?? "")|\($0.locationID ?? "")|\($0.limitations)|\($0.source.name)|\($0.source.kind)|\($0.source.reference)|\($0.source.license)|\($0.source.attribution ?? "")"
             }.sorted()
             builder.append(retailerEvidence)
         } else {

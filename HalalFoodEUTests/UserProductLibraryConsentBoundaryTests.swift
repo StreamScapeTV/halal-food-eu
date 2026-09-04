@@ -26,7 +26,8 @@ struct UserProductLibraryConsentBoundaryTests {
         await viewModel.setHistoryEnabled(true)
         try await Task.sleep(for: .milliseconds(50))
 
-        #expect(await store.recordedBarcodes.isEmpty)
+        let recordedBarcodes = await store.recordedBarcodes
+        #expect(recordedBarcodes.isEmpty)
         #expect(viewModel.historyEnabled)
     }
 }

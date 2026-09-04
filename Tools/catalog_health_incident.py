@@ -18,6 +18,15 @@ from typing import Any
 
 MARKER_PREFIX = "catalog-health-key:"
 TITLE_PREFIX = "[Catalog health]"
+PRIORITY_PREFIX = "priority:"
+STATUS_PREFIX = "status:"
+P0_PRIORITY = "priority:P0"
+P1_PRIORITY = "priority:P1"
+ACTIVE_STATUS = "status:blocked"
+RESOLVED_STATUS = "status:done"
+BASE_CLASSIFICATION_LABELS = ("type:data-quality", "area:observability")
+REFRESH_CLASSIFICATION_LABEL = "area:sources"
+P1_INCIDENT_ACTIONS = {"investigate-refresh"}
 
 
 class HealthIncidentError(ValueError):
@@ -29,6 +38,7 @@ class Incident:
     key: str
     title: str
     body: str
+    labels: tuple[str, ...]
 
 
 def load_report(path: Path) -> dict[str, Any]:
@@ -39,6 +49,53 @@ def load_report(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise HealthIncidentError("health report must be an object")
     return value
+
+
+def _priority_for_action(action: str) -> str:
+    # Catalog correctness/safety actions are release blockers and remain P0.
+    # Refresh/coverage degradation is material production coverage work and is P1.
+    return P1_PRIORITY if action in P1_INCIDENT_ACTIONS else P0_PRIORITY
+
+
+def _classification_labels(key: str) -> tuple[str, ...]:
+    labels = list(BASE_CLASSIFICATION_LABELS)
+    if key.startswith("refresh:"):
+        labels.append(REFRESH_CLASSIFICATION_LABEL)
+    return tuple(labels)
+
+
+def _desired_labels(
+    *,
+    key: str,
+    priority: str,
+    status: str,
+    existing: Any = None,
+) -> tuple[str, ...]:
+    preserved: set[str] = set()
+    if isinstance(existing, list):
+        for label in existing:
+            if not isinstance(label, dict):
+                continue
+            name = label.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if name.startswith(PRIORITY_PREFIX) or name.startswith(STATUS_PREFIX):
+                continue
+            preserved.add(name)
+    preserved.update(_classification_labels(key))
+    return tuple(sorted({priority, status, *preserved}))
+
+
+def _resolved_priority(key: str, current: dict[str, Any]) -> str:
+    names = [
+        label.get("name")
+        for label in current.get("labels", [])
+        if isinstance(label, dict) and isinstance(label.get("name"), str)
+    ]
+    priorities = [name for name in names if name.startswith(PRIORITY_PREFIX)]
+    if len(priorities) == 1 and priorities[0] in {P0_PRIORITY, P1_PRIORITY}:
+        return priorities[0]
+    return P1_PRIORITY if key.startswith("refresh:") else P0_PRIORITY
 
 
 def plan_incidents(report: dict[str, Any]) -> list[Incident]:
@@ -53,7 +110,12 @@ def plan_incidents(report: dict[str, Any]) -> list[Incident]:
         codes = []
     commit = str(report.get("commitSha", "unknown"))
     evaluated = str(report.get("evaluatedAt", "unknown"))
-    action = str(quality.get("incident", {}).get("action", "block-release")) if isinstance(quality.get("incident"), dict) else "block-release"
+    action = (
+        str(quality.get("incident", {}).get("action", "block-release"))
+        if isinstance(quality.get("incident"), dict)
+        else "block-release"
+    )
+    priority = _priority_for_action(action)
     incidents = []
     for key in sorted(set(keys)):
         marker = f"<!-- {MARKER_PREFIX}{key} -->"
@@ -69,7 +131,18 @@ def plan_incidents(report: dict[str, Any]) -> list[Incident]:
             "",
             "The issue contains aggregate health metadata only. Inspect the exact workflow artifact for the machine-readable report.",
         ])
-        incidents.append(Incident(key=key, title=f"{TITLE_PREFIX} {key}", body=body))
+        incidents.append(
+            Incident(
+                key=key,
+                title=f"{TITLE_PREFIX} {key}",
+                body=body,
+                labels=_desired_labels(
+                    key=key,
+                    priority=priority,
+                    status=ACTIVE_STATUS,
+                ),
+            )
+        )
     return incidents
 
 
@@ -139,13 +212,42 @@ def synchronize(report: dict[str, Any], repository: str, token: str) -> dict[str
     for key, incident in planned.items():
         current = existing.get(key)
         if current is None:
-            _request("POST", base, token, {"title": incident.title, "body": incident.body})
+            _request(
+                "POST",
+                base,
+                token,
+                {
+                    "title": incident.title,
+                    "body": incident.body,
+                    "labels": list(incident.labels),
+                },
+            )
             created += 1
         else:
             number = current.get("number")
             if not isinstance(number, int):
                 raise HealthIncidentError("existing health issue lacks number")
-            _request("PATCH", f"{base}/{number}", token, {"title": incident.title, "body": incident.body, "state": "open"})
+            labels = _desired_labels(
+                key=key,
+                priority=_priority_for_action(
+                    str(report.get("qualityGate", {}).get("incident", {}).get("action", "block-release"))
+                    if isinstance(report.get("qualityGate", {}).get("incident"), dict)
+                    else "block-release"
+                ),
+                status=ACTIVE_STATUS,
+                existing=current.get("labels"),
+            )
+            _request(
+                "PATCH",
+                f"{base}/{number}",
+                token,
+                {
+                    "title": incident.title,
+                    "body": incident.body,
+                    "state": "open",
+                    "labels": list(labels),
+                },
+            )
             updated += 1
     for key, current in existing.items():
         if key in planned or current.get("state") != "open":
@@ -154,7 +256,23 @@ def synchronize(report: dict[str, Any], repository: str, token: str) -> dict[str
         if not isinstance(number, int):
             continue
         body = str(current.get("body") or "") + "\n\nResolved by a later trusted catalog-health evaluation.\n"
-        _request("PATCH", f"{base}/{number}", token, {"body": body, "state": "closed", "state_reason": "completed"})
+        labels = _desired_labels(
+            key=key,
+            priority=_resolved_priority(key, current),
+            status=RESOLVED_STATUS,
+            existing=current.get("labels"),
+        )
+        _request(
+            "PATCH",
+            f"{base}/{number}",
+            token,
+            {
+                "body": body,
+                "state": "closed",
+                "state_reason": "completed",
+                "labels": list(labels),
+            },
+        )
         closed += 1
     return {"created": created, "updated": updated, "closed": closed}
 

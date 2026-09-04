@@ -61,6 +61,12 @@ final class UserProductLibraryViewModel {
     }
 
     func recordCameraScan(_ result: ProductLookupResult) {
+        // Capture consent at the physical scan event boundary. The store also
+        // checks its persisted preference, but this guard prevents a scan made
+        // while history was off from being admitted if the user enables history
+        // before the asynchronous write reaches the actor.
+        guard historyEnabled else { return }
+
         let catalogVersion = result.product?.catalogVersion ?? currentCatalogVersion
         guard !catalogVersion.isEmpty else {
             errorMessage = String(

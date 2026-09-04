@@ -23,6 +23,47 @@ struct SavedProductVersionMarker: Codable, Equatable, Sendable {
         recordFingerprint = Self.fingerprint(product)
     }
 
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schemaVersion = try container.decode(Int.self, forKey: .fingerprintSchemaVersion)
+        let present = try container.decode(Bool.self, forKey: .wasPresent)
+        let fingerprint = try container.decodeIfPresent(String.self, forKey: .recordFingerprint)
+
+        guard schemaVersion == UserProductLibraryPolicy.fingerprintSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .fingerprintSchemaVersion,
+                in: container,
+                debugDescription: "Unsupported saved-product fingerprint schema"
+            )
+        }
+        if present {
+            guard let fingerprint, Self.isLowercaseSHA256(fingerprint) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .recordFingerprint,
+                    in: container,
+                    debugDescription: "Present saved products require a lowercase SHA-256 fingerprint"
+                )
+            }
+        } else if fingerprint != nil {
+            throw DecodingError.dataCorruptedError(
+                forKey: .recordFingerprint,
+                in: container,
+                debugDescription: "Previously missing products must not carry a record fingerprint"
+            )
+        }
+
+        fingerprintSchemaVersion = schemaVersion
+        wasPresent = present
+        recordFingerprint = fingerprint
+    }
+
+    private static func isLowercaseSHA256(_ value: String) -> Bool {
+        guard value.utf8.count == 64 else { return false }
+        return value.utf8.allSatisfy { byte in
+            (48...57).contains(byte) || (97...102).contains(byte)
+        }
+    }
+
     private static func fingerprint(_ product: ProductRecord) -> String {
         var builder = FingerprintBuilder()
         builder.append(product.barcode.rawValue)

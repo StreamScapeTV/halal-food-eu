@@ -18,11 +18,16 @@ final class ScannerViewModel {
     private(set) var lookupState: LookupState = .idle
 
     private let lookupProduct: LookupProductByBarcode
+    private let onCameraScanResolved: @MainActor @Sendable (ProductLookupResult) -> Void
     private var lookupTask: Task<Void, Never>?
     private var lastRequest: (payload: String, symbology: Barcode.SymbologyHint)?
 
-    init(lookupProduct: LookupProductByBarcode) {
+    init(
+        lookupProduct: LookupProductByBarcode,
+        onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
+    ) {
         self.lookupProduct = lookupProduct
+        self.onCameraScanResolved = onCameraScanResolved
     }
 
     func submitManualBarcode() {
@@ -32,7 +37,7 @@ final class ScannerViewModel {
     func acceptScan(_ scan: ScannedBarcode) {
         isScannerPresented = false
         manualBarcode = scan.payload
-        submit(scan.payload, symbology: scan.symbology)
+        submit(scan.payload, symbology: scan.symbology, recordCameraHistory: true)
     }
 
     func lookup(_ barcode: Barcode) {
@@ -47,6 +52,7 @@ final class ScannerViewModel {
 
     func retry() {
         guard let lastRequest else { return }
+        // A retry is a lookup action, not a second physical camera scan event.
         submit(lastRequest.payload, symbology: lastRequest.symbology)
     }
 
@@ -55,17 +61,24 @@ final class ScannerViewModel {
         lookupState = .idle
     }
 
-    private func submit(_ payload: String, symbology: Barcode.SymbologyHint) {
+    private func submit(
+        _ payload: String,
+        symbology: Barcode.SymbologyHint,
+        recordCameraHistory: Bool = false
+    ) {
         lookupTask?.cancel()
         lastRequest = (payload, symbology)
         lookupState = .lookingUp
 
-        lookupTask = Task { [weak self, lookupProduct] in
+        lookupTask = Task { [weak self, lookupProduct, onCameraScanResolved] in
             do {
                 let result = try await lookupProduct(payload, symbology: symbology)
                 try Task.checkCancellation()
 
                 guard let self else { return }
+                if recordCameraHistory {
+                    onCameraScanResolved(result)
+                }
                 if let product = result.product {
                     lookupState = .found(product)
                 } else {

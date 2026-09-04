@@ -1,7 +1,7 @@
 # 006 — Search, history, and feedback
 
-**Status:** Accepted for behavior; delivery may follow the initial scanner slice.  
-**Last reviewed:** 2026-09-01
+**Status:** Accepted  
+**Last reviewed:** 2026-09-03
 
 ## Product search
 
@@ -13,11 +13,23 @@
 
 ## Scan history and favorites
 
-- **HF-HISTORY-001:** History and favorites are opt-in local user data and are stored separately from the read-only catalog.
-- **HF-HISTORY-002:** The user can clear all history and remove individual entries.
-- **HF-HISTORY-003:** History stores the scanned GTIN and time, not camera imagery.
-- **HF-HISTORY-004:** Opening an old history item resolves it against the current bundled catalog and clearly indicates when the current record differs from the originally viewed catalog version.
+- **HF-HISTORY-001:** History and favorites are opt-in local user data and are stored in a separate writable application-data store, never as mutable tables in the read-only bundled catalog.
+  - Scan history is **off by default**.
+  - Favorites are explicit user actions and remain independent of the scan-history setting; favoriting a product must not enable history.
+- **HF-HISTORY-002:** The user can clear all history and remove individual history entries. Favorites can also be removed individually. Disabling future history does not silently delete existing entries; clear/delete remain explicit user actions.
+- **HF-HISTORY-003:** History stores only a valid camera-scanned canonical GTIN, scan time, the catalog version viewed at that time, and a bounded versioned product-comparison fingerprint. It never stores camera imagery, OCR imagery/text, a full stale `ProductRecord`, device location, manual barcode lookups, product-search selections, demo lookups, or correction/submission payloads.
+  - A retry of a resolved camera scan is a lookup action, not a second scan event.
+  - History retains at most the newest **200** scan entries on device.
+- **HF-HISTORY-004:** Opening an old history/favorite item resolves its GTIN through the current exact bundled `ProductCatalog` path. The UI distinguishes:
+  - the catalog version changed but the exact product-level marker is unchanged;
+  - the current product record materially changed;
+  - a previously present product is no longer in the current catalog; and
+  - a previously missing GTIN now has a current record.
+  The comparison marker is a versioned SHA-256 fingerprint over bounded runtime identity/evidence/assessment/retailer semantics and excludes remote image references; a global catalog-version change alone must not be presented as a product change.
 - **HF-HISTORY-005:** No history, favorite, or dietary profile leaves the device without a future explicit sync specification and consent.
+  - The local history/favorites store is excluded from device cloud backup/sync by the app.
+  - No account, analytics, telemetry, network upload, or iCloud/CloudKit synchronization is introduced by local history/favorites.
+  - Local persistence failure is reported separately and must never block exact barcode lookup, search, OCR, or evidence display.
 
 ## Not-found and correction feedback
 

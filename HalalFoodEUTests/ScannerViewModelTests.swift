@@ -76,6 +76,59 @@ struct ScannerViewModelTests {
         #expect(lookups == [selected.rawValue])
     }
 
+    @Test("A valid camera scan emits one canonical history handoff and retry does not duplicate it")
+    func cameraScanHistoryHandoff() async throws {
+        let rawBarcode = "4006381333931"
+        let expected = try Barcode(validating: rawBarcode)
+        let catalog = CapturingCatalog()
+        let capture = CameraScanCapture()
+        let viewModel = ScannerViewModel(
+            lookupProduct: LookupProductByBarcode(catalog: catalog),
+            onCameraScanResolved: capture.record
+        )
+
+        viewModel.acceptScan(
+            ScannedBarcode(payload: rawBarcode, symbology: .retail)
+        )
+        try await waitUntil {
+            if case let .notFound(barcode) = viewModel.lookupState {
+                return barcode == expected
+            }
+            return false
+        }
+
+        #expect(capture.results.map(\.barcode) == [expected])
+
+        viewModel.retry()
+        try await waitUntilLookupCount(2, in: catalog)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(capture.results.map(\.barcode) == [expected])
+    }
+
+    @Test("Manual lookup, search selection, and demo data never emit camera history")
+    func nonCameraPathsDoNotEmitHistory() async throws {
+        let catalog = CapturingCatalog()
+        let capture = CameraScanCapture()
+        let viewModel = ScannerViewModel(
+            lookupProduct: LookupProductByBarcode(catalog: catalog),
+            onCameraScanResolved: capture.record
+        )
+
+        viewModel.manualBarcode = "4006381333931"
+        viewModel.submitManualBarcode()
+        try await waitUntilLookupCount(1, in: catalog)
+
+        let selected = try Barcode(validating: "0200000000004")
+        viewModel.lookup(selected)
+        try await waitUntilLookupCount(2, in: catalog)
+
+        viewModel.tryDemoBarcode("0200000000011")
+        try await waitUntilLookupCount(3, in: catalog)
+        try await Task.sleep(for: .milliseconds(30))
+
+        #expect(capture.results.isEmpty)
+    }
+
     private func waitUntilLookupStarted(
         _ barcode: String,
         in catalog: DelayedCatalog,
@@ -88,6 +141,18 @@ struct ScannerViewModelTests {
         Issue.record("Timed out waiting for lookup to start")
     }
 
+    private func waitUntilLookupCount(
+        _ count: Int,
+        in catalog: CapturingCatalog,
+        attempts: Int = 100
+    ) async throws {
+        for _ in 0..<attempts {
+            if await catalog.lookups.count >= count { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for catalog lookup count")
+    }
+
     private func waitUntil(
         attempts: Int = 100,
         condition: @MainActor () -> Bool
@@ -97,6 +162,15 @@ struct ScannerViewModelTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         Issue.record("Timed out waiting for scanner state")
+    }
+}
+
+@MainActor
+private final class CameraScanCapture {
+    private(set) var results: [ProductLookupResult] = []
+
+    func record(_ result: ProductLookupResult) {
+        results.append(result)
     }
 }
 

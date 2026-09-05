@@ -116,6 +116,7 @@ struct SettingsView: View {
     }
 }
 
+@MainActor
 enum AppSettingsLink {
     static let url = URL(string: UIApplication.openSettingsURLString)!
 }

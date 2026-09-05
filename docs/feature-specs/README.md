@@ -13,7 +13,7 @@ Specifications use requirement identifiers so code, tests, catalog validators, i
 - **Future** — intentionally outside the current release boundary.
 - **Rejected** — considered and deliberately excluded, with rationale retained.
 
-Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 027 are **Accepted**. Document 012 is **Future**.
+Unless a section says otherwise, requirements in documents 001 through 011 and 013 through 028 are **Accepted**. Document 012 is **Future**.
 
 ## Product invariant
 
@@ -52,6 +52,7 @@ It must not turn missing information into a positive ruling. A product can be `h
 | [025 Source-aware catalog refresh](025-source-aware-catalog-refresh.md) | source-specific cadence, accepted refresh lineage, targeted queues, conditional/delta safeguards and health integration |
 | [026 On-device ingredient OCR](026-on-device-ingredient-ocr.md) | local ingredient-panel capture, Vision OCR, editable unverified text, privacy, bounds and acceptance |
 | [027 Native app shell and local settings](027-native-app-shell-and-local-settings.md) | native Check/Saved/Settings tabs, local appearance, iOS language handoff, privacy and runtime identity |
+| [028 Central Apple validation and TestFlight](028-central-apple-validation-and-testflight.md) | optional Central Apple wrapper contract, exact production catalog packaging, TestFlight identity and credential boundaries |
 
 ## Conflict resolution
 

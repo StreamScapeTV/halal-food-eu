@@ -33,7 +33,9 @@ DEFAULT_BRANCH_ONLY_WORKFLOWS = {
     "catalog-health.yml",
     "configuration-health.yml",
 }
-PINNED_USES = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}(?:\s+#.*)?$")
+PINNED_USES = re.compile(
+    r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml)?@[0-9a-f]{40}(?:\s+#.*)?$"
+)
 USES_LINE = re.compile(r"^-?\s*uses\s*:\s*(?P<target>.+?)\s*$")
 PERMISSIONS_HEADER = re.compile(r"^(?P<indent> *)permissions\s*:\s*(?P<value>[^#]*?)(?:\s+#.*)?$")
 PERMISSION_ENTRY = re.compile(r"^(?P<indent> +)(?P<scope>[A-Za-z0-9-]+)\s*:\s*(?P<access>read|write|none)\s*(?:#.*)?$")

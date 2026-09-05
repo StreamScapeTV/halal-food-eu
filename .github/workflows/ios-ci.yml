@@ -143,9 +143,10 @@ jobs:
         run: |
           python3 -m py_compile \
             Tools/catalog_security.py \
-            Tools/tests/test_catalog_security.py
+            Tools/tests/test_catalog_security.py \
+            Tools/tests/test_catalog_security_reusable_workflow.py
           python3 -m json.tool Data/security/tooling-dependencies-v1.json >/dev/null
-          python3 -m unittest discover -s Tools/tests -p 'test_catalog_security.py'
+          python3 -m unittest discover -s Tools/tests -p 'test_catalog_security*.py'
           python3 Tools/catalog_security.py tooling-sbom \
             --root . \
             --dependency-manifest Data/security/tooling-dependencies-v1.json \

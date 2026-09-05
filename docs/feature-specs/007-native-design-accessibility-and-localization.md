@@ -1,7 +1,7 @@
 # 007 — Native design, accessibility, and localization
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-03
+**Last reviewed:** 2026-09-05
 
 ## Native platform design
 
@@ -12,6 +12,7 @@
 - **HF-UI-005:** Custom glass effects may be introduced only for a demonstrated interaction need and must be availability-gated; decorative glass is not a design goal.
 - **HF-UI-006:** The primary flow is optimized for portrait iPhone use but must respond correctly to landscape, split accessibility sizes, and device safe areas unless a documented release limitation applies.
 - **HF-UI-007:** Ingredient OCR uses native camera presentation and SwiftUI review controls. It must not introduce a custom camera/UI framework or a third-party OCR surface when platform APIs satisfy the requirement.
+- **HF-UI-008:** Shipping iOS builds configure a repository-owned primary `AppIcon`. The iOS asset may use one opaque 1024×1024 source image and rely on Xcode/system-generated size, dark, and tinted treatments unless a reviewed design later requires custom variants. The primary icon must not depend on a third-party logo or asset license and must not imply that the app itself is a halal certifier.
 
 ## Accessibility
 

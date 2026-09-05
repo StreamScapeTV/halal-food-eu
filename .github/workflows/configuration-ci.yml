@@ -31,14 +31,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile \
+            Tools/app_icon.py \
             Tools/project_configuration.py \
             Tools/github_configuration_health.py \
+            Tools/tests/test_app_icon_configuration.py \
             Tools/tests/test_project_configuration.py \
             Tools/tests/test_github_configuration_health.py \
             Tools/tests/test_project_configuration_workflow.py
           python3 -m json.tool Data/config/public-project-configuration-v1.json >/dev/null
           python3 -m json.tool Data/config/public-project-configuration-v1.schema.json >/dev/null
           python3 -m json.tool Data/config/source-credential-policy-v1.schema.json >/dev/null
+          PYTHONPATH=Tools python3 Tools/app_icon.py --root .
           PYTHONPATH=Tools python3 Tools/project_configuration.py validate
           PYTHONPATH=Tools python3 Tools/project_configuration.py health \
             --output "$RUNNER_TEMP/configuration-health.json"

@@ -1,7 +1,7 @@
 # 011 — Testing and acceptance
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-03
+**Last reviewed:** 2026-09-05
 
 ## Test layers
 
@@ -50,6 +50,7 @@
 - Bundled iOS catalog lookup rejects manifest/database digest mismatch, unsupported manifest/source-policy schemas, integrity failures, missing required tables, and incompatible SQLite metadata.
 - Ingredient OCR rejects empty, oversized, invalid, too-small, and unsafe-dimension image input before recognition where applicable.
 - The separate writable local history/favorites SQLite store rejects incompatible application/schema IDs and malformed/corrupt records, uses parameterized SQL, and cannot mutate or weaken the read-only catalog.
+- The shipping privacy manifest is parsed as a bounded property list and must exactly match direct Swift required-reason API use; missing, unused, unapproved, or newly introduced unreviewed categories fail closed while tracking and collected-data declarations remain within the accepted privacy contract.
 
 ### Data integration tests
 
@@ -100,6 +101,7 @@
 - **HF-TEST-010:** Every push/PR that affects catalog ingestion, workflow trust, dependencies, or runtime integrity runs the adversarial security suite and emits a deterministic reviewed-tooling SBOM.
 - **HF-TEST-011:** The iOS lane for specification 026 selects and verifies the accepted stable Xcode 26.6 toolchain, compiles with Swift 6 complete strict concurrency, and executes the real Vision OCR smoke test plus deterministic OCR unit tests without production retailer data.
 - **HF-TEST-012:** Changes to specification-006 local history/favorites must pass the real separate-SQLite persistence suite, camera-only history boundary tests, current-catalog comparison tests, EN/DE resource validation, and the existing barcode/search/OCR/evidence/submission/catalog regression suites under Xcode 26.6 / Swift 6 strict concurrency.
+- **HF-TEST-013:** Every push/PR validates the shipping privacy manifest against direct required-reason API use before iOS project generation. The reviewed current contract requires `NSPrivacyAccessedAPICategoryUserDefaults` / `CA92.1` for app-local `UserDefaults`; a missing, unused, unapproved, or newly introduced unreviewed covered category fails closed.
 
 ## Definition of done
 

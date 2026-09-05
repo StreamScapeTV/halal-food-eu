@@ -1,7 +1,7 @@
 # 008 — Privacy, security, and safety
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-03
+**Last reviewed:** 2026-09-05
 
 ## Privacy
 
@@ -13,6 +13,7 @@
 - **HF-PRIVACY-006:** The privacy manifest must truthfully declare tracking, collected data, and required-reason API use. User-directed transport in another system app must not be misrepresented as project analytics/tracking collection.
 - **HF-PRIVACY-007:** Ingredient OCR must not write captured image bytes or recognized text to SQLite, scan history, analytics, logs, caches intentionally owned by the app, or a network destination. Explicit copy to the system pasteboard is the only initial export action.
 - **HF-PRIVACY-008:** The specification-006 history/favorites store is app-local mutable user data, physically separate from `catalog.sqlite3` and excluded from device cloud backup/sync. It may persist canonical GTINs, local timestamps, catalog versions, explicit favorite state, and a versioned bounded product fingerprint needed to detect later catalog changes. It must not persist camera/OCR images, recognized ingredient text, full stale product records, remote image references, location, account identity, analytics identifiers, or submission payloads.
+- **HF-PRIVACY-009:** Shipping source and `PrivacyInfo.xcprivacy` must remain synchronized for Apple required-reason APIs. As reviewed on 2026-09-05, direct app source uses `UserDefaults` only for the app-local appearance preference, so the manifest declares `NSPrivacyAccessedAPICategoryUserDefaults` with approved reason `CA92.1`. This reason does not authorize cross-app/system-default access, tracking, or fingerprinting. CI scans the current Apple required-reason categories used by direct Swift source—file timestamps, system boot time, disk space, active keyboards, and user defaults—and fails closed when a covered category is introduced without a reviewed mapping or when the manifest declares an unused/unapproved category.
 
 ## Catalog and application security
 

@@ -1,0 +1,16 @@
+name: Issue 73 Central Apple exact-source proof
+
+on:
+  push:
+    branches:
+      - agent/73-central-apple-adoption-copy
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-build:
+    uses: StreamScapeTV/ci-workflows/.github/workflows/apple.yml@565edf3e966ce5628d30f95b60ce72fc9a92df6d
+    with:
+      ref: 1b81fdbcd8bb54ca8e75ccb08b348249c970e80c
+      test_profile: build

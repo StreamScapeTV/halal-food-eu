@@ -4,6 +4,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+VALIDATION_PROFILE="${HFEU_IOS_VALIDATION_PROFILE:-test}"
+case "$VALIDATION_PROFILE" in
+  build|test|simulator) ;;
+  *)
+    echo "Unsupported HFEU_IOS_VALIDATION_PROFILE: $VALIDATION_PROFILE" >&2
+    exit 2
+    ;;
+esac
+
 command -v xcodegen >/dev/null 2>&1 || {
   echo "xcodegen is required. CI builds the reviewed source pin from Data/security/tooling-dependencies-v1.json." >&2
   exit 1
@@ -22,6 +31,7 @@ fi
 xcodebuild -version
 swift --version
 xcodegen --version
+printf 'Halal Food EU iOS validation profile: %s\n' "$VALIDATION_PROFILE"
 
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   ACTUAL_XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
@@ -57,6 +67,17 @@ python3 Tools/production_catalog.py validate \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
 
 xcodegen generate
+
+if [[ "$VALIDATION_PROFILE" == "build" ]]; then
+  xcodebuild build \
+    -project HalalFoodEU.xcodeproj \
+    -scheme HalalFoodEU \
+    -configuration Debug \
+    -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath .build/DerivedData \
+    CODE_SIGNING_ALLOWED=NO
+  exit 0
+fi
 
 SIMULATOR_ID="$({ xcrun simctl list devices available -j; } | python3 -c '
 import json

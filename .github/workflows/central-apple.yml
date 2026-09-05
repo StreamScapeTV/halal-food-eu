@@ -1,0 +1,51 @@
+name: Central Apple validation and TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Fixed Central Apple profile.
+        required: true
+        default: test
+        type: choice
+        options:
+          - build
+          - test
+          - simulator
+          - testflight
+      build_number:
+        description: Exact TestFlight CFBundleVersion. Required only for the testflight profile.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    if: ${{ inputs.profile != 'testflight' }}
+    uses: StreamScapeTV/ci-workflows/.github/workflows/apple.yml@565edf3e966ce5628d30f95b60ce72fc9a92df6d
+    with:
+      ref: ${{ github.sha }}
+      test_profile: ${{ inputs.profile }}
+
+  testflight_guard:
+    if: ${{ inputs.profile == 'testflight' && (github.ref != 'refs/heads/main' || inputs.build_number == '') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject unsafe TestFlight request
+        run: |
+          set -euo pipefail
+          printf 'TestFlight requires protected main and an explicit caller build number.\n' >&2
+          exit 2
+
+  testflight:
+    if: ${{ inputs.profile == 'testflight' && github.ref == 'refs/heads/main' && inputs.build_number != '' }}
+    uses: StreamScapeTV/ci-workflows/.github/workflows/apple.yml@565edf3e966ce5628d30f95b60ce72fc9a92df6d
+    with:
+      repository: StreamScapeTV/halal-food-eu
+      ref: ${{ github.sha }}
+      test_profile: testflight
+      build_number: ${{ inputs.build_number }}
+    secrets: inherit

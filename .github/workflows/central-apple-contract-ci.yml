@@ -1,0 +1,41 @@
+name: Central Apple adoption contract
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Central Apple wrapper contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate wrapper and workflow contracts
+        run: |
+          set -euo pipefail
+          bash -n scripts/ci/apple-common.sh
+          bash -n scripts/ci/run-apple-hosted-validation.sh
+          bash -n scripts/ci/run-apple-testflight.sh
+          bash -n Scripts/ci-ios.sh
+          python3 -m py_compile \
+            Tools/catalog_workflow_policy.py \
+            Tools/tests/test_apple_ci_adoption.py \
+            Tools/tests/test_reusable_workflow_dependency.py
+          python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
+          python3 -m unittest \
+            Tools.tests.test_apple_ci_adoption \
+            Tools.tests.test_reusable_workflow_dependency \
+            -v

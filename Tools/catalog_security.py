@@ -17,7 +17,9 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
-ACTION_TARGET = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@(?P<sha>[0-9a-f]{40})(?:\s+#.*)?$")
+ACTION_TARGET = re.compile(
+    r"^(?P<name>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml)?@(?P<sha>[0-9a-f]{40})(?:\s+#.*)?$"
+)
 USES_LINE = re.compile(r"^-?\s*uses\s*:\s*(?P<target>.+?)\s*$")
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")

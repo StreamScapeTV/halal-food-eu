@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct HomeView: View {
@@ -32,10 +33,10 @@ struct HomeView: View {
                     Button {
                         viewModel.isScannerPresented = true
                     } label: {
-                        Label("Scan a product", systemImage: "barcode.viewfinder")
+                        Label(String(localized: "Scan a product", table: "AppShell"), systemImage: "barcode.viewfinder")
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    .accessibilityHint("Opens the camera barcode scanner.")
+                    .accessibilityHint(String(localized: "Opens the camera barcode scanner.", table: "AppShell"))
 
                     NavigationLink {
                         ProductSearchView(
@@ -55,25 +56,6 @@ struct HomeView: View {
                         )
                     )
 
-                    NavigationLink {
-                        UserProductLibraryView(
-                            viewModel: userProductLibraryViewModel,
-                            submissionCoordinator: submissionCoordinator,
-                            additiveReferenceCatalog: additiveReferenceCatalog
-                        )
-                    } label: {
-                        Label(
-                            String(localized: "Saved products", table: "UserLibrary"),
-                            systemImage: "star"
-                        )
-                    }
-                    .accessibilityHint(
-                        String(
-                            localized: "Opens your local favorites and optional camera scan history.",
-                            table: "UserLibrary"
-                        )
-                    )
-
                     Button {
                         ingredientOCRViewModel.reset()
                         isIngredientOCRPresented = true
@@ -88,18 +70,18 @@ struct HomeView: View {
                         String(localized: "Opens an on-device ingredient text scanner.", table: "IngredientOCR")
                     )
 
-                    TextField("EAN, UPC, or GTIN", text: $viewModel.manualBarcode)
+                    TextField(String(localized: "EAN, UPC, or GTIN", table: "AppShell"), text: $viewModel.manualBarcode)
                         .keyboardType(.numberPad)
                         .textContentType(.none)
                         .autocorrectionDisabled()
-                        .accessibilityLabel("Barcode number")
+                        .accessibilityLabel(String(localized: "Barcode number", table: "AppShell"))
 
-                    Button("Look up barcode") {
+                    Button(String(localized: "Look up barcode", table: "AppShell")) {
                         viewModel.submitManualBarcode()
                     }
                     .disabled(viewModel.manualBarcode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } header: {
-                    Text("Check a packaged food")
+                    Text(String(localized: "Check a packaged food", table: "AppShell"))
                 } footer: {
                     Text(String(localized: "Barcode lookup uses the catalog bundled with the app. Ingredient OCR also runs on device; neither requires a network connection.", table: "IngredientOCR"))
                 }
@@ -111,22 +93,22 @@ struct HomeView: View {
                     additiveReferenceCatalog: additiveReferenceCatalog
                 )
 
-                Section("Synthetic demonstration data") {
-                    Button("Reviewed-halal oat drink — 0200000000004") {
+                Section(String(localized: "Synthetic demonstration data", table: "AppShell")) {
+                    Button(String(localized: "Reviewed-halal oat drink — 0200000000004", table: "AppShell")) {
                         viewModel.tryDemoBarcode("0200000000004")
                     }
-                    Button("Not-halal gelatine sweets — 0200000000011") {
+                    Button(String(localized: "Not-halal gelatine sweets — 0200000000011", table: "AppShell")) {
                         viewModel.tryDemoBarcode("0200000000011")
                     }
-                    Button("Questionable dessert — 0200000000028") {
+                    Button(String(localized: "Questionable dessert — 0200000000028", table: "AppShell")) {
                         viewModel.tryDemoBarcode("0200000000028")
                     }
                 }
 
                 Section {
-                    Label("Evidence, not a fatwa", systemImage: "info.circle")
+                    Label(String(localized: "Evidence, not a fatwa", table: "AppShell"), systemImage: "info.circle")
                         .font(.headline)
-                    Text("Always check current packaging, the manufacturer or certifier, and a trusted qualified scholar for consequential decisions. Formulations and supply chains change.")
+                    Text(String(localized: "Always check current packaging, the manufacturer or certifier, and a trusted qualified scholar for consequential decisions. Formulations and supply chains change.", table: "AppShell"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -138,43 +120,6 @@ struct HomeView: View {
             }
             .sheet(isPresented: $isIngredientOCRPresented) {
                 IngredientOCRView(viewModel: ingredientOCRViewModel)
-            }
-            .sheet(
-                isPresented: Binding(
-                    get: { submissionCoordinator.activeViewModel != nil },
-                    set: { isPresented in
-                        if !isPresented { submissionCoordinator.dismissSubmission() }
-                    }
-                ),
-                onDismiss: submissionCoordinator.dismissSubmission
-            ) {
-                if let submissionViewModel = submissionCoordinator.activeViewModel {
-                    ProductEvidenceSubmissionView(viewModel: submissionViewModel)
-                }
-            }
-            .alert(
-                "Submission unavailable",
-                isPresented: Binding(
-                    get: { submissionCoordinator.alertMessage != nil },
-                    set: { if !$0 { submissionCoordinator.alertMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) { submissionCoordinator.alertMessage = nil }
-            } message: {
-                Text(submissionCoordinator.alertMessage ?? "Product evidence submission is unavailable.")
-            }
-            .alert(
-                String(localized: "Local history unavailable", table: "UserLibrary"),
-                isPresented: Binding(
-                    get: { userProductLibraryViewModel.errorMessage != nil },
-                    set: { if !$0 { userProductLibraryViewModel.errorMessage = nil } }
-                )
-            ) {
-                Button(String(localized: "OK", table: "UserLibrary"), role: .cancel) {
-                    userProductLibraryViewModel.errorMessage = nil
-                }
-            } message: {
-                Text(userProductLibraryViewModel.errorMessage ?? "")
             }
         }
     }
@@ -191,19 +136,19 @@ private struct LookupStateContent: View {
         case .idle:
             Section {
                 ContentUnavailableView(
-                    "Ready to scan",
+                    String(localized: "Ready to scan", table: "AppShell"),
                     systemImage: "barcode",
-                    description: Text("Scan a barcode, search the catalog, or enter one manually.")
+                    description: Text(String(localized: "Scan a barcode, search the catalog, or enter one manually.", table: "AppShell"))
                 )
             }
         case .lookingUp:
             Section {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text("Looking up the bundled catalog…")
+                    Text(String(localized: "Looking up the bundled catalog…", table: "AppShell"))
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Looking up the offline product catalog")
+                .accessibilityLabel(String(localized: "Looking up the offline product catalog", table: "AppShell"))
             }
         case let .found(product):
             Section {
@@ -229,32 +174,47 @@ private struct LookupStateContent: View {
         case let .notFound(barcode):
             Section {
                 ContentUnavailableView(
-                    "Product not found",
+                    String(localized: "Product not found", table: "AppShell"),
                     systemImage: "questionmark.folder",
-                    description: Text("GTIN \(barcode.rawValue) is not present in this catalog version. This does not mean the product is halal or not halal.")
+                    description: Text(
+                        String(
+                            format: String(
+                                localized: "GTIN %@ is not present in this catalog version. This does not mean the product is halal or not halal.",
+                                table: "AppShell"
+                            ),
+                            locale: .current,
+                            barcode.rawValue
+                        )
+                    )
                 )
                 Button {
                     submissionCoordinator.startMissingProduct(barcode: barcode)
                 } label: {
                     Label("Submit product evidence", systemImage: "envelope.badge")
                 }
-                .accessibilityHint("Prepares a private local evidence package that you can review before sending or sharing.")
+                .accessibilityHint(String(localized: "Prepares a private local evidence package that you can review before sending or sharing.", table: "AppShell"))
             }
         case let .invalidInput(message):
             Section {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
-                    .accessibilityLabel("Invalid barcode. \(message)")
+                    .accessibilityLabel(
+                        String(
+                            format: String(localized: "Invalid barcode. %@", table: "AppShell"),
+                            locale: .current,
+                            message
+                        )
+                    )
             }
         case let .failed(message):
             Section {
-                Label("Catalog lookup failed", systemImage: "xmark.octagon")
+                Label(String(localized: "Catalog lookup failed", table: "AppShell"), systemImage: "xmark.octagon")
                     .font(.headline)
                     .foregroundStyle(.red)
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button("Retry") { viewModel.retry() }
+                Button(String(localized: "Retry", table: "AppShell")) { viewModel.retry() }
             }
         }
     }

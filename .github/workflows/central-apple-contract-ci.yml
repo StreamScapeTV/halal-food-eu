@@ -32,6 +32,10 @@ jobs:
           bash -n Scripts/ci-ios.sh
           python3 -m py_compile \
             Tools/catalog_workflow_policy.py \
-            Tools/tests/test_apple_ci_adoption.py
+            Tools/tests/test_apple_ci_adoption.py \
+            Tools/tests/test_reusable_workflow_dependency.py
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
-          python3 -m unittest Tools.tests.test_apple_ci_adoption -v
+          python3 -m unittest \
+            Tools.tests.test_apple_ci_adoption \
+            Tools.tests.test_reusable_workflow_dependency \
+            -v

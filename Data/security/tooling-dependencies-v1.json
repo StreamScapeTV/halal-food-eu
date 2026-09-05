@@ -1,5 +1,9 @@
 {
   "githubActions": {
+    "StreamScapeTV/ci-workflows": {
+      "commitSha": "565edf3e966ce5628d30f95b60ce72fc9a92df6d",
+      "version": "apple.yml"
+    },
     "actions/attest-build-provenance": {
       "commitSha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",
       "version": "v3"
@@ -18,7 +22,7 @@
     }
   },
   "pythonRuntimeDependencies": [],
-  "reviewedAt": "2026-08-29",
+  "reviewedAt": "2026-09-05",
   "schemaVersion": 1,
   "xcodegen": {
     "commitSha": "8445e778451c7e44237b90281bde622d764b0084",

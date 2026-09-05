@@ -66,6 +66,8 @@ python3 Tools/production_catalog.py validate \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
 
+PYTHONPATH=Tools python3 Tools/privacy_manifest.py --root .
+
 xcodegen generate
 
 if [[ "$VALIDATION_PROFILE" == "build" ]]; then

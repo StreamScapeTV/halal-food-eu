@@ -112,6 +112,14 @@ class RefreshRecoveryTests(unittest.TestCase):
                 refresh_policy=policy(), scheduled_workflow_text=changed,
             )
 
+    def test_recovery_fails_closed_when_trusted_ref_is_not_protected_main(self):
+        changed = workflow_text().replace("EXPECTED_REF: refs/heads/main", "EXPECTED_REF: refs/heads/develop")
+        with self.assertRaisesRegex(REFRESH_HEALTH.RefreshHealthError, "protected main"):
+            REFRESH_HEALTH.enrich_health(
+                base_health=base_health(), refresh_queue=queue(), refresh_plan=plan(),
+                refresh_policy=policy(), scheduled_workflow_text=changed,
+            )
+
     def test_recovery_fails_closed_when_policy_cadence_conflicts_with_weekly_schedule(self):
         changed = policy()
         changed["sources"]["open-food-facts"]["fullCadenceDays"] = 14
@@ -157,6 +165,7 @@ class RefreshRecoveryTests(unittest.TestCase):
         refresh = schema["properties"]["refresh"]
         operator = refresh["properties"]["operatorRecovery"]
         self.assertEqual(set(operator["required"]), {"workflow", "ref", "workflowDispatch", "sources"})
+        self.assertEqual(operator["properties"]["ref"], {"const": "main"})
         source = operator["properties"]["sources"]["additionalProperties"]
         self.assertEqual(
             set(source["required"]),

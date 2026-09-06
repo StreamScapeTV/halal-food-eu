@@ -121,9 +121,10 @@
         "operatorRecovery": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["workflow", "workflowDispatch", "sources"],
+          "required": ["workflow", "ref", "workflowDispatch", "sources"],
           "properties": {
             "workflow": {"const": "scheduled-catalog-refresh.yml"},
+            "ref": {"type": "string", "minLength": 1},
             "workflowDispatch": {"const": true},
             "sources": {
               "type": "object",

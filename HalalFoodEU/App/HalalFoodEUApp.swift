@@ -20,9 +20,14 @@ struct HalalFoodEUApp: App {
         _userProductLibraryViewModel = State(initialValue: userProductLibraryViewModel)
         _scannerViewModel = State(
             initialValue: container.makeScannerViewModel(
-                shouldRecordCameraHistory: { userProductLibraryViewModel.historyEnabled },
-                onCameraScanResolved: { result in
-                    userProductLibraryViewModel.recordCameraScan(result)
+                cameraHistoryConsentToken: {
+                    userProductLibraryViewModel.cameraHistoryConsentToken()
+                },
+                onCameraScanResolved: { result, consentToken in
+                    userProductLibraryViewModel.recordCameraScan(
+                        result,
+                        consentToken: consentToken
+                    )
                 }
             )
         )

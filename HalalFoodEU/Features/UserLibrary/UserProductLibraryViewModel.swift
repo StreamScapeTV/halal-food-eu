@@ -14,6 +14,8 @@ final class UserProductLibraryViewModel {
     private let resolveSavedProduct: ResolveSavedProduct
     private let currentCatalogVersion: String
     private let now: @Sendable () -> Date
+    private var historyConsentRevision: UInt64 = 0
+    private var cameraHistoryWriteTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         store: any UserProductLibraryStore,
@@ -35,6 +37,9 @@ final class UserProductLibraryViewModel {
             async let loadedHistory = store.history(limit: UserProductLibraryPolicy.maximumHistoryEntries)
             async let loadedFavorites = store.favorites()
             let values = try await (enabled, loadedHistory, loadedFavorites)
+            if historyEnabled != values.0 {
+                invalidateCameraHistoryConsent()
+            }
             historyEnabled = values.0
             history = values.1
             favorites = values.2
@@ -48,6 +53,12 @@ final class UserProductLibraryViewModel {
 
     func setHistoryEnabled(_ enabled: Bool) async {
         let previous = historyEnabled
+        if previous != enabled {
+            // A consent transition permanently invalidates every camera event
+            // captured under the preceding generation. Re-enabling history must
+            // never resurrect a scan that crossed a revocation boundary.
+            invalidateCameraHistoryConsent()
+        }
         historyEnabled = enabled
         do {
             try await store.setHistoryEnabled(enabled)
@@ -60,12 +71,12 @@ final class UserProductLibraryViewModel {
         }
     }
 
-    func recordCameraScan(_ result: ProductLookupResult) {
-        // Capture consent at the physical scan event boundary. The store also
-        // checks its persisted preference, but this guard prevents a scan made
-        // while history was off from being admitted if the user enables history
-        // before the asynchronous write reaches the actor.
-        guard historyEnabled else { return }
+    func cameraHistoryConsentToken() -> UInt64? {
+        historyEnabled ? historyConsentRevision : nil
+    }
+
+    func recordCameraScan(_ result: ProductLookupResult, consentToken: UInt64) {
+        guard historyEnabled, consentToken == historyConsentRevision else { return }
 
         let catalogVersion = result.product?.catalogVersion ?? currentCatalogVersion
         guard !catalogVersion.isEmpty else {
@@ -77,26 +88,35 @@ final class UserProductLibraryViewModel {
         }
         let timestamp = now()
         let marker = SavedProductVersionMarker(product: result.product)
+        let taskID = UUID()
 
-        Task { [weak self, store] in
+        let task = Task { [weak self, store] in
+            guard let self else { return }
+            defer { cameraHistoryWriteTasks[taskID] = nil }
+            guard historyEnabled,
+                  historyConsentRevision == consentToken,
+                  !Task.isCancelled else { return }
             do {
+                // SQLiteUserProductLibrary also checks Task cancellation and the
+                // persisted opt-in immediately before its transaction. Together
+                // with generation invalidation this closes revoke/re-enable races.
                 try await store.recordScan(
                     barcode: result.barcode,
                     scannedAt: timestamp,
                     catalogVersion: catalogVersion,
                     versionMarker: marker
                 )
-                guard let self else { return }
-                if historyEnabled {
-                    history = try await store.history(limit: UserProductLibraryPolicy.maximumHistoryEntries)
-                }
+                try Task.checkCancellation()
+                guard historyEnabled, historyConsentRevision == consentToken else { return }
+                history = try await store.history(limit: UserProductLibraryPolicy.maximumHistoryEntries)
                 errorMessage = nil
             } catch is CancellationError {
                 return
             } catch {
-                self?.errorMessage = error.localizedDescription
+                errorMessage = error.localizedDescription
             }
         }
+        cameraHistoryWriteTasks[taskID] = task
     }
 
     func isFavorite(_ barcode: Barcode) -> Bool {
@@ -166,6 +186,14 @@ final class UserProductLibraryViewModel {
 
     func makeDetailViewModel(for reference: SavedProductReference) -> SavedProductDetailViewModel {
         SavedProductDetailViewModel(reference: reference, resolveSavedProduct: resolveSavedProduct)
+    }
+
+    private func invalidateCameraHistoryConsent() {
+        historyConsentRevision &+= 1
+        for task in cameraHistoryWriteTasks.values {
+            task.cancel()
+        }
+        cameraHistoryWriteTasks.removeAll()
     }
 }
 

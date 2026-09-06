@@ -18,18 +18,18 @@ final class ScannerViewModel {
     private(set) var lookupState: LookupState = .idle
 
     private let lookupProduct: LookupProductByBarcode
-    private let shouldRecordCameraHistory: @MainActor @Sendable () -> Bool
-    private let onCameraScanResolved: @MainActor @Sendable (ProductLookupResult) -> Void
+    private let cameraHistoryConsentToken: @MainActor @Sendable () -> UInt64?
+    private let onCameraScanResolved: @MainActor @Sendable (ProductLookupResult, UInt64) -> Void
     private var lookupTask: Task<Void, Never>?
     private var lastRequest: (payload: String, symbology: Barcode.SymbologyHint)?
 
     init(
         lookupProduct: LookupProductByBarcode,
-        shouldRecordCameraHistory: @escaping @MainActor @Sendable () -> Bool = { false },
-        onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
+        cameraHistoryConsentToken: @escaping @MainActor @Sendable () -> UInt64? = { nil },
+        onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult, UInt64) -> Void = { _, _ in }
     ) {
         self.lookupProduct = lookupProduct
-        self.shouldRecordCameraHistory = shouldRecordCameraHistory
+        self.cameraHistoryConsentToken = cameraHistoryConsentToken
         self.onCameraScanResolved = onCameraScanResolved
     }
 
@@ -40,14 +40,13 @@ final class ScannerViewModel {
     func acceptScan(_ scan: ScannedBarcode) {
         isScannerPresented = false
         manualBarcode = scan.payload
-        // Consent belongs to the physical scan event, not to the later async
-        // catalog-resolution instant. Carry this immutable eligibility decision
-        // through lookup so a later opt-in cannot admit a pre-consent scan.
-        let recordCameraHistory = shouldRecordCameraHistory()
+        // Consent belongs to the physical camera event. Capture the current
+        // generation synchronously and carry it unchanged through resolution.
+        let consentToken = cameraHistoryConsentToken()
         submit(
             scan.payload,
             symbology: scan.symbology,
-            recordCameraHistory: recordCameraHistory
+            cameraHistoryConsentToken: consentToken
         )
     }
 
@@ -75,7 +74,7 @@ final class ScannerViewModel {
     private func submit(
         _ payload: String,
         symbology: Barcode.SymbologyHint,
-        recordCameraHistory: Bool = false
+        cameraHistoryConsentToken consentToken: UInt64? = nil
     ) {
         lookupTask?.cancel()
         lastRequest = (payload, symbology)
@@ -87,8 +86,8 @@ final class ScannerViewModel {
                 try Task.checkCancellation()
 
                 guard let self else { return }
-                if recordCameraHistory {
-                    onCameraScanResolved(result)
+                if let consentToken {
+                    onCameraScanResolved(result, consentToken)
                 }
                 if let product = result.product {
                     lookupState = .found(product)

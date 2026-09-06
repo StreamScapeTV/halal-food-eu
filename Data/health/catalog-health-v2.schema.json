@@ -124,7 +124,7 @@
           "required": ["workflow", "ref", "workflowDispatch", "sources"],
           "properties": {
             "workflow": {"const": "scheduled-catalog-refresh.yml"},
-            "ref": {"type": "string", "minLength": 1},
+            "ref": {"const": "main"},
             "workflowDispatch": {"const": true},
             "sources": {
               "type": "object",

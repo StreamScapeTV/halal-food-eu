@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 RECOVERY_WORKFLOW = "scheduled-catalog-refresh.yml"
+TRUSTED_RECOVERY_REF = "main"
 EXPECTED_RECOVERY_SOURCES = frozenset({"open-food-facts", "open-prices"})
 WEEKLY_CRON = re.compile(r"^(?P<minute>[0-9]{1,2}) (?P<hour>[0-9]{1,2}) \* \* (?P<weekday>[0-6])$")
 EXPLICIT_SCHEDULE_BRANCH = re.compile(
@@ -63,9 +64,9 @@ def _scheduled_crons(workflow_text: str, error: type[ValueError]) -> list[str]:
 
 def _trusted_ref(workflow_text: str, error: type[ValueError]) -> str:
     matches = set(re.findall(r"(?m)^\s*EXPECTED_REF:\s*refs/heads/([^\s#]+)\s*$", workflow_text))
-    if len(matches) != 1:
-        raise error("scheduled refresh workflow must declare one trusted default-branch ref")
-    return next(iter(matches))
+    if matches != {TRUSTED_RECOVERY_REF}:
+        raise error("scheduled refresh workflow must require protected main as its trusted ref")
+    return TRUSTED_RECOVERY_REF
 
 
 def _source_schedule_mapping(workflow_text: str, error: type[ValueError]) -> dict[str, str]:
@@ -182,9 +183,8 @@ def validate_operator_recovery(recovery: Any, error: type[ValueError]) -> None:
         raise error("refresh operatorRecovery must be an object")
     if recovery.get("workflow") != RECOVERY_WORKFLOW or recovery.get("workflowDispatch") is not True:
         raise error("refresh operatorRecovery workflow contract is invalid")
-    ref = recovery.get("ref")
-    if not isinstance(ref, str) or not ref:
-        raise error("refresh operatorRecovery trusted ref is invalid")
+    if recovery.get("ref") != TRUSTED_RECOVERY_REF:
+        raise error("refresh operatorRecovery trusted ref must be protected main")
     sources = recovery.get("sources")
     if not isinstance(sources, dict) or set(sources) != EXPECTED_RECOVERY_SOURCES:
         raise error("refresh operatorRecovery sources are invalid")

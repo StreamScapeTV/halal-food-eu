@@ -32,6 +32,8 @@ jobs:
         run: python3 -m py_compile Tools/github_governance.py Tools/tests/test_github_governance.py
       - name: Validate managed label manifest
         run: python3 Tools/github_governance.py validate-manifest
+      - name: Validate repository lifecycle authority
+        run: python3 Tools/github_governance.py validate-authority
       - name: Validate issue forms
         run: ruby Tools/validate_issue_forms.rb
       - name: Run governance unit tests

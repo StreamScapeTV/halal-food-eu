@@ -53,6 +53,7 @@
         "targeted",
         "latestAttempt",
         "scheduledWorkflows",
+        "operatorRecovery",
         "deduplicationKeys"
       ],
       "properties": {
@@ -114,6 +115,35 @@
               "runId": {"type": ["string", "null"]},
               "event": {"type": ["string", "null"]},
               "updatedAt": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "operatorRecovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workflow", "workflowDispatch", "sources"],
+          "properties": {
+            "workflow": {"const": "scheduled-catalog-refresh.yml"},
+            "workflowDispatch": {"const": true},
+            "sources": {
+              "type": "object",
+              "minProperties": 2,
+              "maxProperties": 2,
+              "propertyNames": {"enum": ["open-food-facts", "open-prices"]},
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["sourceKey", "mode", "snapshotIDRequired", "catalogVersionMustBeEmpty", "scheduleCronUTC", "fullCadenceDays", "nextScheduledAt"],
+                "properties": {
+                  "sourceKey": {"enum": ["open-food-facts", "open-prices"]},
+                  "mode": {"const": "full"},
+                  "snapshotIDRequired": {"const": true},
+                  "catalogVersionMustBeEmpty": {"const": true},
+                  "scheduleCronUTC": {"type": "string", "pattern": "^[0-9]{1,2} [0-9]{1,2} \\* \\* [0-6]$"},
+                  "fullCadenceDays": {"const": 7},
+                  "nextScheduledAt": {"type": "string", "format": "date-time"}
+                }
+              }
             }
           }
         },

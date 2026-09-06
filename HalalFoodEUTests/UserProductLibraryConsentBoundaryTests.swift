@@ -9,20 +9,16 @@ struct UserProductLibraryConsentBoundaryTests {
     func preOptInScanCannotRaceIntoHistory() async throws {
         let barcode = try Barcode(validating: "4006381333931")
         let store = ConsentBoundaryStore()
-        let viewModel = UserProductLibraryViewModel(
-            store: store,
-            resolveSavedProduct: ResolveSavedProduct(
-                catalog: EmptyConsentBoundaryCatalog(),
-                currentCatalogVersion: "fixture-v1"
-            ),
-            currentCatalogVersion: "fixture-v1",
-            now: { Date(timeIntervalSince1970: 1_700_000_000) }
-        )
+        let viewModel = makeLibraryViewModel(store: store)
 
         await viewModel.load()
         #expect(viewModel.historyEnabled == false)
+        #expect(viewModel.cameraHistoryConsentToken() == nil)
 
-        viewModel.recordCameraScan(ProductLookupResult(barcode: barcode, product: nil))
+        viewModel.recordCameraScan(
+            ProductLookupResult(barcode: barcode, product: nil),
+            consentToken: 0
+        )
         await viewModel.setHistoryEnabled(true)
         try await Task.sleep(for: .milliseconds(50))
 
@@ -38,11 +34,7 @@ struct UserProductLibraryConsentBoundaryTests {
         let store = ConsentBoundaryStore()
         let libraryViewModel = makeLibraryViewModel(store: store)
         let catalog = SuspendedConsentBoundaryCatalog()
-        let scannerViewModel = ScannerViewModel(
-            lookupProduct: LookupProductByBarcode(catalog: catalog),
-            shouldRecordCameraHistory: { libraryViewModel.historyEnabled },
-            onCameraScanResolved: libraryViewModel.recordCameraScan
-        )
+        let scannerViewModel = makeScanner(catalog: catalog, library: libraryViewModel)
 
         await libraryViewModel.load()
         #expect(libraryViewModel.historyEnabled == false)
@@ -73,11 +65,7 @@ struct UserProductLibraryConsentBoundaryTests {
         let store = ConsentBoundaryStore(initiallyEnabled: true)
         let libraryViewModel = makeLibraryViewModel(store: store)
         let catalog = SuspendedConsentBoundaryCatalog()
-        let scannerViewModel = ScannerViewModel(
-            lookupProduct: LookupProductByBarcode(catalog: catalog),
-            shouldRecordCameraHistory: { libraryViewModel.historyEnabled },
-            onCameraScanResolved: libraryViewModel.recordCameraScan
-        )
+        let scannerViewModel = makeScanner(catalog: catalog, library: libraryViewModel)
 
         await libraryViewModel.load()
         #expect(libraryViewModel.historyEnabled)
@@ -98,6 +86,52 @@ struct UserProductLibraryConsentBoundaryTests {
         let recordedBarcodes = await store.recordedBarcodes
         #expect(recordedBarcodes.isEmpty)
         #expect(libraryViewModel.historyEnabled == false)
+    }
+
+    @Test("Re-enabling history cannot resurrect a scan captured before revocation")
+    func revokeThenReenableDoesNotResurrectPendingCameraEvent() async throws {
+        let rawBarcode = "4006381333931"
+        let store = ConsentBoundaryStore(initiallyEnabled: true)
+        let libraryViewModel = makeLibraryViewModel(store: store)
+        let catalog = SuspendedConsentBoundaryCatalog()
+        let scannerViewModel = makeScanner(catalog: catalog, library: libraryViewModel)
+
+        await libraryViewModel.load()
+        let originalToken = try #require(libraryViewModel.cameraHistoryConsentToken())
+
+        scannerViewModel.acceptScan(
+            ScannedBarcode(payload: rawBarcode, symbology: .retail)
+        )
+        try await waitUntil { await catalog.isLookupSuspended }
+
+        await libraryViewModel.setHistoryEnabled(false)
+        #expect(libraryViewModel.cameraHistoryConsentToken() == nil)
+        await libraryViewModel.setHistoryEnabled(true)
+        let replacementToken = try #require(libraryViewModel.cameraHistoryConsentToken())
+        #expect(replacementToken != originalToken)
+
+        await catalog.resumeLookup()
+        try await waitUntil {
+            if case .notFound = scannerViewModel.lookupState { return true }
+            return false
+        }
+        try await Task.sleep(for: .milliseconds(30))
+
+        #expect(await store.recordedBarcodes.isEmpty)
+        #expect(libraryViewModel.historyEnabled)
+    }
+
+    private func makeScanner(
+        catalog: SuspendedConsentBoundaryCatalog,
+        library: UserProductLibraryViewModel
+    ) -> ScannerViewModel {
+        ScannerViewModel(
+            lookupProduct: LookupProductByBarcode(catalog: catalog),
+            cameraHistoryConsentToken: { library.cameraHistoryConsentToken() },
+            onCameraScanResolved: { result, token in
+                library.recordCameraScan(result, consentToken: token)
+            }
+        )
     }
 
     private func makeLibraryViewModel(store: ConsentBoundaryStore) -> UserProductLibraryViewModel {
@@ -135,6 +169,7 @@ private actor ConsentBoundaryStore: UserProductLibraryStore {
     func isHistoryEnabled() async throws -> Bool { enabled }
 
     func setHistoryEnabled(_ enabled: Bool) async throws {
+        try Task.checkCancellation()
         self.enabled = enabled
     }
 
@@ -144,8 +179,7 @@ private actor ConsentBoundaryStore: UserProductLibraryStore {
         catalogVersion: String,
         versionMarker: SavedProductVersionMarker
     ) async throws {
-        // Deliberately model the original race: if the view model incorrectly
-        // dispatches a pre-consent scan, the store would accept it once enabled.
+        try Task.checkCancellation()
         guard enabled else { return }
         recordedBarcodes.append(barcode)
     }

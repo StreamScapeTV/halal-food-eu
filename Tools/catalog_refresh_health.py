@@ -1,127 +1,44 @@
 #!/usr/bin/env python3
-"""Enrich catalog-health v1 with deterministic source-refresh health.
-
-This layer does not decide halal status and does not mutate evidence. It projects
-refresh due state, privacy-safe queue aggregates, and trusted workflow status into
-the existing catalog-health incident surface.
-"""
+"""Catalog-health refresh facade with deterministic operator recovery metadata."""
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-from collections import Counter
+import sys
 from pathlib import Path
 from typing import Any
 
+TOOLS = str(Path(__file__).resolve().parent)
+if TOOLS not in sys.path:
+    sys.path.insert(0, TOOLS)
+
 import catalog_health
+import catalog_refresh_health_core as core
+import catalog_refresh_recovery as recovery
+
+RefreshHealthError = core.RefreshHealthError
+load_json = core.load_json
+canonical = core.canonical
+digest_without = core.digest_without
+write_json = core.write_json
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_POLICY = ROOT / "Data/refresh/catalog-refresh-policy-v1.json"
+DEFAULT_WORKFLOW = ROOT / ".github/workflows/scheduled-catalog-refresh.yml"
 
 
-class RefreshHealthError(ValueError):
-    pass
-
-
-def load_json(path: Path | None) -> dict[str, Any] | None:
-    if path is None:
-        return None
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RefreshHealthError(f"failed to read JSON {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise RefreshHealthError(f"{path} must contain a JSON object")
-    return value
-
-
-def canonical(value: Any) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
-def digest_without(value: dict[str, Any], field: str) -> str:
-    work = dict(value)
-    work.pop(field, None)
-    return hashlib.sha256(canonical(work)).hexdigest()
-
-
-def write_json(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _queue_projection(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    entries = queue.get("entries")
-    if not isinstance(entries, list):
-        raise RefreshHealthError("refresh queue entries must be an array")
-    reasons = Counter()
-    priorities = Counter()
-    for item in entries:
-        if not isinstance(item, dict):
-            raise RefreshHealthError("refresh queue entry must be an object")
-        reason = item.get("reason")
-        priority = item.get("priority")
-        if not isinstance(reason, str) or not reason:
-            raise RefreshHealthError("refresh queue reason is invalid")
-        if not isinstance(priority, str) or not priority:
-            raise RefreshHealthError("refresh queue priority is invalid")
-        reasons[reason] += 1
-        priorities[priority] += 1
-
-    incident_reasons = {
-        "stale-ingredients",
-        "changed-unreviewed",
-        "certification-expiry",
-        "certification-invalidated",
-        "source-or-quality-blocker",
-    }
-    blockers = sorted(reason for reason in reasons if reason in incident_reasons)
-    return (
-        {
-            "entryCount": len(entries),
-            "reasonCounts": dict(sorted(reasons.items())),
-            "priorityCounts": dict(sorted(priorities.items())),
-            "queueSha256": queue.get("queueSha256"),
-        },
-        blockers,
-    )
-
-
-def _workflow_projection(status: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    if status.get("available") is False:
-        return {"available": False, "conclusion": None, "runId": None, "event": None, "updatedAt": None}, None
-    available = status.get("available")
-    if available not in {None, True}:
-        raise RefreshHealthError("workflow status available flag is invalid")
-    conclusion = status.get("conclusion")
-    if conclusion is not None and not isinstance(conclusion, str):
-        raise RefreshHealthError("workflow status conclusion is invalid")
-    run_id = status.get("runId")
-    if run_id is not None and not isinstance(run_id, (str, int)):
-        raise RefreshHealthError("workflow status runId is invalid")
-    projection = {
-        "available": True,
-        "conclusion": conclusion,
-        "runId": str(run_id) if run_id is not None else None,
-        "event": status.get("event") if isinstance(status.get("event"), str) else None,
-        "updatedAt": status.get("updatedAt") if isinstance(status.get("updatedAt"), str) else None,
-    }
-    unhealthy = conclusion in {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}
-    return projection, conclusion if unhealthy else None
-
-
-def _workflow_projections(statuses: list[dict[str, Any]] | None) -> tuple[dict[str, Any], list[str]]:
-    projections: dict[str, Any] = {}
-    blockers: list[str] = []
-    for status in statuses or []:
-        source_key = status.get("sourceKey")
-        if not isinstance(source_key, str) or not source_key:
-            raise RefreshHealthError("workflow status sourceKey is invalid")
-        if source_key in projections:
-            raise RefreshHealthError(f"duplicate workflow status for source {source_key}")
-        projection, conclusion = _workflow_projection(status)
-        projections[source_key] = projection
-        if conclusion:
-            blockers.append(f"refresh:{source_key}:scheduled-workflow:{conclusion}")
-    return dict(sorted(projections.items())), sorted(blockers)
+def _recovery_inputs(
+    refresh_policy: dict[str, Any] | None,
+    scheduled_workflow_text: str | None,
+) -> tuple[dict[str, Any], str]:
+    policy = refresh_policy if refresh_policy is not None else load_json(DEFAULT_POLICY)
+    if policy is None:
+        raise RefreshHealthError("refresh policy is unavailable")
+    if scheduled_workflow_text is None:
+        try:
+            scheduled_workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise RefreshHealthError(f"failed to read scheduled refresh workflow: {exc}") from exc
+    return policy, scheduled_workflow_text
 
 
 def enrich_health(
@@ -131,160 +48,51 @@ def enrich_health(
     refresh_plan: dict[str, Any],
     refresh_report: dict[str, Any] | None = None,
     workflow_statuses: list[dict[str, Any]] | None = None,
+    refresh_policy: dict[str, Any] | None = None,
+    scheduled_workflow_text: str | None = None,
 ) -> dict[str, Any]:
-    catalog_health.validate_health_report(base_health)
-    if refresh_plan.get("schemaVersion") != 1:
-        raise RefreshHealthError("refresh plan schemaVersion must be 1")
-    source_key = refresh_plan.get("sourceKey")
-    if not isinstance(source_key, str) or not source_key:
-        raise RefreshHealthError("refresh plan sourceKey is invalid")
-
-    queue_projection, queue_blockers = _queue_projection(refresh_queue)
-    workflow_projections, workflow_blockers = _workflow_projections(workflow_statuses)
-    targeted = refresh_plan.get("targetedExecution")
-    if targeted is not None and not isinstance(targeted, dict):
-        raise RefreshHealthError("targetedExecution must be object or null")
-
-    blocker_keys: set[str] = {
-        f"refresh:{source_key}:queue:{reason}" for reason in queue_blockers
-    }
-    blocker_keys.update(workflow_blockers)
-    due_reason = refresh_plan.get("fullDueReason")
-    if due_reason == "full-cadence-due":
-        blocker_keys.add(f"refresh:{source_key}:full-overdue")
-    elif due_reason == "no-successful-full-acquisition":
-        blocker_keys.add(f"refresh:{source_key}:no-successful-full-acquisition")
-
-    attempt = {
-        "available": refresh_report is not None,
-        "attemptStatus": None,
-        "qualityStatus": None,
-        "snapshotID": None,
-        "candidateChangedFromAccepted": None,
-    }
-    last_success_at = None
-    last_success_snapshot = None
-    if refresh_report is not None:
-        if refresh_report.get("schemaVersion") != 1:
-            raise RefreshHealthError("refresh report schemaVersion must be 1")
-        if refresh_report.get("sourceKey") != source_key:
-            raise RefreshHealthError("refresh report source differs from plan")
-        last_success_at = refresh_report.get("lastSuccessfulFullAcquisitionAt")
-        last_success_snapshot = refresh_report.get("lastSuccessfulFullSnapshotID")
-        if (last_success_at is None) != (last_success_snapshot is None):
-            raise RefreshHealthError("refresh report successful-full acquisition clock is inconsistent")
-        if last_success_at is not None and not isinstance(last_success_at, str):
-            raise RefreshHealthError("refresh report successful-full acquisition time is invalid")
-        if last_success_snapshot is not None and (not isinstance(last_success_snapshot, str) or not last_success_snapshot):
-            raise RefreshHealthError("refresh report successful-full snapshot ID is invalid")
-        attempt.update(
-            attemptStatus=refresh_report.get("attemptStatus"),
-            qualityStatus=refresh_report.get("qualityStatus"),
-            snapshotID=refresh_report.get("snapshotID"),
-            candidateChangedFromAccepted=refresh_report.get("candidateChangedFromAccepted"),
-        )
-        if refresh_report.get("attemptStatus") != "complete" or refresh_report.get("qualityStatus") != "pass":
-            blocker_keys.add(
-                f"refresh:{source_key}:attempt:{refresh_report.get('attemptStatus', 'unknown')}:quality:{refresh_report.get('qualityStatus', 'unknown')}"
-            )
-
-    refresh = {
-        "available": True,
-        "sourceKey": source_key,
-        "acceptedSnapshotID": refresh_plan.get("acceptedSnapshotID"),
-        "acceptedContentSha256": refresh_plan.get("acceptedContentSha256"),
-        "lastSuccessfulFullAcquisitionAt": last_success_at,
-        "lastSuccessfulFullSnapshotID": last_success_snapshot,
-        "fullDueAt": refresh_plan.get("fullDueAt"),
-        "fullDueReason": due_reason,
-        "requestedMode": refresh_plan.get("requestedMode"),
-        "fallbackReason": refresh_plan.get("fallbackReason"),
-        "queue": queue_projection,
-        "targeted": {
-            "available": targeted is not None,
-            "enabled": targeted.get("enabled") if targeted else False,
-            "gtinCount": targeted.get("gtinCount") if targeted else 0,
-            "networkExecutionAllowed": targeted.get("networkExecutionAllowed") if targeted else False,
-            "networkExecutionPerformed": targeted.get("networkExecutionPerformed") if targeted else False,
-            "blockedReason": targeted.get("blockedReason") if targeted else None,
-        },
-        "latestAttempt": attempt,
-        "scheduledWorkflows": workflow_projections,
-        "deduplicationKeys": sorted(blocker_keys),
-    }
-
-    report = json.loads(json.dumps(base_health))
-    report["schemaVersion"] = 2
-    report["refresh"] = refresh
-    gate = report.get("qualityGate")
-    if not isinstance(gate, dict):
-        raise RefreshHealthError("base health lacks qualityGate")
-    existing = gate.get("deduplicationKeys", [])
-    if not isinstance(existing, list) or any(not isinstance(item, str) for item in existing):
-        raise RefreshHealthError("base health qualityGate deduplicationKeys are invalid")
-    gate["deduplicationKeys"] = sorted(set(existing) | blocker_keys)
-    incident = gate.get("incident")
-    if blocker_keys and (not isinstance(incident, dict) or incident.get("action") in {None, "none"}):
-        gate["incident"] = {"action": "investigate-refresh", "deduplicationKeys": sorted(blocker_keys)}
+    report = core.enrich_health(
+        base_health=base_health,
+        refresh_queue=refresh_queue,
+        refresh_plan=refresh_plan,
+        refresh_report=refresh_report,
+        workflow_statuses=workflow_statuses,
+    )
+    policy, workflow_text = _recovery_inputs(refresh_policy, scheduled_workflow_text)
+    report["refresh"]["operatorRecovery"] = recovery.build_operator_recovery(
+        evaluated_at=str(report.get("evaluatedAt", "")),
+        refresh_policy=policy,
+        scheduled_workflow_text=workflow_text,
+        error=RefreshHealthError,
+    )
     report["reportSha256"] = digest_without(report, "reportSha256")
     validate_refresh_health(report)
     return report
 
 
 def validate_refresh_health(report: dict[str, Any]) -> None:
-    if report.get("schemaVersion") != 2:
-        raise RefreshHealthError("refresh-enriched health schemaVersion must be 2")
-    refresh = report.get("refresh")
-    if not isinstance(refresh, dict) or refresh.get("available") is not True:
-        raise RefreshHealthError("refresh-enriched health lacks refresh projection")
-    if not isinstance(refresh.get("deduplicationKeys"), list):
-        raise RefreshHealthError("refresh deduplicationKeys must be an array")
-    success_at = refresh.get("lastSuccessfulFullAcquisitionAt")
-    success_snapshot = refresh.get("lastSuccessfulFullSnapshotID")
-    if (success_at is None) != (success_snapshot is None):
-        raise RefreshHealthError("refresh successful-full acquisition clock is inconsistent")
-    workflows = refresh.get("scheduledWorkflows")
-    if not isinstance(workflows, dict):
-        raise RefreshHealthError("refresh scheduledWorkflows must be an object")
-    gate = report.get("qualityGate")
-    if not isinstance(gate, dict):
-        raise RefreshHealthError("refresh-enriched health lacks qualityGate")
-    gate_keys = gate.get("deduplicationKeys")
-    if not isinstance(gate_keys, list):
-        raise RefreshHealthError("qualityGate deduplicationKeys must be an array")
-    if not set(refresh["deduplicationKeys"]).issubset(set(gate_keys)):
-        raise RefreshHealthError("refresh blockers are not exposed through catalog-health incidents")
+    core.validate_refresh_health(report)
+    recovery.validate_operator_recovery(report.get("refresh", {}).get("operatorRecovery"), RefreshHealthError)
     if report.get("reportSha256") != digest_without(report, "reportSha256"):
         raise RefreshHealthError("refresh-enriched health digest mismatch")
 
 
 def human_summary(report: dict[str, Any]) -> str:
-    refresh = report["refresh"]
-    lines = [
-        "# Catalog health",
-        "",
-        f"- Evaluated commit: `{report['commitSha']}`",
-        f"- Evaluated at: `{report['evaluatedAt']}`",
-        f"- Current products: {report['products']['uniqueCurrentSelections']}",
-        f"- Current exact ingredient coverage: {report['products']['withCurrentIngredients']} / {report['products']['uniqueCurrentSelections']}",
-        f"- Quality gate: `{report['qualityGate']['status']}`",
-        "",
-        "## Refresh health",
-        f"- Source: `{refresh['sourceKey']}`",
-        f"- Accepted snapshot: `{refresh['acceptedSnapshotID']}`",
-        f"- Last successful full acquisition: `{refresh['lastSuccessfulFullAcquisitionAt']}` (`{refresh['lastSuccessfulFullSnapshotID']}`)",
-        f"- Full refresh due: `{refresh['fullDueAt']}` (`{refresh['fullDueReason']}`)",
-        f"- Queue entries: `{refresh['queue']['entryCount']}`; reasons: `{json.dumps(refresh['queue']['reasonCounts'], sort_keys=True)}`",
-        f"- Targeted network allowed: `{str(refresh['targeted']['networkExecutionAllowed']).lower()}`; performed: `{str(refresh['targeted']['networkExecutionPerformed']).lower()}`",
-        f"- Scheduled source workflows: `{json.dumps(refresh['scheduledWorkflows'], sort_keys=True)}`",
-        f"- Refresh incident keys: `{json.dumps(refresh['deduplicationKeys'])}`",
-        "",
-        "Refresh dates are independent of formulation, retailer, certification, and assessment evidence dates. A source check never freshens older evidence by itself.",
-        "",
-        f"- Report SHA-256: `{report['reportSha256']}`",
-        "",
+    validate_refresh_health(report)
+    lines = core.human_summary(report).rstrip().splitlines()
+    insertion = next((i for i, line in enumerate(lines) if line.startswith("- Refresh incident keys:")), len(lines))
+    operator = report["refresh"]["operatorRecovery"]
+    extra = [
+        f"- Manual recovery workflow: `{operator['workflow']}` from `{operator['ref']}` (`workflow_dispatch`)"
     ]
-    return "\n".join(lines)
+    for source in operator["sources"].values():
+        extra.append(
+            f"- Manual recovery `{source['sourceKey']}`: `source_key={source['sourceKey']}`, `mode=full`, "
+            f"provide a unique `snapshot_id`, leave `catalog_version` empty; next scheduled full refresh "
+            f"`{source['nextScheduledAt']}` (`{source['scheduleCronUTC']}` UTC)"
+        )
+    lines[insertion:insertion] = extra
+    return "\n".join(lines) + "\n"
 
 
 def parse_args() -> argparse.Namespace:
@@ -312,9 +120,7 @@ def main() -> None:
             validate_refresh_health(report)
             print(f"Validated refresh catalog health {report['reportSha256']}")
             return
-        base = load_json(args.base_health)
-        queue = load_json(args.refresh_queue)
-        plan = load_json(args.refresh_plan)
+        base, queue, plan = load_json(args.base_health), load_json(args.refresh_queue), load_json(args.refresh_plan)
         assert base is not None and queue is not None and plan is not None
         statuses = []
         for path in args.workflow_status:

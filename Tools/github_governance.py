@@ -21,6 +21,26 @@ HEX_COLOR = re.compile(r"^[0-9A-Fa-f]{6}$")
 PRIORITY_PREFIX = "priority:"
 STATUS_PREFIX = "status:"
 MAX_DESCRIPTION_LENGTH = 100
+AUTHORITY_FILES = (
+    Path("AGENTS.md"),
+    Path("docs/governance/issues-and-priorities.md"),
+)
+RETIRED_AUTHORITY_FRAGMENTS = (
+    "no agent state integration",
+    "external claim service",
+)
+REQUIRED_AUTHORITY_FRAGMENTS: dict[Path, tuple[str, ...]] = {
+    Path("AGENTS.md"): (
+        "github issues, specifications, pull requests, commits, and checks are the durable project record",
+        "agent state",
+        "no repository orchestrator",
+    ),
+    Path("docs/governance/issues-and-priorities.md"): (
+        "github issues are the durable execution system",
+        "agent state is a bounded current operational layer",
+        "do not infer readiness",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -82,6 +102,26 @@ def load_manifest(path: Path = DEFAULT_MANIFEST) -> list[dict[str, str]]:
         extra = sorted(set(statuses) - required_statuses)
         raise ValueError(f"status label mismatch; missing={missing}, extra={extra}")
     return labels
+
+
+
+def validate_repository_authority(root: Path = ROOT) -> list[str]:
+    failures: list[str] = []
+    for relative in AUTHORITY_FILES:
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, UnicodeDecodeError) as exc:
+            failures.append(f"{relative}: missing or not strict UTF-8 ({exc})")
+            continue
+        normalized = " ".join(text.lower().split())
+        for fragment in RETIRED_AUTHORITY_FRAGMENTS:
+            if fragment in normalized:
+                failures.append(f"{relative}: retired lifecycle wording remains: {fragment!r}")
+        for fragment in REQUIRED_AUTHORITY_FRAGMENTS[relative]:
+            if fragment not in normalized:
+                failures.append(f"{relative}: missing required lifecycle wording: {fragment!r}")
+    return failures
 
 
 def classify_issue(issue: dict[str, Any]) -> TaxonomyResult:
@@ -203,7 +243,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("validate-manifest", "sync-labels", "validate-roadmap"),
+        choices=("validate-manifest", "validate-authority", "sync-labels", "validate-roadmap"),
     )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     return parser.parse_args()
@@ -211,6 +251,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.command == "validate-authority":
+        failures = validate_repository_authority()
+        if failures:
+            print("Repository lifecycle authority validation failed:", file=sys.stderr)
+            for failure in failures:
+                print(f"- {failure}", file=sys.stderr)
+            raise SystemExit(1)
+        print(f"Validated lifecycle authority in {len(AUTHORITY_FILES)} files")
+        return
+
     manifest = load_manifest(args.manifest)
     if args.command == "validate-manifest":
         print(f"Validated {len(manifest)} managed labels")

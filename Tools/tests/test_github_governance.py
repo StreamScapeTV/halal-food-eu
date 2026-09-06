@@ -39,6 +39,50 @@ class ManifestTests(unittest.TestCase):
                 MODULE.load_manifest(path)
 
 
+class AuthorityTests(unittest.TestCase):
+    def test_repository_authority_matches_shared_lifecycle_boundary(self) -> None:
+        self.assertEqual(MODULE.validate_repository_authority(ROOT), [])
+
+    def test_rejects_retired_no_agent_state_wording(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            governance = root / "docs/governance"
+            governance.mkdir(parents=True)
+            (root / "AGENTS.md").write_text(
+                "GitHub issues, specifications, pull requests, commits, and checks are the durable project record.\n"
+                "No repository Orchestrator is required.\n"
+                "There is no Agent State integration.\n",
+                encoding="utf-8",
+            )
+            (governance / "issues-and-priorities.md").write_text(
+                "GitHub Issues are the durable execution system.\n"
+                "Agent State is a bounded current operational layer.\n"
+                "Do not infer readiness from stale state.\n",
+                encoding="utf-8",
+            )
+            failures = MODULE.validate_repository_authority(root)
+            self.assertTrue(any("no agent state integration" in failure for failure in failures))
+
+    def test_requires_fail_closed_readiness_wording(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            governance = root / "docs/governance"
+            governance.mkdir(parents=True)
+            (root / "AGENTS.md").write_text(
+                "GitHub issues, specifications, pull requests, commits, and checks are the durable project record.\n"
+                "Agent State is bounded current operational truth.\n"
+                "No repository Orchestrator is required.\n",
+                encoding="utf-8",
+            )
+            (governance / "issues-and-priorities.md").write_text(
+                "GitHub Issues are the durable execution system.\n"
+                "Agent State is a bounded current operational layer.\n",
+                encoding="utf-8",
+            )
+            failures = MODULE.validate_repository_authority(root)
+            self.assertTrue(any("do not infer readiness" in failure for failure in failures))
+
+
 class TaxonomyTests(unittest.TestCase):
     def test_accepts_one_priority_and_status(self) -> None:
         issues = [

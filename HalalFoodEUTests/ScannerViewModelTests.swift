@@ -84,6 +84,7 @@ struct ScannerViewModelTests {
         let capture = CameraScanCapture()
         let viewModel = ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
+            shouldRecordCameraHistory: { true },
             onCameraScanResolved: capture.record
         )
 
@@ -111,6 +112,7 @@ struct ScannerViewModelTests {
         let capture = CameraScanCapture()
         let viewModel = ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
+            shouldRecordCameraHistory: { true },
             onCameraScanResolved: capture.record
         )
 

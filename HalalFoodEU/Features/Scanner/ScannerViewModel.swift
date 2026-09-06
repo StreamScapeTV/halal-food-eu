@@ -25,7 +25,7 @@ final class ScannerViewModel {
 
     init(
         lookupProduct: LookupProductByBarcode,
-        shouldRecordCameraHistory: @escaping @MainActor @Sendable () -> Bool = { true },
+        shouldRecordCameraHistory: @escaping @MainActor @Sendable () -> Bool = { false },
         onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
     ) {
         self.lookupProduct = lookupProduct

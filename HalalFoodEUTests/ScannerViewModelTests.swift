@@ -25,8 +25,6 @@ struct ScannerViewModelTests {
             return false
         }
 
-        // The slow catalog intentionally ignores cancellation so the obsolete
-        // lookup still returns. The cancelled result task must not publish it.
         try await Task.sleep(for: .milliseconds(320))
         #expect(viewModel.lookupState == .notFound(second))
     }
@@ -76,7 +74,7 @@ struct ScannerViewModelTests {
         #expect(lookups == [selected.rawValue])
     }
 
-    @Test("A valid camera scan emits one canonical history handoff and retry does not duplicate it")
+    @Test("A valid camera scan emits one canonical consent-token handoff and retry does not duplicate it")
     func cameraScanHistoryHandoff() async throws {
         let rawBarcode = "4006381333931"
         let expected = try Barcode(validating: rawBarcode)
@@ -84,7 +82,7 @@ struct ScannerViewModelTests {
         let capture = CameraScanCapture()
         let viewModel = ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
-            shouldRecordCameraHistory: { true },
+            cameraHistoryConsentToken: { 41 },
             onCameraScanResolved: capture.record
         )
 
@@ -99,11 +97,13 @@ struct ScannerViewModelTests {
         }
 
         #expect(capture.results.map(\.barcode) == [expected])
+        #expect(capture.consentTokens == [41])
 
         viewModel.retry()
         try await waitUntilLookupCount(2, in: catalog)
         try await Task.sleep(for: .milliseconds(30))
         #expect(capture.results.map(\.barcode) == [expected])
+        #expect(capture.consentTokens == [41])
     }
 
     @Test("Manual lookup, search selection, and demo data never emit camera history")
@@ -112,7 +112,7 @@ struct ScannerViewModelTests {
         let capture = CameraScanCapture()
         let viewModel = ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
-            shouldRecordCameraHistory: { true },
+            cameraHistoryConsentToken: { 41 },
             onCameraScanResolved: capture.record
         )
 
@@ -129,6 +129,7 @@ struct ScannerViewModelTests {
         try await Task.sleep(for: .milliseconds(30))
 
         #expect(capture.results.isEmpty)
+        #expect(capture.consentTokens.isEmpty)
     }
 
     private func waitUntilLookupStarted(
@@ -170,9 +171,11 @@ struct ScannerViewModelTests {
 @MainActor
 private final class CameraScanCapture {
     private(set) var results: [ProductLookupResult] = []
+    private(set) var consentTokens: [UInt64] = []
 
-    func record(_ result: ProductLookupResult) {
+    func record(_ result: ProductLookupResult, consentToken: UInt64) {
         results.append(result)
+        consentTokens.append(consentToken)
     }
 }
 

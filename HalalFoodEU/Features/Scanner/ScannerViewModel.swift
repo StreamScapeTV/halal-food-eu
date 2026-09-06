@@ -18,15 +18,18 @@ final class ScannerViewModel {
     private(set) var lookupState: LookupState = .idle
 
     private let lookupProduct: LookupProductByBarcode
+    private let shouldRecordCameraHistory: @MainActor @Sendable () -> Bool
     private let onCameraScanResolved: @MainActor @Sendable (ProductLookupResult) -> Void
     private var lookupTask: Task<Void, Never>?
     private var lastRequest: (payload: String, symbology: Barcode.SymbologyHint)?
 
     init(
         lookupProduct: LookupProductByBarcode,
+        shouldRecordCameraHistory: @escaping @MainActor @Sendable () -> Bool = { true },
         onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
     ) {
         self.lookupProduct = lookupProduct
+        self.shouldRecordCameraHistory = shouldRecordCameraHistory
         self.onCameraScanResolved = onCameraScanResolved
     }
 
@@ -37,7 +40,15 @@ final class ScannerViewModel {
     func acceptScan(_ scan: ScannedBarcode) {
         isScannerPresented = false
         manualBarcode = scan.payload
-        submit(scan.payload, symbology: scan.symbology, recordCameraHistory: true)
+        // Consent belongs to the physical scan event, not to the later async
+        // catalog-resolution instant. Carry this immutable eligibility decision
+        // through lookup so a later opt-in cannot admit a pre-consent scan.
+        let recordCameraHistory = shouldRecordCameraHistory()
+        submit(
+            scan.payload,
+            symbology: scan.symbology,
+            recordCameraHistory: recordCameraHistory
+        )
     }
 
     func lookup(_ barcode: Barcode) {

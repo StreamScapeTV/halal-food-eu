@@ -19,9 +19,12 @@ struct HalalFoodEUApp: App {
         let userProductLibraryViewModel = container.makeUserProductLibraryViewModel()
         _userProductLibraryViewModel = State(initialValue: userProductLibraryViewModel)
         _scannerViewModel = State(
-            initialValue: container.makeScannerViewModel { result in
-                userProductLibraryViewModel.recordCameraScan(result)
-            }
+            initialValue: container.makeScannerViewModel(
+                shouldRecordCameraHistory: { userProductLibraryViewModel.historyEnabled },
+                onCameraScanResolved: { result in
+                    userProductLibraryViewModel.recordCameraScan(result)
+                }
+            )
         )
         _productSearchViewModel = State(initialValue: container.makeProductSearchViewModel())
         _ingredientOCRViewModel = State(initialValue: container.makeIngredientOCRViewModel())

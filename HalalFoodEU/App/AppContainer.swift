@@ -111,10 +111,12 @@ struct AppContainer {
     }
 
     func makeScannerViewModel(
+        shouldRecordCameraHistory: @escaping @MainActor @Sendable () -> Bool = { true },
         onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
     ) -> ScannerViewModel {
         ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
+            shouldRecordCameraHistory: shouldRecordCameraHistory,
             onCameraScanResolved: onCameraScanResolved
         )
     }

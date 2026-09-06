@@ -81,8 +81,11 @@ def human_summary(report: dict[str, Any]) -> str:
     validate_refresh_health(report)
     lines = core.human_summary(report).rstrip().splitlines()
     insertion = next((i for i, line in enumerate(lines) if line.startswith("- Refresh incident keys:")), len(lines))
-    extra = [f"- Manual recovery workflow: `{report['refresh']['operatorRecovery']['workflow']}` (`workflow_dispatch`)"]
-    for source in report["refresh"]["operatorRecovery"]["sources"].values():
+    operator = report["refresh"]["operatorRecovery"]
+    extra = [
+        f"- Manual recovery workflow: `{operator['workflow']}` from `{operator['ref']}` (`workflow_dispatch`)"
+    ]
+    for source in operator["sources"].values():
         extra.append(
             f"- Manual recovery `{source['sourceKey']}`: `source_key={source['sourceKey']}`, `mode=full`, "
             f"provide a unique `snapshot_id`, leave `catalog_version` empty; next scheduled full refresh "

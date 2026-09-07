@@ -1,7 +1,7 @@
 # 027 — Native app shell and local settings
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-05
+**Last reviewed:** 2026-09-07
 
 ## Top-level application shell
 
@@ -13,7 +13,7 @@
 ## Appearance preference
 
 - **HF-SETTINGS-001:** Settings offers exactly **System**, **Light**, and **Dark** appearance choices. System is the default. The selected value is applied through SwiftUI system color-scheme APIs and never changes product evidence, status, reason, freshness, or methodology meaning.
-- **HF-SETTINGS-002:** Appearance is the only preference persisted by this surface. It is stored locally as a small enum value outside both `catalog.sqlite3` and the specification-006 history/favorites SQLite store. Missing or unrecognized persisted values fail safely to System.
+- **HF-SETTINGS-002:** Appearance remains the only general UI preference persisted by this surface. Specification 029 explicitly supersedes the former appearance-only restriction only to allow the selected/installed market identifiers and bounded local module-management state required for signed market catalogs. These values remain outside catalog evidence and the specification-006 history/favorites SQLite store; missing or unrecognized appearance values fail safely to System, and invalid market-module state fails closed to a recoverable local state.
 
 ## Language handoff
 

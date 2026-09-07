@@ -7,7 +7,7 @@ Halal Food EU uses a small clean architecture optimized for one iOS application 
 ```text
 SwiftUI Features ──> Domain Use Cases ──> Domain Repository Protocols
        │                                         ▲
-       └──────── App composition root ───────────┤
+       └─────── App composition root ───────────┤
                                                  │
                                       SQLite Data Implementation
 ```
@@ -52,3 +52,5 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0008 — Catalog quality and release gates](ADR-0008-catalog-quality-release-gates.md)
 - [ADR-0009 — Versioned halal methodology and explicit human review](ADR-0009-versioned-halal-methodology-and-human-review.md)
 - [ADR-0010 — Owner-admitted product evidence with local Apple Vision OCR](ADR-0010-owner-admitted-local-vision-product-evidence-intake.md)
+- [ADR-0011 — Digest-bound offline product search index](ADR-0011-digest-bound-offline-product-search-index.md)
+- [ADR-0012 — Per-market immutable catalog modules with signed optional delivery](ADR-0012-per-market-immutable-catalog-modules.md)

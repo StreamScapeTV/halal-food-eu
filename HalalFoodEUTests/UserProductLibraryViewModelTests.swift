@@ -59,8 +59,12 @@ struct UserProductLibraryViewModelTests {
             now: { timestamp }
         )
         await viewModel.load()
+        let consentToken = try #require(viewModel.cameraHistoryConsentToken())
 
-        viewModel.recordCameraScan(ProductLookupResult(barcode: barcode, product: nil))
+        viewModel.recordCameraScan(
+            ProductLookupResult(barcode: barcode, product: nil),
+            consentToken: consentToken
+        )
         try await waitUntil {
             await store.recordedScans.count == 1
         }

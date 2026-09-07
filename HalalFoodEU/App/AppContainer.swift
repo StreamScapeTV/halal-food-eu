@@ -111,10 +111,12 @@ struct AppContainer {
     }
 
     func makeScannerViewModel(
-        onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult) -> Void = { _ in }
+        cameraHistoryConsentToken: @escaping @MainActor @Sendable () -> UInt64? = { nil },
+        onCameraScanResolved: @escaping @MainActor @Sendable (ProductLookupResult, UInt64) -> Void = { _, _ in }
     ) -> ScannerViewModel {
         ScannerViewModel(
             lookupProduct: LookupProductByBarcode(catalog: catalog),
+            cameraHistoryConsentToken: cameraHistoryConsentToken,
             onCameraScanResolved: onCameraScanResolved
         )
     }

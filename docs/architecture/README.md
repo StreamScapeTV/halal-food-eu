@@ -7,7 +7,7 @@ Halal Food EU uses a small clean architecture optimized for one iOS application 
 ```text
 SwiftUI Features ──> Domain Use Cases ──> Domain Repository Protocols
        │                                         ▲
-       └─────── App composition root ───────────┤
+       └──────── App composition root ───────────┤
                                                  │
                                       SQLite Data Implementation
 ```

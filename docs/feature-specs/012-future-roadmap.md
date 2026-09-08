@@ -1,15 +1,14 @@
 # 012 — Future roadmap
 
 **Status:** Future; non-binding until promoted by a reviewed specification.  
-**Last reviewed:** 2026-09-03
+**Last reviewed:** 2026-09-07
 
-Potential capabilities are recorded here to keep the initial architecture extensible without prematurely implementing them. Capabilities already promoted into accepted specifications are not future authority here: indexed offline product search is owned by specification 006, on-device ingredient OCR by specification 026, and local favorites/scan history/current-catalog saved-item comparison by specification 006.
+Potential capabilities are recorded here to keep the initial architecture extensible without prematurely implementing them. Capabilities already promoted into accepted specifications are not future authority here: indexed offline product search is owned by specification 006, on-device ingredient OCR by specification 026, local favorites/scan history/current-catalog saved-item comparison by specification 006, and full signed user-selectable per-market catalog modules by specification 029.
 
 ## Catalog evolution
 
-- Signed, compressed catalog delta downloads with atomic rollback and an offline bundled fallback.
+- Signed binary/row delta catalog updates layered on the full signed market-module contract in specification 029.
 - Background freshness checks that remain optional and privacy-preserving.
-- Country/market-specific formulations sharing a GTIN with explicit conflict handling.
 - Multiple compatible source catalogs kept separate when licenses cannot be combined.
 - Reviewer tooling, change queues, double review for high-risk assessment changes, and audit exports.
 

@@ -1,7 +1,7 @@
 # 027 — Native app shell and local settings
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-05
+**Last reviewed:** 2026-09-07
 
 ## Top-level application shell
 
@@ -13,7 +13,7 @@
 ## Appearance preference
 
 - **HF-SETTINGS-001:** Settings offers exactly **System**, **Light**, and **Dark** appearance choices. System is the default. The selected value is applied through SwiftUI system color-scheme APIs and never changes product evidence, status, reason, freshness, or methodology meaning.
-- **HF-SETTINGS-002:** Appearance is the only preference persisted by this surface. It is stored locally as a small enum value outside both `catalog.sqlite3` and the specification-006 history/favorites SQLite store. Missing or unrecognized persisted values fail safely to System.
+- **HF-SETTINGS-002:** Appearance remains the only general UI preference persisted by this surface. Specification 029 explicitly supersedes the former appearance-only restriction only to allow the selected/installed market identifiers and bounded local module-management state required for signed market catalogs. These values remain outside catalog evidence and the specification-006 history/favorites SQLite store; missing or unrecognized appearance values fail safely to System, and invalid market-module state fails closed to a recoverable local state.
 
 ## Language handoff
 
@@ -21,12 +21,12 @@
 
 ## Privacy and local data
 
-- **HF-SETTINGS-004:** Settings summarizes the existing privacy boundary without weakening specification 008: the product catalog is bundled/offline, core lookup does not require a network connection, ingredient OCR runs on device and is ephemeral, favorites/history are local-only, and the app has no account, analytics, advertising, or tracking system.
+- **HF-SETTINGS-004:** Settings summarizes the existing privacy boundary without weakening specifications 008 and 029: the Germany baseline catalog is bundled and offline; any installed verified market module remains fully offline for normal lookup/search after installation; optional module metadata/download networking is user-visible and sends no scan, search, history, account/device identifier, or location data; ingredient OCR runs on device and is ephemeral; favorites/history are local-only; and the app has no account, analytics, advertising, or tracking system.
 - **HF-SETTINGS-005:** Settings provides a clear route to Saved for managing favorites and optional scan history. It does not introduce a second erase/reset implementation.
 
 ## Runtime identity
 
-- **HF-SETTINGS-006:** Settings displays the app marketing version, build number, and current bundled catalog version from local runtime identity. Missing identity fields are shown as unavailable; the surface does not fetch remote release or catalog metadata.
+- **HF-SETTINGS-006:** Settings displays the app marketing version, build number, and the active locally verified catalog identity. For the bundled Germany baseline this is the bundled catalog version; for an active downloaded market module it is that installed module's market/catalog version and local verified manifest identity required by specification 029. Missing local identity fields are shown as unavailable. Remote metadata checks occur only through the explicit optional module-management behavior in specification 029 and are never required to display the currently installed/bundled runtime identity.
 
 ## Localization and accessibility
 

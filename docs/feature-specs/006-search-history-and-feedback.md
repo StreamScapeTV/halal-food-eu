@@ -1,7 +1,7 @@
 # 006 — Search, history, and feedback
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-03
+**Last reviewed:** 2026-09-07
 
 ## Product search
 
@@ -17,10 +17,10 @@
   - Scan history is **off by default**.
   - Favorites are explicit user actions and remain independent of the scan-history setting; favoriting a product must not enable history.
 - **HF-HISTORY-002:** The user can clear all history and remove individual history entries. Favorites can also be removed individually. Disabling future history does not silently delete existing entries; clear/delete remain explicit user actions.
-- **HF-HISTORY-003:** History stores only a valid camera-scanned canonical GTIN, scan time, the catalog version viewed at that time, and a bounded versioned product-comparison fingerprint. It never stores camera imagery, OCR imagery/text, a full stale `ProductRecord`, device location, manual barcode lookups, product-search selections, demo lookups, or correction/submission payloads.
+- **HF-HISTORY-003:** History stores only a valid camera-scanned canonical GTIN, scan time, the ISO market active at that physical event, the catalog version viewed at that time, and a bounded versioned product-comparison fingerprint. It never stores camera imagery, OCR imagery/text, a full stale `ProductRecord`, device location, manual barcode lookups, product-search selections, demo lookups, or correction/submission payloads.
   - A retry of a resolved camera scan is a lookup action, not a second scan event.
   - History retains at most the newest **200** scan entries on device.
-- **HF-HISTORY-004:** Opening an old history/favorite item resolves its GTIN through the current exact bundled `ProductCatalog` path. The UI distinguishes:
+- **HF-HISTORY-004:** Opening an old history/favorite item resolves its saved `(market, GTIN)` through the current exact verified catalog for that same market under specification 029. Pre-module records may be migrated to `DE` because their accepted source application was Germany-only; a missing non-Germany module is shown as unavailable and never falls through to another market. The UI distinguishes:
   - the catalog version changed but the exact product-level marker is unchanged;
   - the current product record materially changed;
   - a previously present product is no longer in the current catalog; and

@@ -1,20 +1,20 @@
 # 010 — Catalog pipeline and release
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-09-08
 
 ## Pipeline stages
 
 1. **Acquire** from an approved source and capture source/license metadata.
 2. **Stage** immutable raw observations outside the app bundle.
 3. **Normalize** GTIN, language, whitespace, dates, taxonomy/category signals, and ingredient tokens without destroying source text.
-4. **Select** detailed Germany catalog candidates through the accepted versioned selection policy, preserving explicit basic/invalid exclusions and metrics.
+4. **Select** detailed market catalog candidates through an accepted versioned selection policy, preserving explicit basic/invalid exclusions and metrics. The bundled Germany baseline uses the accepted Germany policy; each additional specification-029 market requires its own accepted source/selection scope before release.
 5. **Detect change** using source record and ingredient hash.
 6. **Assess** through a versioned rule/review process.
 7. **Build** a new SQLite file from deterministic ordered inputs.
 8. **Validate** logical constraints, selection metrics, query plans, integrity, license compatibility, and digest.
 9. **Review** sampled records, deterministic basic exclusions, and all changed high-risk assessments.
-10. **Release** the database and manifest inside a tested app build.
+10. **Release** the baseline database and manifest inside a tested app build. Specification 029 additionally permits a separately signed per-market release artifact after the same applicable catalog gates pass.
 
 ## Accepted requirements
 
@@ -45,4 +45,4 @@ Prerelease labels such as `demo.1` identify non-production synthetic catalogs.
 
 ## Rollback
 
-Because the initial catalog ships in the app bundle, rollback occurs through a new app release containing the last known-good catalog. A future separately downloaded catalog requires signature verification, atomic replacement, compatibility checks, and retained previous version before it can become Accepted.
+The bundled baseline rolls back through a new app release containing the last known-good catalog. Specification 029 accepts separately downloaded per-market catalogs only when signature/digest/schema/market/app/source-policy checks pass before activation, replacement is atomic, and the previous verified market version is retained for rollback.

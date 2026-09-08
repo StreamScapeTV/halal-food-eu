@@ -1,15 +1,15 @@
 # 003 — Catalog and SQLite
 
 **Status:** Accepted  
-**Last reviewed:** 2026-08-29
+**Last reviewed:** 2026-09-07
 
 ## Storage decision
 
-The product catalog is a versioned SQLite database bundled as an application resource. It is immutable at runtime. Mutable user data, if introduced, belongs in a separate store and must never rewrite catalog evidence.
+The product catalog has a mandatory versioned SQLite baseline bundled as an application resource. It is immutable at runtime. Specification 029 additionally permits verified immutable per-market SQLite modules installed after launch; those modules use the same read-only catalog boundary and never weaken the bundled Germany fallback. Mutable user data belongs in a separate store and must never rewrite catalog evidence.
 
 ## Accepted requirements
 
-- **HF-DB-001:** The application bundle must include `catalog.sqlite3` and `catalog-manifest.json`.
+- **HF-DB-001:** The application bundle must include baseline `catalog.sqlite3` and `catalog-manifest.json`. Optional specification-029 market modules do not replace this bundle requirement.
 - **HF-DB-002:** Runtime catalog access must open SQLite read-only. Application code must not execute schema migrations, inserts, updates, deletes, or vacuum operations against the bundled catalog.
 - **HF-DB-003:** The normalized 14-digit GTIN is the product primary key and must have a unique B-tree lookup path.
 - **HF-DB-004:** Ingredient observations are immutable rows. A product points to its current observation while older observations can remain available for provenance/history.

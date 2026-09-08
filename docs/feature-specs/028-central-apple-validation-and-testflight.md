@@ -1,7 +1,7 @@
 # 028 — Central Apple validation and TestFlight release boundary
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-05
+**Last reviewed:** 2026-09-07
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Halal Food EU may reuse the organization-wide product-neutral Apple workflow for
 - **HF-APPLE-CI-007:** The catalog packaged for TestFlight must come from successful `catalog-release.yml` release evidence for the same exact application source SHA. The wrapper revalidates the production SQLite/manifest pair before archive and verifies the same catalog and manifest SHA-256 values inside both the signed archive and exported IPA before upload.
 - **HF-APPLE-CI-008:** Signing/export/upload authentication is temporary runner state supplied by Central. Product tooling must not commit credentials, echo private-key contents, persist credentials in the repository, or leave a second product-owned credential store after the Central cleanup boundary.
 - **HF-APPLE-CI-009:** A real TestFlight upload is an external release proof, not a prerequisite for implementing the fail-closed wrapper while production catalog evidence or owner-authorized signing credentials are unavailable. The first authorized upload must still prove the complete exact-source/build/catalog contract before the release lane is considered operationally proven.
-- **HF-APPLE-CI-010:** Future downloadable market modules from specifications 012/025/026 or issue #72 do not silently change this release boundary. Until a later accepted specification explicitly promotes that model, TestFlight packages the accepted bundled production catalog.
+- **HF-APPLE-CI-010:** Specification 029 accepts optional post-install downloaded market modules, but they do not silently change this binary release boundary. TestFlight still packages and verifies the accepted bundled production baseline; downloaded market modules are separately verified data and cannot become a hidden TestFlight, Central CI, or archive prerequisite without another explicit accepted release-spec change.
 
 ## Validation
 

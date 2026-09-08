@@ -19,7 +19,7 @@ Adopt **one immutable SQLite catalog per market/country** as the default physica
 
 A concurrency-safe market catalog router owns the active market and a set of verified read-only catalog/search repositories. It implements or fronts the existing domain repository boundaries so scanner and search features continue to depend on domain protocols rather than SQLite, files, networking, or release metadata.
 
-The user selects the active market explicitly. Device/App Store region may suggest a market but does not choose it silently and precise location is never requested. Exact lookup/search use the active market only. Missing/unsupported markets are explicit recoverable states; the router never falls through to Germany or another market and thereby changes formulation semantics.
+The user selects the active market explicitly. Device/App Store region may suggest a market but does not choose it silently and precise location is never requested. Every scan/manual-lookup/search operation captures an immutable market context before asynchronous resolution; a later market switch invalidates stale presentation or cancels the old operation rather than retargeting it. Exact lookup/search therefore use the market accepted for that operation only. Missing/unsupported markets are explicit recoverable states; the router never falls through to Germany or another market and thereby changes formulation semantics.
 
 Saved history/favorites become `(market, GTIN)` references. The writable local store moves to a market-aware schema; legacy Germany-only records may be deterministically migrated to `DE`. This remains local mutable user state and is not part of any downloaded module.
 

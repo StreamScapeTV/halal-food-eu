@@ -21,12 +21,12 @@
 
 ## Privacy and local data
 
-- **HF-SETTINGS-004:** Settings summarizes the existing privacy boundary without weakening specification 008: the product catalog is bundled/offline, core lookup does not require a network connection, ingredient OCR runs on device and is ephemeral, favorites/history are local-only, and the app has no account, analytics, advertising, or tracking system.
+- **HF-SETTINGS-004:** Settings summarizes the existing privacy boundary without weakening specifications 008 and 029: the Germany baseline catalog is bundled and offline; any installed verified market module remains fully offline for normal lookup/search after installation; optional module metadata/download networking is user-visible and sends no scan, search, history, account/device identifier, or location data; ingredient OCR runs on device and is ephemeral; favorites/history are local-only; and the app has no account, analytics, advertising, or tracking system.
 - **HF-SETTINGS-005:** Settings provides a clear route to Saved for managing favorites and optional scan history. It does not introduce a second erase/reset implementation.
 
 ## Runtime identity
 
-- **HF-SETTINGS-006:** Settings displays the app marketing version, build number, and current bundled catalog version from local runtime identity. Missing identity fields are shown as unavailable; the surface does not fetch remote release or catalog metadata.
+- **HF-SETTINGS-006:** Settings displays the app marketing version, build number, and the active locally verified catalog identity. For the bundled Germany baseline this is the bundled catalog version; for an active downloaded market module it is that installed module's market/catalog version and local verified manifest identity required by specification 029. Missing local identity fields are shown as unavailable. Remote metadata checks occur only through the explicit optional module-management behavior in specification 029 and are never required to display the currently installed/bundled runtime identity.
 
 ## Localization and accessibility
 

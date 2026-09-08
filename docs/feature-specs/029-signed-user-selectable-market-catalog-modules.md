@@ -1,7 +1,7 @@
 # 029 — Signed user-selectable market catalog modules
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-07
+**Last reviewed:** 2026-09-08
 
 ## Purpose
 
@@ -20,8 +20,8 @@ This specification promotes full-market catalog modules from future roadmap scop
 ## Market selection and routing
 
 - **HF-MODULE-006:** The user explicitly chooses the active market and which supported market modules are installed. App Store/device region may be used only as a first-run suggestion; precise location is not requested or used for market selection.
-- **HF-MODULE-007:** Scanner exact lookup, offline product search, product detail, and not-found semantics use only the explicitly active market. Every accepted scan/manual-lookup/search operation captures that market before asynchronous resolution; a later market switch must cancel/invalidate the pending operation or discard its stale result before presentation, and must never re-resolve the same event against the newly active market. For `DE`, the last verified downloaded Germany module may supersede the bundled Germany catalog, otherwise the bundle is the deliberate Germany fallback. For any other active market, a missing/removed/unverified module produces a recoverable unsupported/not-installed state; the app must not silently answer from Germany or another installed market.
-- **HF-MODULE-008:** Switching the active market does not recreate the top-level app shell. A long-lived concurrency-safe market catalog router may change the selected read-only catalog beneath the existing domain repository/use-case boundaries so scanner/search features do not acquire SQLite/download concerns. Repository operations accept or internally capture an immutable market context so router mutation cannot retarget an in-flight request.
+- **HF-MODULE-007:** Scanner exact lookup, offline product search, product detail, and not-found semantics use only the explicitly active market. Every accepted scan/manual-lookup/search operation captures its market before asynchronous resolution; if the active market changes while work is in flight, that operation is cancelled/invalidated or its stale result is discarded and never retargeted to the newly active market. A result/not-found correction or evidence-submission draft created under specification 018 inherits that exact operation's `(market, catalog version)` identity and a later market switch must not rewrite the draft. For `DE`, the last verified downloaded Germany module may supersede the bundled Germany catalog, otherwise the bundle is the deliberate Germany fallback. For any other active market, a missing/removed/unverified module produces a recoverable unsupported/not-installed state; the app must not silently answer from Germany or another installed market.
+- **HF-MODULE-008:** Switching the active market does not recreate the top-level app shell. A long-lived concurrency-safe market catalog router may change the selected read-only catalog beneath the existing domain repository/use-case boundaries so scanner/search features do not acquire SQLite/download concerns. Each operation carries an immutable market context so a concurrent router change cannot alter the meaning of an already accepted lookup/search event.
 - **HF-MODULE-009:** Settings is the user-visible surface for market selection/module state and shows market name/code, installed catalog version/date, approximate installed/download size where known, ingredient/evidence coverage limitations, update result, and removal/reset actions. No new top-level tab is added.
 - **HF-MODULE-010:** Market selection is local non-sensitive preference state. This requirement supersedes HF-SETTINGS-002 only to permit persisted selected/installed market identifiers and related local module-management state in addition to appearance; it does not authorize analytics, location history, account identity, or scan-derived preference data.
 
@@ -66,7 +66,8 @@ This specification promotes full-market catalog modules from future roadmap scop
 Automated and release validation must cover at minimum:
 
 - two deterministic markets containing the same GTIN with intentionally different formulation/assessment, proving no cross-market inheritance;
-- active-market scanner and search routing, unsupported/not-installed market behavior, market switching, and a delayed lookup/search race proving an in-flight request cannot be retargeted or rendered under the newly selected market;
+- active-market scanner and search routing, unsupported/not-installed market behavior, market switching, and delayed lookup/search races where an old-market result must not publish after the active market changes;
+- result/not-found evidence-submission drafts retaining the exact initiating market/catalog identity across later market switches and retries;
 - history/favorite market scoping plus v1→v2 local-store migration and removed-module behavior;
 - valid/tampered/wrong-market/wrong-key/wrong-digest/incompatible-schema/incompatible-app/oversized/truncated release candidates;
 - atomic install, replacement, cancellation/crash recovery, rollback, removal, and bundled reset/fallback;

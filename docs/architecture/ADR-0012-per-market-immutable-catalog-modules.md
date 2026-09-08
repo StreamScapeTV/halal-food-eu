@@ -1,7 +1,7 @@
 # ADR-0012 — Per-market immutable catalog modules with signed optional delivery
 
 **Status:** Accepted  
-**Date:** 2026-09-07
+**Date:** 2026-09-08
 
 ## Context
 
@@ -19,7 +19,9 @@ Adopt **one immutable SQLite catalog per market/country** as the default physica
 
 A concurrency-safe market catalog router owns the active market and a set of verified read-only catalog/search repositories. It implements or fronts the existing domain repository boundaries so scanner and search features continue to depend on domain protocols rather than SQLite, files, networking, or release metadata.
 
-The user selects the active market explicitly. Device/App Store region may suggest a market but does not choose it silently and precise location is never requested. Every scan/manual-lookup/search operation captures an immutable market context before asynchronous resolution; a later market switch invalidates stale presentation or cancels the old operation rather than retargeting it. Exact lookup/search therefore use the market accepted for that operation only. Missing/unsupported markets are explicit recoverable states; the router never falls through to Germany or another market and thereby changes formulation semantics.
+The user selects the active market explicitly. Device/App Store region may suggest a market but does not choose it silently and precise location is never requested. Exact lookup/search use the active market only. Missing/unsupported markets are explicit recoverable states; the router never falls through to Germany or another market and thereby changes formulation semantics.
+
+Each accepted scan, manual lookup, or search operation captures an immutable market context before asynchronous work begins. If Settings changes the active market while that operation is in flight, the old operation is cancelled/invalidated or its stale result is discarded; the same physical/user event is never silently retargeted to a different market. Product-detail presentation and any result/not-found evidence-submission draft inherit the exact market/catalog identity that produced the result. A later market switch does not rewrite an existing submission draft.
 
 Saved history/favorites become `(market, GTIN)` references. The writable local store moves to a market-aware schema; legacy Germany-only records may be deterministically migrated to `DE`. This remains local mutable user state and is not part of any downloaded module.
 
@@ -79,8 +81,9 @@ Rejected until real update-bandwidth measurements justify patch complexity. Full
 ## Consequences and follow-up
 
 - Specification 029 is the normative runtime/UX contract.
-- Specification 027 is extended so Settings may persist market selection/module-management state in addition to appearance.
+- Specification 027 is extended so Settings may persist market selection/module-management state in addition to appearance and may display/manage locally verified module identity.
 - Specification 006/008 is extended narrowly so saved history/favorites include market code.
+- Specification 018/020 is extended so result presentation and evidence-submission context use the exact active market/catalog identity rather than assuming the bundled Germany catalog.
 - Specification 010/012/028 must distinguish the mandatory bundled app release from optional post-install signed market assets.
 - Issue #25 implements the signing/channel/publication and atomic download/install mechanics under this architecture.
 - Issue #26 admits additional markets only after their source, methodology, localization, coverage, size, and release gates pass.

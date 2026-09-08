@@ -1,7 +1,7 @@
 # 018 — Backend-free product evidence submission
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-01
+**Last reviewed:** 2026-09-08
 
 ## Purpose
 
@@ -12,9 +12,9 @@ The canonical user-side v1 machine-readable contract is `Data/submissions/produc
 ## Entry points and identity
 
 - **HF-SUBMIT-001:** A valid not-found GTIN offers `Submit product evidence`. Product results offer ingredient, identity, and certification/result correction actions, including when ingredients are missing or stale.
-- **HF-SUBMIT-002:** The submission keeps the canonical GTIN-14, market, exact bundled catalog version, app version, issue type, and optional user-entered product/retailer context. Device location is never requested.
+- **HF-SUBMIT-002:** The submission keeps the canonical GTIN-14, market, exact locally verified catalog version that supplied the initiating result/not-found context, app version, issue type, and optional user-entered product/retailer context. Under specification 029 that catalog identity may be the bundled Germany baseline or an installed verified market module. The `(market, catalog version)` snapshot is captured when the submission draft is created and remains stable for that draft and its retries; a later active-market switch must not rewrite or retarget it. Device location is never requested.
 - **HF-SUBMIT-003:** One stable submission ID is generated when the submission view model is created and is reused for retries during that draft. The stable subject is `[Halal Food EU Product] <submission-id> <GTIN>`.
-- **HF-SUBMIT-004:** Corrections may include the current catalog ingredient/source reference and dates needed to identify what is being challenged. The user package does not serialize the current halal assessment as accepted evidence and contains no submitter-provided accepted halal verdict.
+- **HF-SUBMIT-004:** Corrections may include the current active-catalog ingredient/source reference and dates needed to identify what is being challenged. The user package does not serialize the current halal assessment as accepted evidence and contains no submitter-provided accepted halal verdict.
 
 ## Package evidence
 
@@ -28,7 +28,7 @@ The canonical user-side v1 machine-readable contract is `Data/submissions/produc
 
 - **HF-SUBMIT-010:** The JSON envelope uses `schemaVersion: 1` and `sourceType: user-package-evidence`, validates GTIN/market/date/text/attachment bounds, and records consent version/date. Its field set is closed by the canonical JSON Schema.
 - **HF-SUBMIT-011:** The envelope is a user-side transport artifact, not an immutable admitted evidence record. #15 must independently inspect privacy/ownership, verify hashes/content, add reviewer admission, and convert accepted material to the canonical evidence model.
-- **HF-SUBMIT-012:** Email receipt, Mail's `sent` result, a completed share sheet, or copied details never directly mutate the read-only SQLite catalog and never mean the evidence or a halal result was accepted.
+- **HF-SUBMIT-012:** Email receipt, Mail's `sent` result, a completed share sheet, or copied details never directly mutate any read-only SQLite catalog and never mean the evidence or a halal result was accepted.
 
 ## Consent and privacy
 
@@ -54,9 +54,9 @@ The canonical user-side v1 machine-readable contract is `Data/submissions/produc
 ## Offline and security behavior
 
 - **HF-SUBMIT-025:** Scanning, lookup, draft editing, photo sanitation, JSON generation, and package preparation work without a network request. Network transport happens only after the user explicitly asks another system app to send/share.
-- **HF-SUBMIT-026:** The submission implementation has no write access to `ProductCatalog`; the bundled SQLite database remains read-only. No submission can update a product or assessment locally.
+- **HF-SUBMIT-026:** The submission implementation has no write access to `ProductCatalog` or specification-029 market modules; bundled and downloaded catalog SQLite files remain read-only. No submission can update a product or assessment locally.
 - **HF-SUBMIT-027:** The camera usage description truthfully covers barcode scanning and explicit package-evidence capture. The privacy manifest continues to declare no tracking/analytics collection by the app; transport chosen in Mail/share is user-directed system-app behavior.
 
 ## Acceptance tests
 
-Tests cover exact subject/envelope fields, canonical GTIN/catalog version, required photo matrix, future-date and consent rejection, no halal-status/sender leakage, canonical public recipient, image size/metadata sanitation, package byte limits, temporary-file cleanup, Mail availability/fallback routing, correction/not-found contexts, German/English resource presence, and the absence of any catalog mutation path.
+Tests cover exact subject/envelope fields, canonical GTIN plus exact market/catalog identity for bundled and downloaded-module contexts, immutability of that identity across a later active-market switch/retry, required photo matrix, future-date and consent rejection, no halal-status/sender leakage, canonical public recipient, image size/metadata sanitation, package byte limits, temporary-file cleanup, Mail availability/fallback routing, correction/not-found contexts, German/English resource presence, and the absence of any catalog mutation path.

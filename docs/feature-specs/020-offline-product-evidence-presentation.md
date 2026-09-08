@@ -1,20 +1,20 @@
 # 020 — Offline product evidence presentation
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-01  
+**Last reviewed:** 2026-09-08  
 **Owner:** Halal Food EU product/runtime
 
 ## Purpose
 
-Define the iOS product-detail projection and user-visible evidence semantics for the bundled production SQLite catalog. A successful barcode lookup must explain what product was found, which current evidence supports the result, which limitations apply, and why the current halal state is shown without requiring a network connection.
+Define the iOS product-detail projection and user-visible evidence semantics for the active verified production SQLite catalog. A successful barcode lookup must explain what product was found, which current evidence supports the result, which limitations apply, and why the current halal state is shown without requiring a network connection. Under specification 029 the active catalog may be the bundled Germany baseline or an installed verified market module; presentation semantics do not weaken when the physical catalog source changes.
 
-This specification refines 002, 003, 004, 005, 007, 008, 009, 014 and 018 for the Phase 1 product-result experience.
+This specification refines 002, 003, 004, 005, 007, 008, 009, 014, 018 and 029 for the product-result experience.
 
 ## Requirements
 
 ### HF-RESULT-001 — One offline detail projection
 
-A successful lookup MUST return one immutable `Sendable` product-detail projection from the bundled read-only SQLite catalog. The repository layer MAY use a fixed bounded set of SQL statements for ordered evidence collections, but SwiftUI MUST NOT issue evidence-row queries or create UI-driven N+1 access.
+A successful lookup MUST return one immutable `Sendable` product-detail projection from the exact read-only SQLite catalog bound to that lookup's market snapshot. Under specification 029 this is either the bundled Germany baseline or the installed verified module for that market. The repository layer MAY use a fixed bounded set of SQL statements for ordered evidence collections, but SwiftUI MUST NOT issue evidence-row queries or create UI-driven N+1 access.
 
 The projection MUST carry, when stored by runtime schema v2:
 
@@ -101,15 +101,15 @@ All new product-result semantic strings MUST have English and German resources. 
 
 VoiceOver output for an invalidated former positive assessment MUST announce the current needs-review/unknown state before identifying the earlier result.
 
-### HF-RESULT-009 — Scanner and submission boundaries remain intact
+### HF-RESULT-009 — Scanner, market and submission boundaries remain intact
 
-`ScannerViewModel` remains `@MainActor` and MUST cancel an obsolete lookup task before starting a newer scan/manual request. SQLite work remains behind the injected async repository/use case.
+`ScannerViewModel` remains `@MainActor` and MUST cancel an obsolete lookup task before starting a newer scan/manual request. SQLite work remains behind the injected async repository/use case. Under specification 029 an accepted lookup/search operation is also bound to an immutable market snapshot; switching markets while work is in flight cancels/invalidates that operation or discards its stale result rather than re-presenting it under the new market.
 
-Product-not-found and correction actions MUST continue to route through the backend-free #14 submission flow. No account or backend is introduced by this screen.
+Product-not-found and correction actions MUST continue to route through the backend-free specification-018 submission flow. The submission context inherits the exact market/catalog identity that produced the displayed result/not-found state; a later market switch does not retarget an existing draft. No account or backend is introduced by this screen.
 
 ### HF-RESULT-010 — Failure states fail closed
 
-Missing, corrupt, digest-mismatched or incompatible catalog artifacts MUST continue to surface a lookup failure rather than synthetic product data. Invalid/unsupported barcodes remain distinct from catalog failures.
+Missing, corrupt, digest-mismatched, wrong-market, unverified or incompatible catalog artifacts MUST continue to surface a lookup failure or explicit market-unavailable state rather than synthetic product data. Invalid/unsupported barcodes remain distinct from catalog failures.
 
 The result screen MUST NOT log scanned GTINs, viewed products or evidence to analytics.
 
@@ -118,6 +118,7 @@ The result screen MUST NOT log scanned GTINs, viewed products or evidence to ana
 Automated verification MUST cover at least:
 
 - production SQLite projection of canonical GTIN, market/quantity, source attribution, exact ingredients, verification state and certification lineage;
+- active-market product-detail routing, including the same GTIN with intentionally different market formulations and rejection of stale old-market results after a market switch;
 - production retailer observation kind/date/scope/limitations;
 - inert HTTPS remote-image projection;
 - conflict/stale/date-unknown/changed/unverified precedence over former positive results;
@@ -126,7 +127,7 @@ Automated verification MUST cover at least:
 - qualified retailer wording and explicit absence of stock/completeness claims;
 - English/German semantic resources and absolute localized dates;
 - accessibility wording that marks former positive results historical;
-- existing catalog integrity/incompatibility/cancellation/submission tests.
+- existing catalog integrity/incompatibility/cancellation/submission tests, including exact submission market/catalog identity.
 
 The complete iOS target MUST compile and tests MUST pass under Swift 6 strict concurrency on the repository’s GitHub-hosted macOS/Xcode gate.
 

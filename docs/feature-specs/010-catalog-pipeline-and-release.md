@@ -1,14 +1,14 @@
 # 010 — Catalog pipeline and release
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-07
+**Last reviewed:** 2026-09-08
 
 ## Pipeline stages
 
 1. **Acquire** from an approved source and capture source/license metadata.
 2. **Stage** immutable raw observations outside the app bundle.
 3. **Normalize** GTIN, language, whitespace, dates, taxonomy/category signals, and ingredient tokens without destroying source text.
-4. **Select** detailed Germany catalog candidates through the accepted versioned selection policy, preserving explicit basic/invalid exclusions and metrics.
+4. **Select** detailed market catalog candidates through an accepted versioned selection policy, preserving explicit basic/invalid exclusions and metrics. The bundled Germany baseline uses the accepted Germany policy; each additional specification-029 market requires its own accepted source/selection scope before release.
 5. **Detect change** using source record and ingredient hash.
 6. **Assess** through a versioned rule/review process.
 7. **Build** a new SQLite file from deterministic ordered inputs.

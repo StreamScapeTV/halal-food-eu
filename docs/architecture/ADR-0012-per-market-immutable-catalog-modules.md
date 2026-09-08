@@ -31,7 +31,7 @@ A market release contains:
 
 1. the deterministic production SQLite for one market;
 2. its existing production catalog manifest;
-3. a canonical market-module manifest that binds market/release/app compatibility, database and manifest digests/bytes, source/license/coverage identity, signing key ID, and rollback/supersession metadata;
+3. a canonical market-module manifest that binds market/release/app compatibility, database and manifest digests/bytes, explicit product/evidence counts, source/license/coverage identity, signing key ID, and rollback/supersession metadata;
 4. redistribution/attribution material required for the public asset; and
 5. a detached asymmetric signature under the #25 trust design.
 
@@ -43,7 +43,9 @@ Full market SQLite assets are used first. Binary/row deltas are rejected for ini
 
 ### Distribution and availability
 
-GitHub Release assets are the initial distribution channel because the repository is public and no custom backend/account is required. Network availability is never on the lookup path. Outage, rate limiting, invalid release metadata, insufficient storage, verification failure, or source-rights withdrawal must leave the last verified module/bundled baseline operable.
+GitHub Release assets are the initial distribution channel because the repository is public and no custom backend/account is required. The initial release identity is market-specific: one immutable release/tag identity per market-module version, allowing independent cadence, rollback and source-rights handling. A later shared release train may reference multiple independently signed module envelopes, but it must not make one market's trust or availability depend on another. CDN/object storage is not introduced unless measured GitHub scale/rate-limit evidence justifies a later accepted delivery change.
+
+Network availability is never on the lookup path. Outage, rate limiting, invalid release metadata, insufficient storage, verification failure, or source-rights withdrawal must leave the last verified module/bundled baseline operable.
 
 Module availability is separate from product/retailer completeness. Coverage/freshness data is published as qualified manifest/UI metadata using the accepted health/coverage semantics; it cannot create stronger evidence or a completeness claim.
 

@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / ".github/workflows/catalog-module-ci.yml"
 RELEASE = ROOT / ".github/workflows/catalog-module-release.yml"
 POLICY = ROOT / "Data/catalog/catalog-module-trust-policy-v1.json"
+MANAGER = ROOT / "HalalFoodEU/Data/CatalogModules/CatalogModuleManager.swift"
 RFC_PUBLIC = "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
 
 
@@ -56,6 +57,20 @@ class CatalogModuleWorkflowTests(unittest.TestCase):
         self.assertIn('git ls-remote --exit-code --tags', self.release)
         self.assertIn("catalog-module-release-report.json", self.release)
         self.assertIn("publicRedownloadVerified", self.release)
+
+    def test_runtime_transport_redirect_contract_and_request_privacy_are_pinned(self) -> None:
+        source = MANAGER.read_text(encoding="utf-8")
+        self.assertIn(
+            "willPerformHTTPRedirection response: HTTPURLResponse,\n        newRequest request: URLRequest",
+            source,
+        )
+        transport = source.split("struct GitHubCatalogModuleTransport: CatalogModuleTransport", 1)[1]
+        self.assertIn('response.url?.host == "api.github.com"', transport)
+        self.assertIn('asset.browser_download_url.host == "github.com"', transport)
+        self.assertIn('Self.allowedFinalHosts.contains(finalHost)', transport)
+        self.assertIn('metadataBaseURL = "https://api.github.com/repos/StreamScapeTV/halal-food-eu/releases"', transport)
+        for forbidden in ("barcode", "scanHistory", "history", "identifierForVendor", "userID", "deviceID"):
+            self.assertNotIn(forbidden, transport)
 
 
 if __name__ == "__main__":

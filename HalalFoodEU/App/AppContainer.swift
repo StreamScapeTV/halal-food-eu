@@ -88,7 +88,7 @@ struct AppContainer {
         let bundledSearch = SQLiteProductSearchCatalog(databaseURL: databaseURL, manifestURL: manifestURL)
         let router = MarketCatalogRouter(
             bundledGermany: .init(catalog: bundledCatalog, searchCatalog: bundledSearch, catalogVersion: catalogVersion),
-            selectedMarket: .germany
+            selectedMarket: preferences.selectedMarket
         )
 
         let moduleService: (any CatalogModuleService)? = makeCatalogModuleService(

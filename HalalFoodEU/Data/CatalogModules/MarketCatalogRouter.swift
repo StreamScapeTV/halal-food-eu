@@ -19,8 +19,7 @@ actor MarketCatalogRouter: MarketScopedProductCatalog, ProductSearchCatalog {
 
     func activeMarket() async -> CatalogMarket { selectedMarket }
 
-    func selectMarket(_ market: CatalogMarket) throws {
-        _ = try source(for: market)
+    func selectMarket(_ market: CatalogMarket) {
         if selectedMarket != market {
             selectedMarket = market
             revision &+= 1

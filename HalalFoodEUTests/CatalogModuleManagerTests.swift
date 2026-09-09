@@ -129,6 +129,42 @@ struct CatalogModuleManagerTests {
         }
     }
 
+    @Test("Removing an active non-Germany download leaves that market selected and unavailable")
+    func removingActiveNonGermanyModuleDoesNotFallBack() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let france = try CatalogMarket(validating: "FR")
+        let catalog = SQLiteProductCatalog(
+            databaseURL: fixture.sourceDatabaseURL,
+            manifestURL: fixture.sourceManifestURL,
+            expectedMarket: .germany
+        )
+        let search = SQLiteProductSearchCatalog(
+            databaseURL: fixture.sourceDatabaseURL,
+            manifestURL: fixture.sourceManifestURL
+        )
+        await fixture.router.registerDownloadedModule(
+            market: france,
+            catalog: catalog,
+            searchCatalog: search,
+            catalogVersion: fixture.catalogVersion
+        )
+        await fixture.router.selectMarket(france)
+        let manager = fixture.makeManager()
+
+        try await manager.removeDownloadedModule(for: france)
+
+        #expect(await fixture.router.activeMarket() == france)
+        do {
+            _ = try await fixture.router.resolveProduct(
+                for: try Barcode(validating: "0200000000004")
+            )
+            Issue.record("Expected the removed active market to remain explicitly unavailable")
+        } catch ProductCatalogError.unavailable(let message) {
+            #expect(message.contains("FR"))
+        }
+    }
+
     @Test("CryptoKit verifies the RFC 8032 Ed25519 test vector used by release tooling")
     func cryptoKitMatchesRFC8032() throws {
         let publicKey = try Curve25519.Signing.PublicKey(

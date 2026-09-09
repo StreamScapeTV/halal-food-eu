@@ -32,7 +32,7 @@ final class CatalogModuleSettingsModel {
     }
 
     var installedSelectableMarkets: [CatalogMarket] {
-        Set([.germany] + installedModules.map(\.manifest.market)).sorted()
+        Set([.germany, selectedMarket] + installedModules.map(\.manifest.market)).sorted()
     }
 
     var downloadableMarkets: [CatalogMarket] {
@@ -56,19 +56,12 @@ final class CatalogModuleSettingsModel {
 
     func load() async {
         guard let service else {
-            if preferences.selectedMarket != .germany { preferences.selectedMarket = .germany }
+            errorMessage = CatalogModuleError.updatesUnavailable.localizedDescription
             return
         }
         await perform {
             installedModules = try await service.installedModules()
-            do {
-                try await service.activatePersistedSelection(preferences.selectedMarket)
-            } catch {
-                try await service.selectMarket(.germany)
-                preferences.selectedMarket = .germany
-                onMarketDidChange?(.germany)
-                errorMessage = error.localizedDescription
-            }
+            try await service.activatePersistedSelection(preferences.selectedMarket)
         }
     }
 
@@ -131,15 +124,18 @@ final class CatalogModuleSettingsModel {
         await perform {
             try await service.removeDownloadedModule(for: market)
             installedModules = try await service.installedModules()
-            if market != .germany {
-                try await service.selectMarket(.germany)
+            if market == .germany {
                 preferences.selectedMarket = .germany
                 onMarketDidChange?(.germany)
+                statusMessage = String(localized: "Downloaded catalog removed. The bundled Germany catalog remains available.", table: "AppShell")
             } else {
-                preferences.selectedMarket = .germany
-                onMarketDidChange?(.germany)
+                onMarketDidChange?(market)
+                statusMessage = String(
+                    format: String(localized: "Downloaded %@ catalog removed. This market is unavailable until reinstalled or another market is selected.", table: "AppShell"),
+                    locale: .current,
+                    market.rawValue
+                )
             }
-            statusMessage = String(localized: "Downloaded catalog removed. The bundled Germany catalog remains available.", table: "AppShell")
         }
     }
 

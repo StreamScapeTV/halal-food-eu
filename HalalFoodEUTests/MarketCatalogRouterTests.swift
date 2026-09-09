@@ -24,13 +24,13 @@ struct MarketCatalogRouterTests {
             searchCatalog: FixedMarketSearchCatalog(),
             catalogVersion: "2.0.0"
         )
-        try await router.selectMarket(france)
+        await router.selectMarket(france)
         let frenchResolution = try await router.resolveProduct(for: barcode)
         #expect(frenchResolution.market == france)
         #expect(frenchResolution.catalogVersion == "2.0.0")
         #expect(frenchResolution.product?.name == "French formulation")
 
-        try await router.selectMarket(.germany)
+        await router.selectMarket(.germany)
         let germanResolution = try await router.resolveProduct(for: barcode)
         #expect(germanResolution.market == .germany)
         #expect(germanResolution.catalogVersion == "1.0.0")
@@ -62,7 +62,7 @@ struct MarketCatalogRouterTests {
 
         let task = Task { try await router.resolveProduct(for: barcode) }
         try await waitUntil { await suspended.isSuspended }
-        try await router.selectMarket(france)
+        await router.selectMarket(france)
         await suspended.resume()
 
         do {
@@ -73,9 +73,10 @@ struct MarketCatalogRouterTests {
         }
     }
 
-    @Test("An unsupported market never falls through to Germany")
+    @Test("An unsupported selected market stays active and never falls through to Germany")
     func unsupportedMarketFailsClosed() async throws {
         let france = try CatalogMarket(validating: "FR")
+        let barcode = try Barcode(validating: "4006381333931")
         let router = MarketCatalogRouter(
             bundledGermany: .init(
                 catalog: FixedMarketCatalog(product: nil),
@@ -84,11 +85,15 @@ struct MarketCatalogRouterTests {
             )
         )
 
+        await router.selectMarket(france)
+        #expect(await router.activeMarket() == france)
+
         do {
-            try await router.selectMarket(france)
-            Issue.record("Expected an uninstalled market to be unavailable")
+            _ = try await router.resolveProduct(for: barcode)
+            Issue.record("Expected an uninstalled active market to be unavailable")
         } catch ProductCatalogError.unavailable(let message) {
             #expect(message.contains("FR"))
+            #expect(await router.activeMarket() == france)
         }
     }
 

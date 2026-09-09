@@ -69,8 +69,8 @@ struct AppShellSettingsTests {
         #expect(await service.activatedMarkets() == [CatalogMarket(rawValue: "FR")!])
     }
 
-    @Test("Catalog settings fails back to bundled Germany when persisted activation is unavailable")
-    func catalogSettingsFallsBackToGermany() async throws {
+    @Test("Catalog settings preserves an unavailable persisted market instead of silently falling back")
+    func catalogSettingsPreservesUnavailableMarket() async throws {
         let suite = "AppShellSettingsTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -85,8 +85,10 @@ struct AppShellSettingsTests {
 
         await model.load()
 
-        #expect(model.selectedMarket == .germany)
-        #expect(await service.selectedMarkets() == [.germany])
+        let france = try #require(CatalogMarket(rawValue: "FR"))
+        #expect(model.selectedMarket == france)
+        #expect(model.installedSelectableMarkets.contains(france))
+        #expect(await service.selectedMarkets().isEmpty)
         #expect(model.errorMessage != nil)
     }
 }

@@ -159,8 +159,7 @@ actor CatalogModuleManager: CatalogModuleService {
     }
 
     func selectMarket(_ market: CatalogMarket) async throws {
-        _ = try await router.catalogVersion(for: market)
-        try await router.selectMarket(market)
+        await router.selectMarket(market)
     }
 
     func installedModules() async throws -> [InstalledCatalogModule] {
@@ -276,7 +275,7 @@ actor CatalogModuleManager: CatalogModuleService {
         }
         await router.removeDownloadedModule(for: market)
         if market == .germany {
-            try await router.selectMarket(.germany)
+            await router.selectMarket(.germany)
         }
     }
 

@@ -51,7 +51,7 @@ struct HomeView: View {
                     }
                     .accessibilityHint(
                         String(
-                            localized: "Searches the bundled catalog by product name, brand, or barcode.",
+                            localized: "Searches the active offline catalog by product name, brand, or barcode.",
                             table: "ProductSearch"
                         )
                     )

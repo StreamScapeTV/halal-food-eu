@@ -35,7 +35,7 @@
 "Always check current packaging, the manufacturer or certifier, and a trusted qualified scholar for consequential decisions. Formulations and supply chains change." = "Prüfen Sie bei wichtigen Entscheidungen immer die aktuelle Verpackung, den Hersteller oder Zertifizierer und ziehen Sie einen vertrauenswürdigen, qualifizierten islamischen Gelehrten hinzu. Rezepturen und Lieferketten können sich ändern.";
 "Ready to scan" = "Bereit zum Scannen";
 "Scan a barcode, search the catalog, or enter one manually." = "Scannen Sie einen Barcode, durchsuchen Sie den Katalog oder geben Sie ihn manuell ein.";
-"Looking up the bundled catalog…" = "Der gebündelte Katalog wird durchsucht…";
+"Looking up the active offline catalog…" = "Der aktive Offline-Katalog wird durchsucht…";
 "Looking up the offline product catalog" = "Der Offline-Produktkatalog wird durchsucht";
 "Product not found" = "Produkt nicht gefunden";
 "GTIN %@ is not present in this catalog version. This does not mean the product is halal or not halal." = "GTIN %@ ist in dieser Katalogversion nicht enthalten. Das bedeutet nicht, dass das Produkt halal oder nicht halal ist.";

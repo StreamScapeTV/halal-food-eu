@@ -49,7 +49,15 @@ final class CatalogModuleSettingsModel {
             ?? (selectedMarket == .germany ? bundledCatalogVersion.nilIfEmpty : nil)
     }
 
+    var activePublishedDate: Date? {
+        guard let value = activeInstalledModule?.manifest.publishedAt else { return nil }
+        return ISO8601DateFormatter().date(from: value)
+    }
     var activeInstalledBytes: Int? { activeInstalledModule?.manifest.installedBytes }
+    var activeIngredientCoverageBasisPoints: Int? {
+        activeInstalledModule?.manifest.coverage.ingredientCoverageBasisPoints
+    }
+    var activeFreshnessState: String? { activeInstalledModule?.manifest.coverage.freshnessState }
     var activeCoverageLimitations: [String] { activeInstalledModule?.manifest.coverage.limitations ?? [] }
     var usesBundledGermanyFallback: Bool { selectedMarket == .germany && activeInstalledModule == nil }
     var canRemoveActiveDownload: Bool { activeInstalledModule != nil }

@@ -43,7 +43,7 @@ struct SettingsView: View {
                 )
             ) {
                 ForEach(catalogModules.installedSelectableMarkets) { market in
-                    Text(market.rawValue).tag(market)
+                    Text(marketDisplayName(market)).tag(market)
                 }
             }
             .disabled(catalogModules.isWorking)
@@ -51,6 +51,24 @@ struct SettingsView: View {
             LabeledContent(String(localized: "Active catalog", table: "AppShell")) {
                 Text(catalogModules.activeCatalogVersion ?? unavailableText)
                     .monospaced()
+            }
+
+            if let publishedDate = catalogModules.activePublishedDate {
+                LabeledContent(String(localized: "Catalog date", table: "AppShell")) {
+                    Text(publishedDate.formatted(date: .abbreviated, time: .omitted))
+                }
+            }
+
+            if let coverage = catalogModules.activeIngredientCoverageBasisPoints {
+                LabeledContent(String(localized: "Ingredient coverage", table: "AppShell")) {
+                    Text(String(format: "%.2f%%", locale: .current, Double(coverage) / 100.0))
+                }
+            }
+
+            if let freshness = catalogModules.activeFreshnessState {
+                LabeledContent(String(localized: "Freshness", table: "AppShell")) {
+                    Text(freshness)
+                }
             }
 
             if catalogModules.usesBundledGermanyFallback {
@@ -85,7 +103,7 @@ struct SettingsView: View {
                         String(
                             format: String(localized: "Download verified %@ catalog", table: "AppShell"),
                             locale: .current,
-                            market.rawValue
+                            marketDisplayName(market)
                         ),
                         systemImage: "arrow.down.circle"
                     )
@@ -116,6 +134,11 @@ struct SettingsView: View {
         } footer: {
             Text(String(localized: "Downloaded market catalogs are optional. They are verified before activation, normal lookup remains offline, and Germany always keeps the bundled fallback.", table: "AppShell"))
         }
+    }
+
+    private func marketDisplayName(_ market: CatalogMarket) -> String {
+        let name = Locale.current.localizedString(forRegionCode: market.rawValue) ?? market.rawValue
+        return name == market.rawValue ? market.rawValue : "\(name) (\(market.rawValue))"
     }
 
     private var appearanceSection: some View {

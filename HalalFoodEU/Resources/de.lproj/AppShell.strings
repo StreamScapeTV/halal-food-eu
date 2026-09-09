@@ -61,3 +61,6 @@
 "Installed catalog %@ for %@." = "Katalog %@ für %@ wurde installiert.";
 "Downloaded catalog removed. The bundled Germany catalog remains available." = "Heruntergeladener Katalog wurde entfernt. Der gebündelte Deutschland-Katalog bleibt verfügbar.";
 "Downloaded %@ catalog removed. This market is unavailable until reinstalled or another market is selected." = "Der heruntergeladene %@-Katalog wurde entfernt. Dieser Markt ist nicht verfügbar, bis er erneut installiert oder ein anderer Markt ausgewählt wird.";
+"Catalog date" = "Katalogdatum";
+"Ingredient coverage" = "Zutatenabdeckung";
+"Freshness" = "Aktualität";

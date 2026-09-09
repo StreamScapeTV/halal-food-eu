@@ -248,21 +248,33 @@ actor CatalogModuleManager: CatalogModuleService {
         try copy(candidate.attributionURL, to: attributionURL)
 
         let finalDirectory = marketDirectory.appendingPathComponent(manifest.moduleID, isDirectory: true)
+        let installed: InstalledCatalogModule
         if fileManager.fileExists(atPath: finalDirectory.path) {
-            throw CatalogModuleError.installFailed("the versioned module directory already exists")
+            let recovered = try await verifiedInstalledModule(
+                at: finalDirectory,
+                expectedMarket: market,
+                purpose: .persistedActivation,
+                policy: policy
+            )
+            guard recovered.manifest == manifest else {
+                throw CatalogModuleError.replayedOrOutOfOrder(
+                    "existing versioned module directory does not match the requested signed release"
+                )
+            }
+            installed = recovered
+        } else {
+            do {
+                try fileManager.moveItem(at: staging, to: finalDirectory)
+            } catch {
+                throw CatalogModuleError.installFailed("atomic promotion failed")
+            }
+            installed = try await verifiedInstalledModule(
+                at: finalDirectory,
+                expectedMarket: market,
+                purpose: .persistedActivation,
+                policy: policy
+            )
         }
-        do {
-            try fileManager.moveItem(at: staging, to: finalDirectory)
-        } catch {
-            throw CatalogModuleError.installFailed("atomic promotion failed")
-        }
-
-        let installed = try await verifiedInstalledModule(
-            at: finalDirectory,
-            expectedMarket: market,
-            purpose: .persistedActivation,
-            policy: policy
-        )
         try writeActiveModuleID(installed.manifest.moduleID, marketDirectory: marketDirectory)
         try await register(installed)
         return installed
@@ -872,7 +884,9 @@ struct GitHubCatalogModuleTransport: CatalogModuleTransport {
         let assets: [Asset]
     }
 
-    private static let metadataURL = URL(string: "https://api.github.com/repos/StreamScapeTV/halal-food-eu/releases?per_page=20")!
+    private static let metadataBaseURL = "https://api.github.com/repos/StreamScapeTV/halal-food-eu/releases"
+    private static let releasesPerPage = 100
+    private static let maximumReleasePages = 5
     private static let expectedAssets: Set<String> = [
         CatalogModuleManager.databaseFileName,
         CatalogModuleManager.catalogManifestFileName,
@@ -958,15 +972,29 @@ struct GitHubCatalogModuleTransport: CatalogModuleTransport {
     }
 
     private func fetchReleases() async throws -> [Release] {
-        var request = URLRequest(url: Self.metadataURL)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("HalalFoodEU/0.1", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-              data.count <= 2 * 1024 * 1024 else {
-            throw CatalogModuleError.downloadFailed("GitHub release metadata was unavailable or oversized")
+        var releases: [Release] = []
+        for page in 1...Self.maximumReleasePages {
+            guard let url = URL(
+                string: "\(Self.metadataBaseURL)?per_page=\(Self.releasesPerPage)&page=\(page)"
+            ) else {
+                throw CatalogModuleError.downloadFailed("GitHub release metadata URL was invalid")
+            }
+            var request = URLRequest(url: url)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            request.setValue("HalalFoodEU/0.1", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  response.url?.scheme == "https", response.url?.host == "api.github.com",
+                  data.count <= 2 * 1024 * 1024 else {
+                throw CatalogModuleError.downloadFailed("GitHub release metadata was unavailable or oversized")
+            }
+            let pageReleases = try JSONDecoder().decode([Release].self, from: data)
+            releases.append(contentsOf: pageReleases)
+            if pageReleases.count < Self.releasesPerPage { return releases }
         }
-        return try JSONDecoder().decode([Release].self, from: data)
+        throw CatalogModuleError.downloadFailed(
+            "GitHub release discovery exceeded the bounded pagination limit"
+        )
     }
 
     private func download(_ asset: Release.Asset, to root: URL, maximum: Int) async throws -> URL {

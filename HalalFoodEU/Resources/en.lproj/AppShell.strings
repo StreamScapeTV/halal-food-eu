@@ -61,3 +61,6 @@
 "Installed catalog %@ for %@." = "Installed catalog %@ for %@.";
 "Downloaded catalog removed. The bundled Germany catalog remains available." = "Downloaded catalog removed. The bundled Germany catalog remains available.";
 "Downloaded %@ catalog removed. This market is unavailable until reinstalled or another market is selected." = "Downloaded %@ catalog removed. This market is unavailable until reinstalled or another market is selected.";
+"Catalog date" = "Catalog date";
+"Ingredient coverage" = "Ingredient coverage";
+"Freshness" = "Freshness";

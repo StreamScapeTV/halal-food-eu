@@ -176,6 +176,24 @@ struct CatalogModuleManagerTests {
         }
     }
 
+    @Test("A signed module with an incompatible runtime schema is rejected")
+    func rejectsIncompatibleRuntimeSchema() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let candidate = try fixture.resignedCandidate { manifest in
+            manifest["runtimeSchemaVersion"] = 999
+        }
+
+        do {
+            _ = try await fixture.makeManager(candidate: candidate).installLatest(for: .germany)
+            Issue.record("An incompatible signed runtime schema must not activate")
+        } catch CatalogModuleError.invalidCatalog, CatalogModuleError.invalidManifest {
+            // Expected: envelope/inner-catalog schema binding fails closed before activation.
+        } catch {
+            Issue.record("Expected incompatible schema rejection, got \(error)")
+        }
+    }
+
     @Test("A signed module outside the running app compatibility range is rejected")
     func rejectsIncompatibleAppRange() async throws {
         let fixture = try ModuleFixture()

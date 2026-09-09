@@ -69,6 +69,9 @@ class CatalogModuleWorkflowTests(unittest.TestCase):
         self.assertIn('asset.browser_download_url.host == "github.com"', transport)
         self.assertIn('Self.allowedFinalHosts.contains(finalHost)', transport)
         self.assertIn('metadataBaseURL = "https://api.github.com/repos/StreamScapeTV/halal-food-eu/releases"', transport)
+        self.assertIn("values.fileSize == asset.size", transport)
+        self.assertIn("next <= maximumRedirects", source)
+        self.assertIn("asset.size > 0, asset.size <= maximum", transport)
         for forbidden in ("barcode", "scanHistory", "history", "identifierForVendor", "userID", "deviceID"):
             self.assertNotIn(forbidden, transport)
 

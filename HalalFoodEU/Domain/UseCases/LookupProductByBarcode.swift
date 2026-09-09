@@ -46,18 +46,18 @@ struct LookupProductByBarcode: Sendable {
             let resolved = try await marketCatalog.resolveProduct(for: barcode)
             return ProductLookupResult(
                 barcode: barcode,
+                product: resolved.product,
                 market: resolved.market,
-                catalogVersion: resolved.catalogVersion,
-                product: resolved.product
+                catalogVersion: resolved.catalogVersion
             )
         }
 
         let product = try await catalog.product(for: barcode)
         return ProductLookupResult(
             barcode: barcode,
+            product: product,
             market: product?.details.flatMap { CatalogMarket(rawValue: $0.market) } ?? fallbackMarket,
-            catalogVersion: product?.catalogVersion ?? fallbackCatalogVersion,
-            product: product
+            catalogVersion: product?.catalogVersion ?? fallbackCatalogVersion
         )
     }
 }

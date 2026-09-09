@@ -839,13 +839,13 @@ private final class CatalogModuleRedirectDelegate: NSObject, URLSessionTaskDeleg
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
-        willPerformHTTPRedirection newRequest: URLRequest,
-        newResponse: HTTPURLResponse
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest
     ) async -> URLRequest? {
-        guard let url = newRequest.url, url.scheme == "https",
+        guard let url = request.url, url.scheme == "https",
               let host = url.host, allowedHosts.contains(host) else { return nil }
         let next = incrementRedirectCount(for: task.taskIdentifier)
-        return next <= maximumRedirects ? newRequest : nil
+        return next <= maximumRedirects ? request : nil
     }
 
     func urlSession(

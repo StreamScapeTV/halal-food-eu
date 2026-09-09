@@ -1,13 +1,11 @@
 import Foundation
 
 struct SavedProductReference: Identifiable, Equatable, Sendable {
-    enum Kind: Equatable, Sendable {
-        case history
-        case favorite
-    }
+    enum Kind: Equatable, Sendable { case history, favorite }
 
     let id: String
     let kind: Kind
+    let market: CatalogMarket
     let barcode: Barcode
     let savedAt: Date
     let catalogVersion: String
@@ -16,6 +14,7 @@ struct SavedProductReference: Identifiable, Equatable, Sendable {
     init(historyEntry: ScanHistoryEntry) {
         id = "history-\(historyEntry.id)"
         kind = .history
+        market = historyEntry.market
         barcode = historyEntry.barcode
         savedAt = historyEntry.scannedAt
         catalogVersion = historyEntry.catalogVersion
@@ -23,8 +22,9 @@ struct SavedProductReference: Identifiable, Equatable, Sendable {
     }
 
     init(favorite: FavoriteProduct) {
-        id = "favorite-\(favorite.barcode.rawValue)"
+        id = "favorite-\(favorite.market.rawValue)-\(favorite.barcode.rawValue)"
         kind = .favorite
+        market = favorite.market
         barcode = favorite.barcode
         savedAt = favorite.savedAt
         catalogVersion = favorite.catalogVersion
@@ -38,28 +38,39 @@ struct ResolvedSavedProduct: Equatable, Sendable {
     let currentCatalogVersion: String
     let changeState: SavedProductChangeState
 
-    var catalogVersionChanged: Bool {
-        reference.catalogVersion != currentCatalogVersion
-    }
+    var catalogVersionChanged: Bool { reference.catalogVersion != currentCatalogVersion }
 }
 
 struct ResolveSavedProduct: Sendable {
     private let catalog: any ProductCatalog
-    private let currentCatalogVersion: String
+    private let fallbackCatalogVersion: String
 
     init(catalog: any ProductCatalog, currentCatalogVersion: String) {
         self.catalog = catalog
-        self.currentCatalogVersion = currentCatalogVersion
+        fallbackCatalogVersion = currentCatalogVersion
     }
 
     func callAsFunction(_ reference: SavedProductReference) async throws -> ResolvedSavedProduct {
         try Task.checkCancellation()
-        let product = try await catalog.product(for: reference.barcode)
+        let product: ProductRecord?
+        let catalogVersion: String
+        if let marketCatalog = catalog as? any MarketScopedProductCatalog {
+            product = try await marketCatalog.product(for: reference.barcode, market: reference.market)
+            catalogVersion = try await marketCatalog.catalogVersion(for: reference.market)
+        } else {
+            guard reference.market == .germany else {
+                throw ProductCatalogError.unavailable(
+                    CatalogModuleError.unavailableMarket(reference.market.rawValue).localizedDescription
+                )
+            }
+            product = try await catalog.product(for: reference.barcode)
+            catalogVersion = product?.catalogVersion ?? fallbackCatalogVersion
+        }
         try Task.checkCancellation()
         return ResolvedSavedProduct(
             reference: reference,
             currentProduct: product,
-            currentCatalogVersion: product?.catalogVersion ?? currentCatalogVersion,
+            currentCatalogVersion: catalogVersion,
             changeState: reference.versionMarker.comparison(with: product)
         )
     }

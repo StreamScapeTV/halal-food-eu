@@ -4,6 +4,19 @@ protocol ProductCatalog: Sendable {
     func product(for barcode: Barcode) async throws -> ProductRecord?
 }
 
+struct CatalogProductResolution: Sendable {
+    let market: CatalogMarket
+    let catalogVersion: String
+    let product: ProductRecord?
+}
+
+protocol MarketScopedProductCatalog: ProductCatalog, Sendable {
+    func resolveProduct(for barcode: Barcode) async throws -> CatalogProductResolution
+    func product(for barcode: Barcode, market: CatalogMarket) async throws -> ProductRecord?
+    func catalogVersion(for market: CatalogMarket) async throws -> String
+    func activeMarket() async -> CatalogMarket
+}
+
 enum ProductCatalogError: LocalizedError, Sendable {
     case unavailable(String)
     case incompatibleSchema(expected: Int, actual: Int)

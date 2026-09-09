@@ -21,17 +21,35 @@ final class ProductEvidenceSubmissionCoordinator {
         self.composer = composer
     }
 
-    func startMissingProduct(barcode: Barcode) {
+    func startMissingProduct(result: ProductLookupResult) {
+        startMissingProduct(
+            barcode: result.barcode,
+            market: result.market,
+            catalogVersion: result.catalogVersion
+        )
+    }
+
+    func startMissingProduct(
+        barcode: Barcode,
+        market: CatalogMarket = .germany,
+        catalogVersion: String? = nil
+    ) {
         guard let configuration else {
             alertMessage = configurationError
                 ?? String(localized: "Product evidence submission is unavailable in this build.")
+            return
+        }
+        let version = catalogVersion ?? configuration.catalogVersion
+        guard !version.isEmpty else {
+            alertMessage = String(localized: "Product evidence submission is unavailable because the active catalog version is unknown.")
             return
         }
         activeViewModel?.cleanup()
         activeViewModel = ProductEvidenceSubmissionViewModel(
             request: .missingProduct(
                 barcode: barcode,
-                catalogVersion: configuration.catalogVersion
+                catalogVersion: version,
+                market: market.rawValue
             ),
             configuration: configuration,
             composer: composer

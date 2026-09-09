@@ -83,7 +83,7 @@ struct HomeView: View {
                 } header: {
                     Text(String(localized: "Check a packaged food", table: "AppShell"))
                 } footer: {
-                    Text(String(localized: "Barcode lookup uses the catalog bundled with the app. Ingredient OCR also runs on device; neither requires a network connection.", table: "IngredientOCR"))
+                    Text(String(localized: "Barcode lookup uses the active verified offline catalog. Ingredient OCR also runs on device; neither requires a network connection after a market module is installed.", table: "IngredientOCR"))
                 }
 
                 LookupStateContent(
@@ -145,21 +145,24 @@ private struct LookupStateContent: View {
             Section {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text(String(localized: "Looking up the bundled catalog…", table: "AppShell"))
+                    Text(String(localized: "Looking up the active offline catalog…", table: "AppShell"))
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(String(localized: "Looking up the offline product catalog", table: "AppShell"))
             }
         case let .found(product):
+            let market = viewModel.latestLookupResult?.market
+                ?? product.details.flatMap { CatalogMarket(rawValue: $0.market) }
+                ?? .germany
             Section {
                 Button {
-                    Task { await userProductLibraryViewModel.toggleFavorite(product) }
+                    Task { await userProductLibraryViewModel.toggleFavorite(product, market: market) }
                 } label: {
                     Label(
-                        userProductLibraryViewModel.isFavorite(product.barcode)
+                        userProductLibraryViewModel.isFavorite(product.barcode, market: market)
                             ? String(localized: "Remove from Favorites", table: "UserLibrary")
                             : String(localized: "Add to Favorites", table: "UserLibrary"),
-                        systemImage: userProductLibraryViewModel.isFavorite(product.barcode) ? "star.fill" : "star"
+                        systemImage: userProductLibraryViewModel.isFavorite(product.barcode, market: market) ? "star.fill" : "star"
                     )
                 }
                 .accessibilityHint(
@@ -188,7 +191,11 @@ private struct LookupStateContent: View {
                     )
                 )
                 Button {
-                    submissionCoordinator.startMissingProduct(barcode: barcode)
+                    if let result = viewModel.latestLookupResult, result.barcode == barcode {
+                        submissionCoordinator.startMissingProduct(result: result)
+                    } else {
+                        submissionCoordinator.startMissingProduct(barcode: barcode)
+                    }
                 } label: {
                     Label("Submit product evidence", systemImage: "envelope.badge")
                 }

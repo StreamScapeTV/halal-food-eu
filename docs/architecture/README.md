@@ -54,3 +54,4 @@ Patterns are not goals by themselves. A new abstraction must remove meaningful c
 - [ADR-0010 — Owner-admitted product evidence with local Apple Vision OCR](ADR-0010-owner-admitted-local-vision-product-evidence-intake.md)
 - [ADR-0011 — Digest-bound offline product search index](ADR-0011-digest-bound-offline-product-search-index.md)
 - [ADR-0012 — Per-market immutable catalog modules with signed optional delivery](ADR-0012-per-market-immutable-catalog-modules.md)
+- [ADR-0013 — Bundled Ed25519 trust roots for optional signed catalog delivery](ADR-0013-signed-catalog-update-trust.md)

@@ -46,7 +46,7 @@ final class ProductEvidenceSubmissionViewModel: Identifiable {
         builder = PrepareProductEvidenceSubmission(
             configuration: configuration.submission,
             appVersion: configuration.appVersion,
-            catalogVersion: configuration.catalogVersion
+            catalogVersion: request.catalogVersion
         )
     }
 

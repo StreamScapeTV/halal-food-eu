@@ -206,17 +206,49 @@ extension SavedProductVersionMarker {
 
 struct ScanHistoryEntry: Identifiable, Equatable, Sendable {
     let id: Int64
+    let market: CatalogMarket
     let barcode: Barcode
     let scannedAt: Date
     let catalogVersion: String
     let versionMarker: SavedProductVersionMarker
+
+    init(
+        id: Int64,
+        barcode: Barcode,
+        scannedAt: Date,
+        catalogVersion: String,
+        versionMarker: SavedProductVersionMarker,
+        market: CatalogMarket = .germany
+    ) {
+        self.id = id
+        self.market = market
+        self.barcode = barcode
+        self.scannedAt = scannedAt
+        self.catalogVersion = catalogVersion
+        self.versionMarker = versionMarker
+    }
 }
 
 struct FavoriteProduct: Identifiable, Equatable, Sendable {
-    var id: String { barcode.rawValue }
+    var id: String { "\(market.rawValue):\(barcode.rawValue)" }
 
+    let market: CatalogMarket
     let barcode: Barcode
     let savedAt: Date
     let catalogVersion: String
     let versionMarker: SavedProductVersionMarker
+
+    init(
+        barcode: Barcode,
+        savedAt: Date,
+        catalogVersion: String,
+        versionMarker: SavedProductVersionMarker,
+        market: CatalogMarket = .germany
+    ) {
+        self.market = market
+        self.barcode = barcode
+        self.savedAt = savedAt
+        self.catalogVersion = catalogVersion
+        self.versionMarker = versionMarker
+    }
 }

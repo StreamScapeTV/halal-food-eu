@@ -1,0 +1,386 @@
+import CryptoKit
+import Foundation
+import Testing
+@testable import HalalFoodEU
+
+@Suite("Signed catalog module manager")
+struct CatalogModuleManagerTests {
+    @Test("A valid signed production-shaped module installs atomically and becomes queryable")
+    func installsVerifiedModule() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.makeManager()
+
+        let installed = try await manager.installLatest(for: .germany)
+        #expect(installed.manifest.moduleID == fixture.moduleID)
+        #expect(installed.manifest.database.sha256 == fixture.databaseDigest)
+        #expect(FileManager.default.fileExists(atPath: installed.databaseURL.path))
+
+        let resolved = try await fixture.router.resolveProduct(
+            for: try Barcode(validating: "0200000000004")
+        )
+        #expect(resolved.market == .germany)
+        #expect(resolved.catalogVersion == fixture.catalogVersion)
+        #expect(resolved.product?.name == "Demonstration Oat Drink")
+
+        let recovered = try await manager.installedModules()
+        #expect(recovered.map(\.manifest.moduleID) == [fixture.moduleID])
+    }
+
+    @Test("Tampered signed manifest bytes are rejected before installation")
+    func rejectsTamperedManifest() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        var candidate = fixture.candidate
+        var bytes = candidate.manifestData
+        bytes[bytes.startIndex] ^= 0x01
+        candidate = CatalogModuleCandidate(
+            releaseIdentity: candidate.releaseIdentity,
+            manifestData: bytes,
+            signatureData: candidate.signatureData,
+            databaseURL: candidate.databaseURL,
+            catalogManifestURL: candidate.catalogManifestURL,
+            attributionURL: candidate.attributionURL
+        )
+        let manager = fixture.makeManager(candidate: candidate)
+
+        do {
+            _ = try await manager.installLatest(for: .germany)
+            Issue.record("Tampered module manifest must fail closed")
+        } catch CatalogModuleError.invalidManifest, CatalogModuleError.invalidSignature {
+            // Expected: malformed/canonical/signature validation may reject first.
+        } catch {
+            Issue.record("Expected signed-manifest rejection, got \(error)")
+        }
+    }
+
+    @Test("A persisted module is re-verified and remains usable with a retired key")
+    func retiredKeyAllowsPersistedActivation() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.makeManager()
+        _ = try await manager.installLatest(for: .germany)
+
+        try fixture.writeTrustPolicy(keyState: .retired)
+        let recoveredRouter = fixture.makeBundledRouter()
+        let recoveredManager = fixture.makeManager(router: recoveredRouter)
+        try await recoveredManager.activatePersistedSelection(.germany)
+
+        let modules = try await recoveredManager.installedModules()
+        #expect(modules.map(\.manifest.moduleID) == [fixture.moduleID])
+        let resolved = try await recoveredRouter.resolveProduct(
+            for: try Barcode(validating: "0200000000004")
+        )
+        #expect(resolved.catalogVersion == fixture.catalogVersion)
+    }
+
+    @Test("A revoked persisted module fails closed and Germany falls back to the bundle")
+    func revokedModuleFallsBackToBundledGermany() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.makeManager()
+        _ = try await manager.installLatest(for: .germany)
+
+        try fixture.writeTrustPolicy(
+            keyState: .active,
+            revokedModuleIDs: [fixture.moduleID]
+        )
+        let recoveredRouter = fixture.makeBundledRouter()
+        let recoveredManager = fixture.makeManager(router: recoveredRouter)
+        try await recoveredManager.activatePersistedSelection(.germany)
+
+        #expect(try await recoveredManager.installedModules().isEmpty)
+        #expect(try await recoveredRouter.catalogVersion(for: .germany) == fixture.bundledCatalogVersion)
+    }
+
+    @Test("A tampered persisted database is re-verified and never registered")
+    func tamperedPersistedDatabaseFallsBack() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        let manager = fixture.makeManager()
+        let installed = try await manager.installLatest(for: .germany)
+
+        var bytes = try Data(contentsOf: installed.databaseURL)
+        bytes[bytes.startIndex] ^= 0x01
+        try bytes.write(to: installed.databaseURL, options: .atomic)
+
+        let recoveredRouter = fixture.makeBundledRouter()
+        let recoveredManager = fixture.makeManager(router: recoveredRouter)
+        try await recoveredManager.activatePersistedSelection(.germany)
+
+        #expect(try await recoveredManager.installedModules().isEmpty)
+        #expect(try await recoveredRouter.catalogVersion(for: .germany) == fixture.bundledCatalogVersion)
+    }
+
+    @Test("New downloads are disabled when no active trust root is provisioned")
+    func emptyTrustPolicyDisablesUpdates() async throws {
+        let fixture = try ModuleFixture()
+        defer { fixture.cleanup() }
+        try fixture.writeEmptyTrustPolicy()
+        let manager = fixture.makeManager()
+
+        do {
+            _ = try await manager.availableRemoteMarkets()
+            Issue.record("An app build without an active trust root must not offer updates")
+        } catch CatalogModuleError.updatesUnavailable {
+            // Expected.
+        } catch {
+            Issue.record("Expected updatesUnavailable, got \(error)")
+        }
+    }
+
+    @Test("CryptoKit verifies the RFC 8032 Ed25519 test vector used by release tooling")
+    func cryptoKitMatchesRFC8032() throws {
+        let publicKey = try Curve25519.Signing.PublicKey(
+            rawRepresentation: try Data.strictHex(
+                "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+            )
+        )
+        let signature = try Data.strictHex(
+            "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155"
+                + "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
+        )
+        #expect(publicKey.isValidSignature(signature, for: Data()))
+    }
+}
+
+private extension Data {
+    static func strictHex(_ value: String) throws -> Data {
+        guard value.count.isMultiple(of: 2), value.allSatisfy({ $0.isHexDigit }) else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        var result = Data(capacity: value.count / 2)
+        var index = value.startIndex
+        while index < value.endIndex {
+            let next = value.index(index, offsetBy: 2)
+            guard let byte = UInt8(value[index..<next], radix: 16) else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            result.append(byte)
+            index = next
+        }
+        return result
+    }
+}
+
+private final class ModuleFixture: @unchecked Sendable {
+    let root: URL
+    let installRoot: URL
+    let candidateRoot: URL
+    let trustPolicyURL: URL
+    let sourceDatabaseURL: URL
+    let sourceManifestURL: URL
+    let privateKey: Curve25519.Signing.PrivateKey
+    let moduleID: String
+    let releaseIdentity: String
+    let catalogVersion: String
+    let bundledCatalogVersion: String
+    let databaseDigest: String
+    let candidate: CatalogModuleCandidate
+    let router: MarketCatalogRouter
+
+    init() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HalalFoodEU-CatalogModuleTests-\(UUID().uuidString)", isDirectory: true)
+        installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        candidateRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HalalFoodEU-CatalogModule-\(UUID().uuidString)", isDirectory: true)
+        trustPolicyURL = root.appendingPathComponent("trust-policy.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: candidateRoot, withIntermediateDirectories: true)
+
+        let bundle = Bundle(for: ModuleBundleToken.self)
+        sourceDatabaseURL = try #require(
+            bundle.url(forResource: "catalog", withExtension: "sqlite3"),
+            "catalog.sqlite3 must be copied into the unit-test bundle"
+        )
+        sourceManifestURL = try #require(
+            bundle.url(forResource: "catalog-manifest", withExtension: "json"),
+            "catalog-manifest.json must be copied into the unit-test bundle"
+        )
+        let innerData = try Data(contentsOf: sourceManifestURL)
+        let inner = try #require(
+            JSONSerialization.jsonObject(with: innerData) as? [String: Any],
+            "production catalog manifest must be a JSON object"
+        )
+        catalogVersion = try #require(inner["catalogVersion"] as? String)
+        bundledCatalogVersion = catalogVersion
+        let runtimeSchemaVersion = try #require(inner["schemaVersion"] as? Int)
+        let methodologyVersion = try #require(inner["methodologyVersion"] as? String)
+        let counts = try #require(inner["counts"] as? [String: Any])
+        let products = try Self.integer(counts["products"])
+        let ingredients = try Self.integer(counts["ingredientObservations"])
+        let assessments = try Self.integer(counts["assessments"])
+        let retailerEvidence = try Self.integer(counts["retailerEvidence"])
+
+        moduleID = "DE-\(catalogVersion)"
+        releaseIdentity = "catalog-de-\(catalogVersion)"
+        privateKey = Curve25519.Signing.PrivateKey()
+        databaseDigest = try Self.sha256(sourceDatabaseURL)
+
+        let candidateDatabase = candidateRoot.appendingPathComponent(CatalogModuleManager.databaseFileName)
+        let candidateCatalogManifest = candidateRoot.appendingPathComponent(CatalogModuleManager.catalogManifestFileName)
+        let attribution = candidateRoot.appendingPathComponent(CatalogModuleManager.attributionFileName)
+        try FileManager.default.copyItem(at: sourceDatabaseURL, to: candidateDatabase)
+        try FileManager.default.copyItem(at: sourceManifestURL, to: candidateCatalogManifest)
+        try Data("Synthetic test attribution; not production source data.\n".utf8).write(to: attribution)
+
+        let manifestObject: [String: Any] = [
+            "schemaVersion": 1,
+            "moduleID": moduleID,
+            "market": "DE",
+            "catalogVersion": catalogVersion,
+            "runtimeSchemaVersion": runtimeSchemaVersion,
+            "methodologyVersion": methodologyVersion,
+            "minimumAppVersion": "0.1.0",
+            "maximumAppVersion": "99.0.0",
+            "database": [
+                "fileName": CatalogModuleManager.databaseFileName,
+                "byteCount": try Self.fileSize(candidateDatabase),
+                "sha256": databaseDigest,
+            ],
+            "catalogManifest": [
+                "fileName": CatalogModuleManager.catalogManifestFileName,
+                "sha256": try Self.sha256(candidateCatalogManifest),
+            ],
+            "attribution": [
+                "fileName": CatalogModuleManager.attributionFileName,
+                "sha256": try Self.sha256(attribution),
+            ],
+            "counts": [
+                "products": products,
+                "uniqueGTINs": products,
+                "ingredientObservations": ingredients,
+                "assessments": assessments,
+                "retailerEvidence": retailerEvidence,
+            ],
+            "coverage": [
+                "ingredientCoverageBasisPoints": products == 0 ? 0 : (ingredients * 10_000) / products,
+                "freshnessState": "qualified-current-catalog",
+                "limitations": ["Synthetic production-shaped fixture; no completeness claim."],
+            ],
+            "sourceSnapshotIdentity": "test-fixture",
+            "releaseIdentity": releaseIdentity,
+            "compressedBytes": try Self.fileSize(candidateDatabase),
+            "installedBytes": try Self.fileSize(candidateDatabase) + Self.fileSize(candidateCatalogManifest) + Self.fileSize(attribution),
+            "publishedAt": "2026-09-08T00:00:00Z",
+            "signingKeyID": "test-ed25519",
+            "supersedesModuleID": NSNull(),
+        ]
+        var manifestData = try JSONSerialization.data(
+            withJSONObject: manifestObject,
+            options: [.sortedKeys, .withoutEscapingSlashes]
+        )
+        manifestData.append(0x0A)
+        let signature = try privateKey.signature(for: manifestData)
+
+        candidate = CatalogModuleCandidate(
+            releaseIdentity: releaseIdentity,
+            manifestData: manifestData,
+            signatureData: signature,
+            databaseURL: candidateDatabase,
+            catalogManifestURL: candidateCatalogManifest,
+            attributionURL: attribution
+        )
+
+        try writeTrustPolicy(keyState: .active)
+        router = try Self.makeRouter(databaseURL: sourceDatabaseURL, manifestURL: sourceManifestURL)
+    }
+
+    func cleanup() {
+        try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.removeItem(at: candidateRoot)
+    }
+
+    func makeBundledRouter() -> MarketCatalogRouter {
+        // The bundle is immutable for the duration of the test; force-try only wraps fixture construction.
+        try! Self.makeRouter(databaseURL: sourceDatabaseURL, manifestURL: sourceManifestURL)
+    }
+
+    func makeManager(
+        candidate: CatalogModuleCandidate? = nil,
+        router: MarketCatalogRouter? = nil
+    ) -> CatalogModuleManager {
+        CatalogModuleManager(
+            rootDirectory: installRoot,
+            trustPolicyURL: trustPolicyURL,
+            appVersion: "1.0.0",
+            router: router ?? self.router,
+            transport: FixedModuleTransport(candidate: candidate ?? self.candidate)
+        )
+    }
+
+    func writeEmptyTrustPolicy() throws {
+        let object: [String: Any] = [
+            "schemaVersion": 1,
+            "keys": [],
+            "revokedModuleIDs": [],
+            "revokedDatabaseSha256": [],
+        ]
+        try Self.writeJSON(object, to: trustPolicyURL)
+    }
+
+    func writeTrustPolicy(
+        keyState: CatalogModuleTrustPolicy.Key.State,
+        revokedModuleIDs: [String] = [],
+        revokedDatabaseSha256: [String] = []
+    ) throws {
+        let object: [String: Any] = [
+            "schemaVersion": 1,
+            "keys": [[
+                "keyID": "test-ed25519",
+                "publicKeyBase64": privateKey.publicKey.rawRepresentation.base64EncodedString(),
+                "state": keyState.rawValue,
+            ]],
+            "revokedModuleIDs": revokedModuleIDs,
+            "revokedDatabaseSha256": revokedDatabaseSha256,
+        ]
+        try Self.writeJSON(object, to: trustPolicyURL)
+    }
+
+    private static func makeRouter(databaseURL: URL, manifestURL: URL) throws -> MarketCatalogRouter {
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any]
+        let version = try #require(manifest?["catalogVersion"] as? String)
+        return MarketCatalogRouter(
+            bundledGermany: .init(
+                catalog: SQLiteProductCatalog(databaseURL: databaseURL, manifestURL: manifestURL),
+                searchCatalog: SQLiteProductSearchCatalog(databaseURL: databaseURL, manifestURL: manifestURL),
+                catalogVersion: version
+            )
+        )
+    }
+
+    private static func fileSize(_ url: URL) throws -> Int {
+        try #require(url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+    }
+
+    private static func sha256(_ url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func integer(_ value: Any?) throws -> Int {
+        if let int = value as? Int { return int }
+        if let number = value as? NSNumber { return number.intValue }
+        throw CocoaError(.coderInvalidValue)
+    }
+
+    private static func writeJSON(_ object: [String: Any], to url: URL) throws {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+        try data.write(to: url, options: .atomic)
+    }
+}
+
+private actor FixedModuleTransport: CatalogModuleTransport {
+    let candidate: CatalogModuleCandidate
+
+    func availableMarkets() async throws -> [CatalogMarket] { [.germany] }
+    func latestCandidate(for market: CatalogMarket) async throws -> CatalogModuleCandidate { candidate }
+}
+
+private final class ModuleBundleToken {}

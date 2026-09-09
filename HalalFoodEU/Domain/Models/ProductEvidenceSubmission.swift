@@ -150,7 +150,7 @@ struct ProductEvidenceSubmissionRequest: Equatable, Sendable {
     static func correction(
         product: ProductRecord,
         issueType: ProductEvidenceIssueType,
-        market: String = "DE"
+        market: String? = nil
     ) -> ProductEvidenceSubmissionRequest {
         precondition(issueType != .missingProduct)
         let context = product.observation.map { observation in
@@ -167,7 +167,7 @@ struct ProductEvidenceSubmissionRequest: Equatable, Sendable {
         return ProductEvidenceSubmissionRequest(
             barcode: product.barcode,
             issueType: issueType,
-            market: market,
+            market: market ?? product.details?.market ?? "DE",
             productName: product.name,
             brand: product.brand,
             quantity: nil,

@@ -11,7 +11,7 @@ struct ProductSearchView: View {
             switch viewModel.state {
             case .idle:
                 ContentUnavailableView(
-                    String(localized: "Search the bundled catalog", table: "ProductSearch"),
+                    String(localized: "Search the active offline catalog", table: "ProductSearch"),
                     systemImage: "magnifyingglass",
                     description: Text(
                         String(
@@ -141,7 +141,7 @@ private struct ProductSearchResultRow: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(
             String(
-                localized: "Opens this exact barcode in the bundled catalog.",
+                localized: "Opens this exact barcode in the active offline catalog.",
                 table: "ProductSearch"
             )
         )

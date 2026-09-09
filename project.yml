@@ -60,6 +60,8 @@ targets:
         buildPhase: resources
       - path: Data/methodology/additive-identities-v1.json
         buildPhase: resources
+      - path: Data/catalog/catalog-module-trust-policy-v1.json
+        buildPhase: resources
     dependencies:
       - sdk: libsqlite3.tbd
     settings:

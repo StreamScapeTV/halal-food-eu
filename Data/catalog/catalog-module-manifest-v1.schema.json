@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/catalog-module-manifest-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "moduleID",
+    "market",
+    "catalogVersion",
+    "runtimeSchemaVersion",
+    "methodologyVersion",
+    "minimumAppVersion",
+    "maximumAppVersion",
+    "database",
+    "catalogManifest",
+    "attribution",
+    "counts",
+    "coverage",
+    "sourceSnapshotIdentity",
+    "releaseIdentity",
+    "compressedBytes",
+    "installedBytes",
+    "publishedAt",
+    "signingKeyID",
+    "supersedesModuleID"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "moduleID": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}-[A-Za-z0-9._-]{1,120}$"
+    },
+    "market": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "catalogVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "maxLength": 120
+    },
+    "runtimeSchemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "methodologyVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "minimumAppVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "maximumAppVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "database": {
+      "$ref": "#/$defs/database"
+    },
+    "catalogManifest": {
+      "$ref": "#/$defs/fileDigest"
+    },
+    "attribution": {
+      "$ref": "#/$defs/fileDigest"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "products",
+        "uniqueGTINs",
+        "ingredientObservations",
+        "assessments",
+        "retailerEvidence"
+      ],
+      "properties": {
+        "products": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uniqueGTINs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ingredientObservations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assessments": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retailerEvidence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingredientCoverageBasisPoints",
+        "freshnessState",
+        "limitations"
+      ],
+      "properties": {
+        "ingredientCoverageBasisPoints": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "freshnessState": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "sourceSnapshotIdentity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "releaseIdentity": {
+      "type": "string",
+      "pattern": "^catalog-[a-z]{2}-[A-Za-z0-9._-]{1,120}$"
+    },
+    "compressedBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 527433728
+    },
+    "installedBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 527433728
+    },
+    "publishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "signingKeyID": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,80}$"
+    },
+    "supersedesModuleID": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[A-Z]{2}-[A-Za-z0-9._-]{1,120}$"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fileName",
+        "byteCount",
+        "sha256"
+      ],
+      "properties": {
+        "fileName": {
+          "const": "catalog.sqlite3"
+        },
+        "byteCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 524288000
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "fileDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fileName",
+        "sha256"
+      ],
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "enum": [
+            "catalog-manifest.json",
+            "ATTRIBUTION.txt"
+          ]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

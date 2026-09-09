@@ -5,6 +5,7 @@ protocol UserProductLibraryStore: Sendable {
     func setHistoryEnabled(_ enabled: Bool) async throws
 
     func recordScan(
+        market: CatalogMarket,
         barcode: Barcode,
         scannedAt: Date,
         catalogVersion: String,
@@ -15,8 +16,9 @@ protocol UserProductLibraryStore: Sendable {
     func clearHistory() async throws
 
     func favorites() async throws -> [FavoriteProduct]
-    func favorite(for barcode: Barcode) async throws -> FavoriteProduct?
+    func favorite(for market: CatalogMarket, barcode: Barcode) async throws -> FavoriteProduct?
     func setFavorite(
+        market: CatalogMarket,
         barcode: Barcode,
         savedAt: Date,
         catalogVersion: String,

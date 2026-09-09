@@ -8,6 +8,7 @@ struct HalalFoodEUApp: App {
     @State private var userProductLibraryViewModel: UserProductLibraryViewModel
     @State private var ingredientOCRViewModel: IngredientOCRViewModel
     @State private var submissionCoordinator: ProductEvidenceSubmissionCoordinator
+    @State private var catalogModuleSettingsModel: CatalogModuleSettingsModel
     @State private var preferences: AppPreferences
     @State private var navigationModel: AppNavigationModel
     private let additiveReferenceCatalog: AdditiveReferenceCatalog?
@@ -15,26 +16,34 @@ struct HalalFoodEUApp: App {
 
     init() {
         let bundle = Bundle.main
-        let container = AppContainer.live(bundle: bundle)
+        let preferences = AppPreferences()
+        let container = AppContainer.live(bundle: bundle, preferences: preferences)
         let userProductLibraryViewModel = container.makeUserProductLibraryViewModel()
-        _userProductLibraryViewModel = State(initialValue: userProductLibraryViewModel)
-        _scannerViewModel = State(
-            initialValue: container.makeScannerViewModel(
-                cameraHistoryConsentToken: {
-                    userProductLibraryViewModel.cameraHistoryConsentToken()
-                },
-                onCameraScanResolved: { result, consentToken in
-                    userProductLibraryViewModel.recordCameraScan(
-                        result,
-                        consentToken: consentToken
-                    )
-                }
-            )
+        let scannerViewModel = container.makeScannerViewModel(
+            cameraHistoryConsentToken: {
+                userProductLibraryViewModel.cameraHistoryConsentToken()
+            },
+            onCameraScanResolved: { result, consentToken in
+                userProductLibraryViewModel.recordCameraScan(
+                    result,
+                    consentToken: consentToken
+                )
+            }
         )
-        _productSearchViewModel = State(initialValue: container.makeProductSearchViewModel())
+        let productSearchViewModel = container.makeProductSearchViewModel()
+        let catalogModuleSettingsModel = container.makeCatalogModuleSettingsModel(preferences: preferences)
+        catalogModuleSettingsModel.onMarketDidChange = { _ in
+            scannerViewModel.reset()
+            productSearchViewModel.reset()
+        }
+
+        _preferences = State(initialValue: preferences)
+        _userProductLibraryViewModel = State(initialValue: userProductLibraryViewModel)
+        _scannerViewModel = State(initialValue: scannerViewModel)
+        _productSearchViewModel = State(initialValue: productSearchViewModel)
         _ingredientOCRViewModel = State(initialValue: container.makeIngredientOCRViewModel())
         _submissionCoordinator = State(initialValue: container.makeSubmissionCoordinator())
-        _preferences = State(initialValue: AppPreferences())
+        _catalogModuleSettingsModel = State(initialValue: catalogModuleSettingsModel)
         _navigationModel = State(initialValue: AppNavigationModel())
         additiveReferenceCatalog = container.makeAdditiveReferenceCatalog()
         runtimeIdentity = AppRuntimeIdentity(bundle: bundle)
@@ -48,6 +57,7 @@ struct HalalFoodEUApp: App {
                 userProductLibraryViewModel: userProductLibraryViewModel,
                 ingredientOCRViewModel: ingredientOCRViewModel,
                 submissionCoordinator: submissionCoordinator,
+                catalogModuleSettingsModel: catalogModuleSettingsModel,
                 preferences: preferences,
                 navigationModel: navigationModel,
                 additiveReferenceCatalog: additiveReferenceCatalog,

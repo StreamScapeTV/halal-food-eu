@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import SQLite3
 @testable import HalalFoodEU
 
 @Suite("Local scan history and favorites")
@@ -15,6 +16,7 @@ struct UserProductLibraryTests {
         let initiallyEnabled = try await store.isHistoryEnabled()
         #expect(initiallyEnabled == false)
         try await store.recordScan(
+            market: .germany,
             barcode: barcode,
             scannedAt: firstDate,
             catalogVersion: "fixture-v1",
@@ -25,6 +27,7 @@ struct UserProductLibraryTests {
 
         try await store.setHistoryEnabled(true)
         try await store.recordScan(
+            market: .germany,
             barcode: barcode,
             scannedAt: firstDate,
             catalogVersion: "fixture-v1",
@@ -49,12 +52,14 @@ struct UserProductLibraryTests {
             let store = SQLiteUserProductLibrary(databaseURL: fixture.databaseURL)
             try await store.setHistoryEnabled(true)
             try await store.recordScan(
+                market: .germany,
                 barcode: barcode,
                 scannedAt: date,
                 catalogVersion: product.catalogVersion,
                 versionMarker: marker
             )
             try await store.setFavorite(
+                market: .germany,
                 barcode: barcode,
                 savedAt: date,
                 catalogVersion: product.catalogVersion,
@@ -68,7 +73,7 @@ struct UserProductLibraryTests {
         #expect(reopenedEnabled)
         let reopenedHistory = try await reopened.history(limit: 10)
         #expect(reopenedHistory.count == 1)
-        let favorite = try await reopened.favorite(for: barcode)
+        let favorite = try await reopened.favorite(for: .germany, barcode: barcode)
         #expect(favorite?.barcode == barcode)
         #expect(favorite?.versionMarker == marker)
     }
@@ -82,6 +87,7 @@ struct UserProductLibraryTests {
         for (index, raw) in ["0200000000004", "0200000000011"].enumerated() {
             let barcode = try Barcode(validating: raw)
             try await store.recordScan(
+                market: .germany,
                 barcode: barcode,
                 scannedAt: Date(timeIntervalSince1970: 1_700_001_000 + Double(index)),
                 catalogVersion: "fixture-v1",
@@ -110,6 +116,7 @@ struct UserProductLibraryTests {
         let historyInitiallyDisabled = try await store.isHistoryEnabled()
         #expect(historyInitiallyDisabled == false)
         try await store.setFavorite(
+            market: .germany,
             barcode: barcode,
             savedAt: Date(timeIntervalSince1970: 1_700_002_000),
             catalogVersion: product.catalogVersion,
@@ -122,6 +129,7 @@ struct UserProductLibraryTests {
         #expect(historyStillDisabled == false)
 
         try await store.setFavorite(
+            market: .germany,
             barcode: barcode,
             savedAt: Date(),
             catalogVersion: product.catalogVersion,
@@ -141,6 +149,7 @@ struct UserProductLibraryTests {
 
         for index in 0..<205 {
             try await store.recordScan(
+                market: .germany,
                 barcode: barcode,
                 scannedAt: Date(timeIntervalSince1970: 1_700_010_000 + Double(index)),
                 catalogVersion: "fixture-v1",
@@ -169,6 +178,22 @@ struct UserProductLibraryTests {
         #expect(SavedProductVersionMarker(product: nil).comparison(with: original) == .nowAvailable)
     }
 
+    @Test("Germany-only schema v1 migrates saved references to DE")
+    func migratesGermanyOnlyV1Store() async throws {
+        let fixture = try TemporaryUserLibraryFixture()
+        try createLegacyV1Store(at: fixture.databaseURL)
+        let store = SQLiteUserProductLibrary(databaseURL: fixture.databaseURL)
+
+        let entries = try await store.history(limit: 10)
+        let favorites = try await store.favorites()
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.market == .germany)
+        #expect(favorites.count == 1)
+        #expect(favorites.first?.market == .germany)
+        #expect(favorites.first?.barcode.rawValue == "0200000000004")
+    }
+
     @Test("A non-SQLite local store fails closed")
     func corruptStoreFailsClosed() async throws {
         let fixture = try TemporaryUserLibraryFixture()
@@ -181,6 +206,44 @@ struct UserProductLibraryTests {
         } catch {
             // Expected: corrupt local user data must never be accepted as a valid store.
         }
+    }
+
+    private func createLegacyV1Store(at url: URL) throws {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(
+            url.path,
+            &database,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        ) == SQLITE_OK, let database else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        defer { sqlite3_close(database) }
+
+        let marker = try Self.markerJSON(SavedProductVersionMarker(product: nil))
+        let scannedAt = "2023-11-14T22:13:20Z"
+        let sql = """
+        PRAGMA application_id = \(SQLiteUserProductLibrary.expectedApplicationID);
+        PRAGMA user_version = 1;
+        CREATE TABLE user_settings(key TEXT PRIMARY KEY, integer_value INTEGER NOT NULL CHECK(integer_value IN (0, 1)));
+        INSERT INTO user_settings(key, integer_value) VALUES ('history_enabled', 1);
+        CREATE TABLE scan_history(id INTEGER PRIMARY KEY AUTOINCREMENT, gtin TEXT NOT NULL, scanned_at TEXT NOT NULL, catalog_version TEXT NOT NULL, version_marker_json TEXT NOT NULL);
+        CREATE INDEX idx_scan_history_scanned_at ON scan_history(scanned_at DESC, id DESC);
+        CREATE TABLE favorites(gtin TEXT PRIMARY KEY, saved_at TEXT NOT NULL, catalog_version TEXT NOT NULL, version_marker_json TEXT NOT NULL);
+        CREATE INDEX idx_favorites_saved_at ON favorites(saved_at DESC, gtin ASC);
+        INSERT INTO scan_history(gtin, scanned_at, catalog_version, version_marker_json) VALUES ('0200000000004', '\(scannedAt)', 'fixture-v1', '\(marker.replacingOccurrences(of: "'", with: "''"))');
+        INSERT INTO favorites(gtin, saved_at, catalog_version, version_marker_json) VALUES ('0200000000004', '\(scannedAt)', 'fixture-v1', '\(marker.replacingOccurrences(of: "'", with: "''"))');
+        """
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+    }
+
+    private static func markerJSON(_ marker: SavedProductVersionMarker) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try String(decoding: encoder.encode(marker), as: UTF8.self)
     }
 
     private func makeProduct(

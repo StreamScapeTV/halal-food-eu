@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/halal-food-eu/catalog-module-trust-policy-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "keys", "revokedModuleIDs", "revokedDatabaseSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "keys": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keyID", "publicKeyBase64", "state"],
+        "properties": {
+          "keyID": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,80}$"},
+          "publicKeyBase64": {"type": "string", "minLength": 43, "maxLength": 44},
+          "state": {"enum": ["active", "retired", "revoked"]}
+        }
+      }
+    },
+    "revokedModuleIDs": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z]{2}-[A-Za-z0-9._-]{1,120}$"}},
+    "revokedDatabaseSha256": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+  }
+}

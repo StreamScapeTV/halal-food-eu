@@ -1,7 +1,7 @@
 # 011 — Testing and acceptance
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-05
+**Last reviewed:** 2026-09-09
 
 ## Test layers
 
@@ -50,6 +50,7 @@
 - Bundled iOS catalog lookup rejects manifest/database digest mismatch, unsupported manifest/source-policy schemas, integrity failures, missing required tables, and incompatible SQLite metadata.
 - Ingredient OCR rejects empty, oversized, invalid, too-small, and unsafe-dimension image input before recognition where applicable.
 - The separate writable local history/favorites SQLite store rejects incompatible application/schema IDs and malformed/corrupt records, uses parameterized SQL, and cannot mutate or weaken the read-only catalog.
+- Signed market-module tests cover canonical manifest shape, Ed25519 interoperability/tampering, key active/retired/revoked states, module/database revocation, digest/count/market mismatch, regular-file/symlink boundaries, persisted-module re-verification, atomic promotion/rollback, and Germany bundled fallback.
 - The shipping privacy manifest is parsed as a bounded property list and must exactly match direct Swift required-reason API use; missing, unused, unapproved, or newly introduced unreviewed categories fail closed while tracking and collected-data declarations remain within the accepted privacy contract.
 
 ### Data integration tests
@@ -102,6 +103,8 @@
 - **HF-TEST-011:** The iOS lane for specification 026 selects and verifies the accepted stable Xcode 26.6 toolchain, compiles with Swift 6 complete strict concurrency, and executes the real Vision OCR smoke test plus deterministic OCR unit tests without production retailer data.
 - **HF-TEST-012:** Changes to specification-006 local history/favorites must pass the real separate-SQLite persistence suite, camera-only history boundary tests, current-catalog comparison tests, EN/DE resource validation, and the existing barcode/search/OCR/evidence/submission/catalog regression suites under Xcode 26.6 / Swift 6 strict concurrency.
 - **HF-TEST-013:** Every push/PR validates the shipping privacy manifest against direct required-reason API use before iOS project generation. The reviewed current contract requires `NSPrivacyAccessedAPICategoryUserDefaults` / `CA92.1` for app-local `UserDefaults`; a missing, unused, unapproved, or newly introduced unreviewed covered category fails closed.
+- **HF-TEST-014:** Every push/PR affecting specification-029 delivery runs a secretless GitHub-hosted signed-module contract lane using only a deterministic RFC 8032 test key and production-shaped synthetic SQLite. It validates the closed manifest/trust schemas, canonical signing/verification, exact market/count/digest binding, attribution derivation, and full public-artifact verifier without publishing a release or requiring production product data. The deterministic test key is forbidden from the shipping trust policy.
+- **HF-TEST-015:** Real market-module publication is a separate manual protected-`main` workflow. It may consume only successful `catalog-release.yml` production evidence for the exact current `main` SHA, requires an owner-provisioned signing secret matching an already-bundled active public key, publishes an immutable market/version prerelease, publicly re-downloads and independently verifies all fixed assets, and marks it stable only after that verification. A failed verification cleans only the prerelease created by that exact run.
 
 ## Definition of done
 

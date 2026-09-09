@@ -152,7 +152,7 @@ actor CatalogModuleManager: CatalogModuleService {
 
     func activatePersistedSelection(_ market: CatalogMarket) async throws {
         try prepareRoot()
-        for module in try installedModules() {
+        for module in try await installedModules() {
             try await register(module)
         }
         try await selectMarket(market)

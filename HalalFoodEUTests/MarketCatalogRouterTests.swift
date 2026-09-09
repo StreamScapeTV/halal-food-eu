@@ -141,7 +141,7 @@ private actor FixedMarketCatalog: ProductCatalog {
 
 private actor FixedMarketSearchCatalog: ProductSearchCatalog {
     func search(query: String, limit: Int, offset: Int) async throws -> ProductSearchPage {
-        ProductSearchPage(results: [], hasMore: false)
+        ProductSearchPage(results: [], offset: 0, hasMore: false)
     }
 }
 

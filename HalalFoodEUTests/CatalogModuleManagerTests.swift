@@ -768,7 +768,7 @@ private final class ModuleFixture: @unchecked Sendable {
             throw CocoaError(.coderInvalidValue)
         }
         defer { sqlite3_finalize(statement) }
-        guard version.withCString { pointer in
+        guard version.withCString({ pointer in
                   sqlite3_bind_text(
                       statement,
                       1,
@@ -776,7 +776,7 @@ private final class ModuleFixture: @unchecked Sendable {
                       -1,
                       unsafeBitCast(-1, to: sqlite3_destructor_type.self)
                   )
-              } == SQLITE_OK,
+              }) == SQLITE_OK,
               sqlite3_step(statement) == SQLITE_DONE,
               sqlite3_changes(database) == 1 else {
             throw CocoaError(.coderInvalidValue)

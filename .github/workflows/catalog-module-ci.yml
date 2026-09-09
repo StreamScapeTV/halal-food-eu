@@ -1,6 +1,7 @@
 name: Signed catalog module contract
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - ".github/workflows/catalog-module-*.yml"

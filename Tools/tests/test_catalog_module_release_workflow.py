@@ -15,6 +15,7 @@ class CatalogModuleWorkflowTests(unittest.TestCase):
         self.release = RELEASE.read_text(encoding="utf-8")
 
     def test_contract_lane_is_secretless_and_proves_production_shaped_fixture(self) -> None:
+        self.assertIn("workflow_dispatch:", self.contract)
         self.assertIn("pull_request:", self.contract)
         self.assertIn("Tools/build_production_fixture.py", self.contract)
         self.assertIn("Tools/catalog_module_release.py verify-artifacts", self.contract)

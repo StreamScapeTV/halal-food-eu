@@ -824,6 +824,10 @@ private final class ModuleFixture: @unchecked Sendable {
 private actor SlowModuleTransport: CatalogModuleTransport {
     let candidate: CatalogModuleCandidate
 
+    init(candidate: CatalogModuleCandidate) {
+        self.candidate = candidate
+    }
+
     func availableMarkets() async throws -> [CatalogMarket] { [.germany] }
 
     func latestCandidate(for market: CatalogMarket) async throws -> CatalogModuleCandidate {
@@ -844,6 +848,10 @@ private actor FailingModuleTransport: CatalogModuleTransport {
 
 private actor FixedModuleTransport: CatalogModuleTransport {
     let candidate: CatalogModuleCandidate
+
+    init(candidate: CatalogModuleCandidate) {
+        self.candidate = candidate
+    }
 
     func availableMarkets() async throws -> [CatalogMarket] { [.germany] }
     func latestCandidate(for market: CatalogMarket) async throws -> CatalogModuleCandidate { candidate }

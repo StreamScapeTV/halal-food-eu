@@ -125,9 +125,12 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
                 let catalogVersion = requiredText(statement, column: 4)
                 guard !catalogVersion.isEmpty else { throw UserProductLibraryError.invalidRecord("history entry has an empty catalog version") }
                 entries.append(ScanHistoryEntry(
-                    id: sqlite3_column_int64(statement, 0), market: market, barcode: barcode,
-                    scannedAt: scannedAt, catalogVersion: catalogVersion,
-                    versionMarker: try Self.decodeMarker(requiredText(statement, column: 5))
+                    id: sqlite3_column_int64(statement, 0),
+                    barcode: barcode,
+                    scannedAt: scannedAt,
+                    catalogVersion: catalogVersion,
+                    versionMarker: try Self.decodeMarker(requiredText(statement, column: 5)),
+                    market: market
                 ))
             case SQLITE_DONE: return entries
             default: throw queryError(connection: connection)
@@ -174,11 +177,11 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
                 let catalogVersion = requiredText(statement, column: 3)
                 guard !catalogVersion.isEmpty else { throw UserProductLibraryError.invalidRecord("favorite has an empty catalog version") }
                 result.append(FavoriteProduct(
-                    market: market,
                     barcode: barcode,
                     savedAt: try Self.parseDate(requiredText(statement, column: 2)),
                     catalogVersion: catalogVersion,
-                    versionMarker: try Self.decodeMarker(requiredText(statement, column: 4))
+                    versionMarker: try Self.decodeMarker(requiredText(statement, column: 4)),
+                    market: market
                 ))
             case SQLITE_DONE: return result
             default: throw queryError(connection: connection)
@@ -201,10 +204,11 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
             let catalogVersion = requiredText(statement, column: 1)
             guard !catalogVersion.isEmpty else { throw UserProductLibraryError.invalidRecord("favorite has an empty catalog version") }
             return FavoriteProduct(
-                market: market, barcode: barcode,
+                barcode: barcode,
                 savedAt: try Self.parseDate(requiredText(statement, column: 0)),
                 catalogVersion: catalogVersion,
-                versionMarker: try Self.decodeMarker(requiredText(statement, column: 2))
+                versionMarker: try Self.decodeMarker(requiredText(statement, column: 2)),
+                market: market
             )
         case SQLITE_DONE: return nil
         default: throw queryError(connection: connection)

@@ -183,15 +183,17 @@ struct UserProductLibraryTests {
         let fixture = try TemporaryUserLibraryFixture()
         try createLegacyV1Store(at: fixture.databaseURL)
         let store = SQLiteUserProductLibrary(databaseURL: fixture.databaseURL)
+        let expectedBarcode = try Barcode(validating: "0200000000004")
 
         let entries = try await store.history(limit: 10)
         let favorites = try await store.favorites()
 
         #expect(entries.count == 1)
         #expect(entries.first?.market == .germany)
+        #expect(entries.first?.barcode == expectedBarcode)
         #expect(favorites.count == 1)
         #expect(favorites.first?.market == .germany)
-        #expect(favorites.first?.barcode.rawValue == "0200000000004")
+        #expect(favorites.first?.barcode == expectedBarcode)
     }
 
     @Test("A non-SQLite local store fails closed")

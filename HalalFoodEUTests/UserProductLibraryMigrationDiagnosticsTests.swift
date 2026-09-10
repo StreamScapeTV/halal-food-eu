@@ -5,37 +5,66 @@ import Testing
 
 @Suite("Legacy user-library migration diagnostics")
 struct UserProductLibraryMigrationDiagnosticsTests {
-    @Test("Germany-only v1 store migrates through the production actor")
-    func migrationThroughProductionActor() async throws {
+    @Test("Stage 1: production actor opens and preserves history opt-in")
+    func actorOpensMigratedStore() async throws {
+        let fixture = try makeLegacyFixture()
+        let store = SQLiteUserProductLibrary(databaseURL: fixture)
+        #expect(try await store.isHistoryEnabled())
+    }
+
+    @Test("Stage 2: production actor decodes migrated history")
+    func actorDecodesMigratedHistory() async throws {
+        let fixture = try makeLegacyFixture()
+        let store = SQLiteUserProductLibrary(databaseURL: fixture)
+        let entries = try await store.history(limit: 10)
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.market == .germany)
+        #expect(entries.first?.barcode.rawValue == "0200000000004")
+    }
+
+    @Test("Stage 3: production actor decodes migrated favorites")
+    func actorDecodesMigratedFavorites() async throws {
+        let fixture = try makeLegacyFixture()
+        let store = SQLiteUserProductLibrary(databaseURL: fixture)
+        let favorites = try await store.favorites()
+
+        #expect(favorites.count == 1)
+        #expect(favorites.first?.market == .germany)
+        #expect(favorites.first?.barcode.rawValue == "0200000000004")
+    }
+
+    @Test("Stage 4: raw SQLite migration shape is readable after actor opens")
+    func rawShapeAfterActorMigration() async throws {
+        let fixture = try makeLegacyFixture()
+        let store = SQLiteUserProductLibrary(databaseURL: fixture)
+        #expect(try await store.isHistoryEnabled())
+
+        var database: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            fixture.path,
+            &database,
+            SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let database else {
+            if let database { sqlite3_close(database) }
+            throw CocoaError(.fileReadUnknown)
+        }
+        defer { sqlite3_close(database) }
+
+        #expect(try pragma("user_version", database: database) == SQLiteUserProductLibrary.supportedSchemaVersion)
+        #expect(try scalar("SELECT COUNT(*) FROM scan_history WHERE market = 'DE';", database: database) == 1)
+        #expect(try scalar("SELECT COUNT(*) FROM favorites WHERE market = 'DE';", database: database) == 1)
+    }
+
+    private func makeLegacyFixture() throws -> URL {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         let databaseURL = directoryURL.appendingPathComponent("legacy-user-library.sqlite3")
         try createLegacyStore(at: databaseURL)
-
-        let store = SQLiteUserProductLibrary(databaseURL: databaseURL)
-        do {
-            let entries = try await store.history(limit: 10)
-            let favorites = try await store.favorites()
-            diagnostic(
-                "HFEU_V1_MIGRATION_RESULT history=\(entries.count) " +
-                "historyMarkets=\(entries.map(\.market.rawValue)) favorites=\(favorites.count) " +
-                "favoriteMarkets=\(favorites.map(\.market.rawValue))"
-            )
-
-            #expect(entries.count == 1)
-            #expect(entries.first?.market == .germany)
-            #expect(entries.first?.barcode.rawValue == "0200000000004")
-            #expect(favorites.count == 1)
-            #expect(favorites.first?.market == .germany)
-            #expect(favorites.first?.barcode.rawValue == "0200000000004")
-        } catch {
-            diagnostic(
-                "HFEU_V1_MIGRATION_ERROR type=\(String(reflecting: type(of: error))) " +
-                "description=\(error.localizedDescription) raw=\(String(reflecting: error))"
-            )
-            throw error
-        }
+        return databaseURL
     }
 
     private func createLegacyStore(at url: URL) throws {
@@ -68,21 +97,33 @@ struct UserProductLibraryMigrationDiagnosticsTests {
         var errorMessage: UnsafeMutablePointer<CChar>?
         let executeResult = sqlite3_exec(database, sql, nil, nil, &errorMessage)
         if executeResult != SQLITE_OK {
-            let message = errorMessage.map { String(cString: $0) } ?? String(cString: sqlite3_errmsg(database))
             if let errorMessage { sqlite3_free(errorMessage) }
             sqlite3_close(database)
-            diagnostic("HFEU_V1_FIXTURE_ERROR code=\(executeResult) message=\(message)")
             throw CocoaError(.fileWriteUnknown)
         }
 
-        let closeResult = sqlite3_close(database)
-        guard closeResult == SQLITE_OK else {
-            diagnostic("HFEU_V1_FIXTURE_CLOSE_ERROR code=\(closeResult)")
+        guard sqlite3_close(database) == SQLITE_OK else {
             throw CocoaError(.fileWriteUnknown)
         }
     }
 
-    private func diagnostic(_ message: String) {
-        FileHandle.standardError.write(Data((message + "\n").utf8))
+    private func pragma(_ name: String, database: OpaquePointer) throws -> Int32 {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "PRAGMA \(name);", -1, &statement, nil) == SQLITE_OK, let statement else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw CocoaError(.fileReadUnknown) }
+        return sqlite3_column_int(statement, 0)
+    }
+
+    private func scalar(_ sql: String, database: OpaquePointer) throws -> Int32 {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw CocoaError(.fileReadUnknown) }
+        return sqlite3_column_int(statement, 0)
     }
 }

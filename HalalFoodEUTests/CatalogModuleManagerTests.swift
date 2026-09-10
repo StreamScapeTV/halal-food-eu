@@ -561,8 +561,8 @@ private final class ModuleFixture: @unchecked Sendable {
             attributionURL: attribution
         )
 
-        try writeTrustPolicy(keyState: .active)
         router = try Self.makeRouter(databaseURL: sourceDatabaseURL, manifestURL: sourceManifestURL)
+        try writeTrustPolicy(keyState: .active)
     }
 
     func cleanup() {

@@ -309,14 +309,23 @@ actor SQLiteUserProductLibrary: UserProductLibraryStore {
         try execute("BEGIN IMMEDIATE;", connection: connection)
         do {
             // Schema v1 shipped only with the Germany catalog, so DE is the only
-            // truthful deterministic migration for legacy references.
-            try execute("ALTER TABLE scan_history ADD COLUMN market TEXT NOT NULL DEFAULT 'DE';", connection: connection)
+            // truthful deterministic migration for legacy references. Rebuild the
+            // tables instead of only appending a column so migrated stores receive
+            // the exact same market constraints and indexes as fresh v2 stores.
+            try execute("ALTER TABLE scan_history RENAME TO scan_history_v1;", connection: connection)
+            try execute("DROP INDEX IF EXISTS idx_scan_history_scanned_at;", connection: connection)
+            try execute("CREATE TABLE scan_history(id INTEGER PRIMARY KEY AUTOINCREMENT, market TEXT NOT NULL CHECK(length(market)=2), gtin TEXT NOT NULL, scanned_at TEXT NOT NULL, catalog_version TEXT NOT NULL, version_marker_json TEXT NOT NULL);", connection: connection)
+            try execute("INSERT INTO scan_history(id, market, gtin, scanned_at, catalog_version, version_marker_json) SELECT id, 'DE', gtin, scanned_at, catalog_version, version_marker_json FROM scan_history_v1;", connection: connection)
+            try execute("DROP TABLE scan_history_v1;", connection: connection)
+            try execute("CREATE INDEX idx_scan_history_scanned_at ON scan_history(scanned_at DESC, id DESC);", connection: connection)
+
             try execute("ALTER TABLE favorites RENAME TO favorites_v1;", connection: connection)
+            try execute("DROP INDEX IF EXISTS idx_favorites_saved_at;", connection: connection)
             try execute("CREATE TABLE favorites(market TEXT NOT NULL CHECK(length(market)=2), gtin TEXT NOT NULL, saved_at TEXT NOT NULL, catalog_version TEXT NOT NULL, version_marker_json TEXT NOT NULL, PRIMARY KEY(market, gtin));", connection: connection)
             try execute("INSERT INTO favorites(market, gtin, saved_at, catalog_version, version_marker_json) SELECT 'DE', gtin, saved_at, catalog_version, version_marker_json FROM favorites_v1;", connection: connection)
             try execute("DROP TABLE favorites_v1;", connection: connection)
-            try execute("DROP INDEX IF EXISTS idx_favorites_saved_at;", connection: connection)
             try execute("CREATE INDEX idx_favorites_saved_at ON favorites(saved_at DESC, market ASC, gtin ASC);", connection: connection)
+
             try execute("PRAGMA user_version = \(Self.supportedSchemaVersion);", connection: connection)
             try execute("COMMIT;", connection: connection)
         } catch { try? execute("ROLLBACK;", connection: connection); throw error }

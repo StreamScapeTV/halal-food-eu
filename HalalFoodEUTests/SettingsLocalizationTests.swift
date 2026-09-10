@@ -49,7 +49,7 @@ struct SettingsLocalizationTests {
             "Always check current packaging, the manufacturer or certifier, and a trusted qualified scholar for consequential decisions. Formulations and supply chains change.",
             "Ready to scan",
             "Scan a barcode, search the catalog, or enter one manually.",
-            "Looking up the bundled catalog…",
+            "Looking up the active offline catalog…",
             "Looking up the offline product catalog",
             "Product not found",
             "GTIN %@ is not present in this catalog version. This does not mean the product is halal or not halal.",

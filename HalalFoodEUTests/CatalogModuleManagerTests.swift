@@ -595,13 +595,17 @@ private final class ModuleFixture: @unchecked Sendable {
     }
 
     func makeReplacementCandidate() throws -> ReplacementCandidate {
-        let parts = catalogVersion.split(separator: ".", omittingEmptySubsequences: false)
+        let precedence = catalogVersion.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let core = precedence.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let parts = core.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 3,
               let major = Int(parts[0]),
               let minor = Int(parts[1]),
               let patch = Int(parts[2]) else {
             throw CocoaError(.coderInvalidValue)
         }
+        // Bumping the patch core is strictly newer than both a stable core and any
+        // prerelease of that core (for example 0.2.0-demo.1 -> 0.2.1).
         let nextVersion = "\(major).\(minor).\(patch + 1)"
         let nextModuleID = "DE-\(nextVersion)"
         let nextReleaseIdentity = "catalog-de-\(nextVersion)"

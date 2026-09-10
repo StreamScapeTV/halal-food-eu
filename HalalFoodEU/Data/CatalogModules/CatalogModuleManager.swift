@@ -420,7 +420,12 @@ actor CatalogModuleManager: CatalogModuleService {
         policy: CatalogModuleTrustPolicy
     ) throws -> CatalogModuleManifest {
         try validateCanonicalManifestData(candidate.manifestData)
-        let manifest = try decoder.decode(CatalogModuleManifest.self, from: candidate.manifestData)
+        let manifest: CatalogModuleManifest
+        do {
+            manifest = try decoder.decode(CatalogModuleManifest.self, from: candidate.manifestData)
+        } catch {
+            throw CatalogModuleError.invalidManifest("signed manifest does not decode as the closed v1 contract")
+        }
         try validateManifestShape(manifest, expectedMarket: expectedMarket, releaseIdentity: candidate.releaseIdentity)
 
         if policy.revokedModuleIDs.contains(manifest.moduleID) || policy.revokedDatabaseSha256.contains(manifest.database.sha256) {
@@ -770,8 +775,18 @@ actor CatalogModuleManager: CatalogModuleService {
     }
 
     private func validateCanonicalManifestData(_ data: Data) throws {
-        guard !data.isEmpty, data.count <= Self.maximumSmallFileBytes,
-              let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard !data.isEmpty, data.count <= Self.maximumSmallFileBytes else {
+            throw CatalogModuleError.invalidManifest("signed manifest must be a bounded JSON object")
+        }
+        let object: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw CatalogModuleError.invalidManifest("signed manifest must be a bounded JSON object")
+            }
+            object = decoded
+        } catch is CatalogModuleError {
+            throw CatalogModuleError.invalidManifest("signed manifest must be a bounded JSON object")
+        } catch {
             throw CatalogModuleError.invalidManifest("signed manifest must be a bounded JSON object")
         }
         try Self.validateExactManifestKeys(object)

@@ -6,6 +6,7 @@ struct AppShellView: View {
     @Bindable var userProductLibraryViewModel: UserProductLibraryViewModel
     @Bindable var ingredientOCRViewModel: IngredientOCRViewModel
     @Bindable var submissionCoordinator: ProductEvidenceSubmissionCoordinator
+    @Bindable var catalogModuleSettingsModel: CatalogModuleSettingsModel
     @Bindable var preferences: AppPreferences
     @Bindable var navigationModel: AppNavigationModel
     let additiveReferenceCatalog: AdditiveReferenceCatalog?
@@ -47,6 +48,7 @@ struct AppShellView: View {
             NavigationStack {
                 SettingsView(
                     preferences: preferences,
+                    catalogModules: catalogModuleSettingsModel,
                     identity: runtimeIdentity,
                     onOpenSaved: navigationModel.showSaved
                 )
@@ -60,6 +62,9 @@ struct AppShellView: View {
             .tag(AppTab.settings)
         }
         .preferredColorScheme(preferences.appearance.colorScheme)
+        .task {
+            await catalogModuleSettingsModel.load()
+        }
         .sheet(
             isPresented: Binding(
                 get: { submissionCoordinator.activeViewModel != nil },

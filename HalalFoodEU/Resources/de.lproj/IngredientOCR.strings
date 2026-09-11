@@ -30,4 +30,4 @@
 "The captured ingredients photo is too small for reliable text recognition." = "Das aufgenommene Zutatenfoto ist für eine zuverlässige Texterkennung zu klein.";
 "The captured ingredients photo has unsafe dimensions." = "Das aufgenommene Zutatenfoto hat unsichere Abmessungen.";
 "Opens an on-device ingredient text scanner." = "Öffnet einen Zutatentextscanner, der auf dem Gerät arbeitet.";
-"Barcode lookup uses the catalog bundled with the app. Ingredient OCR also runs on device; neither requires a network connection." = "Die Barcode-Suche verwendet den mit der App gebündelten Katalog. Auch die Zutaten-OCR läuft auf dem Gerät; beides benötigt keine Netzwerkverbindung.";
+"Barcode lookup uses the active verified offline catalog. Ingredient OCR also runs on device; neither requires a network connection after a market module is installed." = "Die Barcode-Suche verwendet den aktiven verifizierten Offline-Katalog. Auch die Zutaten-OCR läuft auf dem Gerät; nachdem ein Marktkatalogmodul installiert wurde, benötigt beides keine Netzwerkverbindung.";

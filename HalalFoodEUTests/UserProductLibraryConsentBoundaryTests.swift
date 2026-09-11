@@ -174,6 +174,7 @@ private actor ConsentBoundaryStore: UserProductLibraryStore {
     }
 
     func recordScan(
+        market: CatalogMarket,
         barcode: Barcode,
         scannedAt: Date,
         catalogVersion: String,
@@ -188,9 +189,10 @@ private actor ConsentBoundaryStore: UserProductLibraryStore {
     func deleteHistoryEntry(id: Int64) async throws {}
     func clearHistory() async throws {}
     func favorites() async throws -> [FavoriteProduct] { [] }
-    func favorite(for barcode: Barcode) async throws -> FavoriteProduct? { nil }
+    func favorite(for market: CatalogMarket, barcode: Barcode) async throws -> FavoriteProduct? { nil }
 
     func setFavorite(
+        market: CatalogMarket,
         barcode: Barcode,
         savedAt: Date,
         catalogVersion: String,

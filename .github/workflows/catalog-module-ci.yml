@@ -1,0 +1,121 @@
+name: Signed catalog module contract
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/catalog-module-*.yml"
+      - "Data/catalog/catalog-module-*.json"
+      - "HalalFoodEU/Data/CatalogModules/**"
+      - "HalalFoodEU/Domain/Models/CatalogModule.swift"
+      - "HalalFoodEU/Domain/Repositories/CatalogModuleService.swift"
+      - "HalalFoodEUTests/CatalogModuleManagerTests.swift"
+      - "HalalFoodEUTests/MarketCatalogRouterTests.swift"
+      - "Tools/catalog_module_release.py"
+      - "Tools/tests/test_catalog_module_release*.py"
+  pull_request:
+    paths:
+      - ".github/workflows/catalog-module-*.yml"
+      - "Data/catalog/catalog-module-*.json"
+      - "HalalFoodEU/Data/CatalogModules/**"
+      - "HalalFoodEU/Domain/Models/CatalogModule.swift"
+      - "HalalFoodEU/Domain/Repositories/CatalogModuleService.swift"
+      - "HalalFoodEUTests/CatalogModuleManagerTests.swift"
+      - "HalalFoodEUTests/MarketCatalogRouterTests.swift"
+      - "Tools/catalog_module_release.py"
+      - "Tools/tests/test_catalog_module_release*.py"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Verify signed module contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate schemas, trust policy, and deterministic signing tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile Tools/catalog_module_release.py
+          python3 -m json.tool Data/catalog/catalog-module-manifest-v1.schema.json >/dev/null
+          python3 -m json.tool Data/catalog/catalog-module-trust-policy-v1.schema.json >/dev/null
+          python3 -m json.tool Data/catalog/catalog-module-trust-policy-v1.json >/dev/null
+          python3 Tools/catalog_module_release.py validate-trust \
+            --policy Data/catalog/catalog-module-trust-policy-v1.json
+          python3 -m unittest \
+            Tools.tests.test_catalog_module_release \
+            Tools.tests.test_catalog_module_release_workflow \
+            -v
+
+      - name: Prove full signed-module verification on a production-shaped fixture
+        env:
+          # RFC 8032 vector used only for deterministic CI interoperability testing.
+          CATALOG_SIGNING_PRIVATE_KEY: nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A=
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/catalog-module-fixture"
+          mkdir -p "$ROOT"
+          python3 Tools/build_production_fixture.py \
+            --database "$ROOT/catalog.sqlite3" \
+            --manifest "$ROOT/catalog-manifest.json" \
+            --source-commit "$GITHUB_SHA" \
+            --workflow-run "module-contract-${GITHUB_RUN_ID}"
+          python3 Tools/catalog_module_release.py write-attribution \
+            --catalog-manifest "$ROOT/catalog-manifest.json" \
+            --output "$ROOT/ATTRIBUTION.txt"
+          cat > "$ROOT/trust-policy.json" <<'JSON'
+          {
+            "keys": [
+              {
+                "keyID": "rfc8032-ci-only",
+                "publicKeyBase64": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+                "state": "active"
+              }
+            ],
+            "revokedDatabaseSha256": [],
+            "revokedModuleIDs": [],
+            "schemaVersion": 1
+          }
+          JSON
+          VERSION="$(python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'catalog-module-fixture'
+          print(json.loads((root / 'catalog-manifest.json').read_text())['catalogVersion'])
+          PY
+          )"
+          COMPRESSED_BYTES="$(gzip -n -9 -c "$ROOT/catalog.sqlite3" | wc -c | tr -d ' ')"
+          python3 Tools/catalog_module_release.py verify-key \
+            --policy "$ROOT/trust-policy.json" \
+            --key-id rfc8032-ci-only
+          python3 Tools/catalog_module_release.py assemble \
+            --database "$ROOT/catalog.sqlite3" \
+            --catalog-manifest "$ROOT/catalog-manifest.json" \
+            --attribution "$ROOT/ATTRIBUTION.txt" \
+            --market DE \
+            --minimum-app-version 0.1.0 \
+            --maximum-app-version 99.0.0 \
+            --signing-key-id rfc8032-ci-only \
+            --release-identity "catalog-de-$VERSION" \
+            --module-id "DE-$VERSION" \
+            --source-snapshot-identity "ci:$GITHUB_SHA" \
+            --published-at 2026-01-01T00:00:00Z \
+            --compressed-bytes "$COMPRESSED_BYTES" \
+            --output "$ROOT/catalog-module-manifest.json"
+          python3 Tools/catalog_module_release.py sign \
+            --manifest "$ROOT/catalog-module-manifest.json" \
+            --output "$ROOT/catalog-module-manifest.sig"
+          python3 Tools/catalog_module_release.py verify-artifacts \
+            --database "$ROOT/catalog.sqlite3" \
+            --catalog-manifest "$ROOT/catalog-manifest.json" \
+            --attribution "$ROOT/ATTRIBUTION.txt" \
+            --manifest "$ROOT/catalog-module-manifest.json" \
+            --signature "$ROOT/catalog-module-manifest.sig" \
+            --policy "$ROOT/trust-policy.json" \
+            --release-identity "catalog-de-$VERSION"

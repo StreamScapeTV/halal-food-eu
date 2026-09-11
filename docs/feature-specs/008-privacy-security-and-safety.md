@@ -1,7 +1,7 @@
 # 008 — Privacy, security, and safety
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-07
+**Last reviewed:** 2026-09-09
 
 ## Privacy
 
@@ -26,6 +26,8 @@
 - **HF-SEC-007:** Dependencies are minimized and pinned/reviewed when introduced.
 - **HF-SEC-008:** OCR image input is hostile input: byte size, source dimensions, decoded pixel count, decode success, and processing bounds are validated before Vision receives the image.
 - **HF-SEC-009:** The writable local history/favorites database has its own application identifier and schema version, uses bound SQL, serializes access behind a non-main-actor repository, bounds history retention, and fails closed on malformed/corrupt/incompatible local data. Its failure must not weaken or mutate the read-only production catalog path.
+- **HF-SEC-010:** Optional specification-029 catalog-module metadata and files are hostile network input. The app accepts only the fixed GitHub release metadata/asset path, HTTPS redirects to the reviewed GitHub asset hosts, bounded response/file sizes, fixed asset filenames, regular non-symlink files/directories, canonical closed-schema JSON, and an Ed25519 signature whose key is already present in the bundled trust policy. Product/catalog text can never choose a download URL, host, path, key ID, or local destination.
+- **HF-SEC-011:** A downloaded module is re-verified against the current bundled trust policy every time it is restored/activated, not trusted merely because it was previously installed. Retired keys may validate already-installed known-good modules during a rotation window but cannot authorize a new download; revoked keys, module IDs, or database digests make the installed candidate unusable. Germany then uses the immutable bundled fallback; another market remains explicitly unavailable.
 
 ## Religious and consumer safety
 

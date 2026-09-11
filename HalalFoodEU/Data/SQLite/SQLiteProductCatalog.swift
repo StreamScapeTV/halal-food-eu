@@ -69,12 +69,14 @@ actor SQLiteProductCatalog: ProductCatalog {
 
     private let databaseURL: URL
     private let manifestURL: URL
+    private let expectedMarket: CatalogMarket
     private var connection: SQLiteConnection?
     private var catalogVersion: String?
 
-    init(databaseURL: URL, manifestURL: URL) {
+    init(databaseURL: URL, manifestURL: URL, expectedMarket: CatalogMarket = .germany) {
         self.databaseURL = databaseURL
         self.manifestURL = manifestURL
+        self.expectedMarket = expectedMarket
     }
 
     /// Loads one immutable product-detail projection. The repository performs a fixed,
@@ -136,8 +138,8 @@ actor SQLiteProductCatalog: ProductCatalog {
 
         let storedBarcode = try Barcode(validating: requiredText(statement, column: 0))
         let market = requiredText(statement, column: 1)
-        guard market == "DE" else {
-            throw ProductCatalogError.invalidRecord("runtime catalog contains unsupported market \(market)")
+        guard market == expectedMarket.rawValue else {
+            throw ProductCatalogError.invalidRecord("runtime catalog contains market \(market), expected \(expectedMarket.rawValue)")
         }
         let name = requiredText(statement, column: 2)
         let brand = optionalText(statement, column: 3)

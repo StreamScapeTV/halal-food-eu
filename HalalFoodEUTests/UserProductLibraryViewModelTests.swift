@@ -171,6 +171,7 @@ struct UserProductLibraryViewModelTests {
 }
 
 private struct RecordedUserScan: Sendable {
+    let market: CatalogMarket
     let barcode: Barcode
     let scannedAt: Date
     let catalogVersion: String
@@ -208,6 +209,7 @@ private actor UserLibraryTestStore: UserProductLibraryStore {
     }
 
     func recordScan(
+        market: CatalogMarket,
         barcode: Barcode,
         scannedAt: Date,
         catalogVersion: String,
@@ -216,6 +218,7 @@ private actor UserLibraryTestStore: UserProductLibraryStore {
         guard historyEnabled else { return }
         recordedScans.append(
             RecordedUserScan(
+                market: market,
                 barcode: barcode,
                 scannedAt: scannedAt,
                 catalogVersion: catalogVersion,
@@ -228,7 +231,8 @@ private actor UserLibraryTestStore: UserProductLibraryStore {
                 barcode: barcode,
                 scannedAt: scannedAt,
                 catalogVersion: catalogVersion,
-                versionMarker: versionMarker
+                versionMarker: versionMarker,
+                market: market
             ),
             at: 0
         )
@@ -248,25 +252,27 @@ private actor UserLibraryTestStore: UserProductLibraryStore {
 
     func favorites() async throws -> [FavoriteProduct] { favoriteEntries }
 
-    func favorite(for barcode: Barcode) async throws -> FavoriteProduct? {
-        favoriteEntries.first { $0.barcode == barcode }
+    func favorite(for market: CatalogMarket, barcode: Barcode) async throws -> FavoriteProduct? {
+        favoriteEntries.first { $0.market == market && $0.barcode == barcode }
     }
 
     func setFavorite(
+        market: CatalogMarket,
         barcode: Barcode,
         savedAt: Date,
         catalogVersion: String,
         versionMarker: SavedProductVersionMarker,
         isFavorite: Bool
     ) async throws {
-        favoriteEntries.removeAll { $0.barcode == barcode }
+        favoriteEntries.removeAll { $0.market == market && $0.barcode == barcode }
         if isFavorite {
             favoriteEntries.append(
                 FavoriteProduct(
                     barcode: barcode,
                     savedAt: savedAt,
                     catalogVersion: catalogVersion,
-                    versionMarker: versionMarker
+                    versionMarker: versionMarker,
+                    market: market
                 )
             )
         }

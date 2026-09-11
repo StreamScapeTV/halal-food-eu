@@ -9,6 +9,6 @@ HalalFoodEU.xcodeproj/
 *.ipa
 *.dSYM
 coverage/
-Tools/__pycache__/
+__pycache__/
 HalalFoodEU/Resources/catalog.sqlite3
 HalalFoodEU/Resources/catalog-manifest.json

@@ -78,7 +78,7 @@ final class UserProductLibraryViewModel {
     func recordCameraScan(_ result: ProductLookupResult, consentToken: UInt64) {
         guard historyEnabled, consentToken == historyConsentRevision else { return }
 
-        let catalogVersion = result.product?.catalogVersion ?? currentCatalogVersion
+        let catalogVersion = result.catalogVersion.isEmpty ? (result.product?.catalogVersion ?? currentCatalogVersion) : result.catalogVersion
         guard !catalogVersion.isEmpty else {
             errorMessage = String(
                 localized: "The current catalog version could not be identified, so this scan was not saved.",
@@ -101,6 +101,7 @@ final class UserProductLibraryViewModel {
                 // persisted opt-in immediately before its transaction. Together
                 // with generation invalidation this closes revoke/re-enable races.
                 try await store.recordScan(
+                    market: result.market,
                     barcode: result.barcode,
                     scannedAt: timestamp,
                     catalogVersion: catalogVersion,
@@ -119,14 +120,16 @@ final class UserProductLibraryViewModel {
         cameraHistoryWriteTasks[taskID] = task
     }
 
-    func isFavorite(_ barcode: Barcode) -> Bool {
-        favorites.contains(where: { $0.barcode == barcode })
+    func isFavorite(_ barcode: Barcode, market: CatalogMarket = .germany) -> Bool {
+        favorites.contains(where: { $0.market == market && $0.barcode == barcode })
     }
 
-    func toggleFavorite(_ product: ProductRecord) async {
-        let shouldFavorite = !isFavorite(product.barcode)
+    func toggleFavorite(_ product: ProductRecord, market: CatalogMarket? = nil) async {
+        let resolvedMarket = market ?? product.details.flatMap { CatalogMarket(rawValue: $0.market) } ?? .germany
+        let shouldFavorite = !isFavorite(product.barcode, market: resolvedMarket)
         do {
             try await store.setFavorite(
+                market: resolvedMarket,
                 barcode: product.barcode,
                 savedAt: now(),
                 catalogVersion: product.catalogVersion,
@@ -145,6 +148,7 @@ final class UserProductLibraryViewModel {
     func removeFavorite(_ favorite: FavoriteProduct) async {
         do {
             try await store.setFavorite(
+                market: favorite.market,
                 barcode: favorite.barcode,
                 savedAt: favorite.savedAt,
                 catalogVersion: favorite.catalogVersion,

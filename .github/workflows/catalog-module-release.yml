@@ -1,0 +1,335 @@
+name: Publish signed catalog module
+
+on:
+  workflow_dispatch:
+    inputs:
+      catalog_release_run_id:
+        description: Successful catalog-release.yml run ID for this exact protected main SHA.
+        required: true
+        type: string
+      market:
+        description: Market admitted for publication. Additional markets require the #26 rollout gate.
+        required: true
+        type: choice
+        options:
+          - DE
+      minimum_app_version:
+        description: Minimum compatible app semantic version.
+        required: true
+        type: string
+      maximum_app_version:
+        description: Maximum compatible app semantic version.
+        required: true
+        type: string
+      signing_key_id:
+        description: Active key ID already present in the bundled trust policy.
+        required: true
+        type: string
+      supersedes_module_id:
+        description: Exact previously active module ID, empty only for the first module in this market.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: signed-catalog-module-${{ inputs.market }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Sign, publish, and publicly re-verify market module
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: catalog-module-release
+    steps:
+      - name: Require exact protected main and bounded inputs
+        env:
+          EXPECTED_REF: refs/heads/main
+          RELEASE_RUN_ID: ${{ inputs.catalog_release_run_id }}
+          MARKET: ${{ inputs.market }}
+          SIGNING_KEY_ID: ${{ inputs.signing_key_id }}
+          SUPERSEDES_MODULE_ID: ${{ inputs.supersedes_module_id }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          [[ "$RELEASE_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$MARKET" =~ ^[A-Z]{2}$ ]]
+          [[ "$SIGNING_KEY_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]]
+          if [[ -n "$SUPERSEDES_MODULE_ID" ]]; then
+            [[ "$SUPERSEDES_MODULE_ID" =~ ^[A-Z]{2}-[A-Za-z0-9._-]{1,120}$ ]]
+            [[ "$SUPERSEDES_MODULE_ID" == "$MARKET-"* ]]
+          fi
+
+      - name: Check out exact integrated main without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify referenced catalog-release run identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN_ID: ${{ inputs.catalog_release_run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > "$RUNNER_TEMP/catalog-release-run.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          run = json.loads((Path(os.environ['RUNNER_TEMP']) / 'catalog-release-run.json').read_text())
+          expected = {
+              'head_sha': os.environ['GITHUB_SHA'],
+              'head_branch': 'main',
+              'conclusion': 'success',
+          }
+          for key, value in expected.items():
+              if run.get(key) != value:
+                  raise SystemExit(f'catalog release run {key} is not the exact integrated main value')
+          if run.get('path') != '.github/workflows/catalog-release.yml':
+              raise SystemExit('referenced run is not catalog-release.yml')
+          PY
+
+      - name: Download exact integrated production release evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/release-evidence
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.catalog_release_run_id }}
+
+      - name: Revalidate production release evidence and redistribution policy
+        env:
+          MARKET: ${{ inputs.market }}
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/release-evidence"
+          python3 Tools/catalog_workflow.py validate-contract
+          python3 Tools/production_catalog.py validate \
+            --database "$ROOT/database/payload/catalog.sqlite3" \
+            --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          python3 - <<'PY'
+          import json, os, sqlite3
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'release-evidence'
+          report = json.loads((root / 'release/payload/release-report.json').read_text())
+          manifest = json.loads((root / 'manifest/payload/catalog-manifest.json').read_text())
+          if report.get('releaseMode') != 'production':
+              raise SystemExit('synthetic release evidence cannot be published as a market module')
+          if report.get('commitSha') != os.environ['GITHUB_SHA'] or manifest.get('sourceCommit') != os.environ['GITHUB_SHA']:
+              raise SystemExit('catalog release evidence is not bound to this exact protected main SHA')
+          if report.get('catalogVersion') != manifest.get('catalogVersion'):
+              raise SystemExit('catalog version differs between release report and manifest')
+          if not manifest.get('sourcePolicies') or not manifest.get('rights', {}).get('attributions') or not manifest.get('rights', {}).get('licenses'):
+              raise SystemExit('production catalog lacks redistribution/attribution lineage')
+          contract = json.loads(Path('Data/workflows/catalog-workflow-contract-v1.json').read_text())
+          classes = {item['key']: item['redistributionClass'] for item in contract['sources']}
+          for source in manifest['sourcePolicies']:
+              if classes.get(source['sourceKey']) != 'redistributable':
+                  raise SystemExit(f"source {source['sourceKey']} is not admitted for public redistribution")
+          db = sqlite3.connect(f"file:{(root / 'database/payload/catalog.sqlite3').resolve()}?mode=ro&immutable=1", uri=True)
+          try:
+              markets = [row[0] for row in db.execute('SELECT DISTINCT market FROM products ORDER BY market')]
+          finally:
+              db.close()
+          if markets != [os.environ['MARKET']]:
+              raise SystemExit(f'catalog market scope {markets!r} does not match requested market')
+          PY
+
+      - name: Assemble canonical module envelope and prove signing-key identity
+        env:
+          CATALOG_SIGNING_PRIVATE_KEY: ${{ secrets.CATALOG_SIGNING_PRIVATE_KEY }}
+          MARKET: ${{ inputs.market }}
+          MIN_APP: ${{ inputs.minimum_app_version }}
+          MAX_APP: ${{ inputs.maximum_app_version }}
+          SIGNING_KEY_ID: ${{ inputs.signing_key_id }}
+          SUPERSEDES_MODULE_ID: ${{ inputs.supersedes_module_id }}
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/release-evidence"
+          OUT="$RUNNER_TEMP/catalog-module"
+          mkdir -p "$OUT"
+          cp "$ROOT/database/payload/catalog.sqlite3" "$OUT/catalog.sqlite3"
+          cp "$ROOT/manifest/payload/catalog-manifest.json" "$OUT/catalog-manifest.json"
+          python3 Tools/catalog_module_release.py write-attribution \
+            --catalog-manifest "$OUT/catalog-manifest.json" \
+            --output "$OUT/ATTRIBUTION.txt"
+          python3 Tools/catalog_module_release.py validate-trust \
+            --policy Data/catalog/catalog-module-trust-policy-v1.json
+          python3 Tools/catalog_module_release.py verify-key \
+            --policy Data/catalog/catalog-module-trust-policy-v1.json \
+            --key-id "$SIGNING_KEY_ID"
+          readarray -t META < <(python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'release-evidence'
+          manifest = json.loads((root / 'manifest/payload/catalog-manifest.json').read_text())
+          report = json.loads((root / 'release/payload/release-report.json').read_text())
+          print(manifest['catalogVersion'])
+          print(f"{report['sourceKey']}:{report['snapshotId']}:{report['commitSha']}")
+          PY
+          )
+          VERSION="${META[0]}"
+          SOURCE_IDENTITY="${META[1]}"
+          TAG="catalog-${MARKET,,}-$VERSION"
+          MODULE_ID="$MARKET-$VERSION"
+          [[ "$TAG" =~ ^catalog-[a-z]{2}-[A-Za-z0-9._-]{1,120}$ ]]
+          [[ "$MODULE_ID" =~ ^[A-Z]{2}-[A-Za-z0-9._-]{1,120}$ ]]
+          echo "tag=$TAG" >> "$GITHUB_ENV"
+          echo "module_id=$MODULE_ID" >> "$GITHUB_ENV"
+          COMPRESSED_BYTES="$(gzip -n -9 -c "$OUT/catalog.sqlite3" | wc -c | tr -d ' ')"
+          PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          ARGS=(
+            --database "$OUT/catalog.sqlite3"
+            --catalog-manifest "$OUT/catalog-manifest.json"
+            --attribution "$OUT/ATTRIBUTION.txt"
+            --market "$MARKET"
+            --minimum-app-version "$MIN_APP"
+            --maximum-app-version "$MAX_APP"
+            --signing-key-id "$SIGNING_KEY_ID"
+            --release-identity "$TAG"
+            --module-id "$MODULE_ID"
+            --source-snapshot-identity "$SOURCE_IDENTITY"
+            --published-at "$PUBLISHED_AT"
+            --compressed-bytes "$COMPRESSED_BYTES"
+            --output "$OUT/catalog-module-manifest.json"
+          )
+          if [[ -n "$SUPERSEDES_MODULE_ID" ]]; then
+            ARGS+=(--supersedes-module-id "$SUPERSEDES_MODULE_ID")
+          fi
+          python3 Tools/catalog_module_release.py assemble "${ARGS[@]}"
+          python3 Tools/catalog_module_release.py sign \
+            --manifest "$OUT/catalog-module-manifest.json" \
+            --output "$OUT/catalog-module-manifest.sig"
+          python3 Tools/catalog_module_release.py verify-artifacts \
+            --database "$OUT/catalog.sqlite3" \
+            --catalog-manifest "$OUT/catalog-manifest.json" \
+            --attribution "$OUT/ATTRIBUTION.txt" \
+            --manifest "$OUT/catalog-module-manifest.json" \
+            --signature "$OUT/catalog-module-manifest.sig" \
+            --policy Data/catalog/catalog-module-trust-policy-v1.json \
+            --release-identity "$TAG"
+
+      - name: Refuse release identity reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable release $tag already exists; refusing to rewrite it." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Immutable tag $tag already exists; refusing to reuse it." >&2
+            exit 1
+          fi
+
+      - name: Attest exact module assets
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            ${{ runner.temp }}/catalog-module/catalog.sqlite3
+            ${{ runner.temp }}/catalog-module/catalog-manifest.json
+            ${{ runner.temp }}/catalog-module/catalog-module-manifest.json
+            ${{ runner.temp }}/catalog-module/catalog-module-manifest.sig
+            ${{ runner.temp }}/catalog-module/ATTRIBUTION.txt
+
+      - name: Publish immutable prerelease from exact protected main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/catalog-module"
+          NOTES="$RUNNER_TEMP/release-evidence/release-notes/payload/catalog-release-notes.md"
+          test -f "$NOTES"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Halal Food EU ${module_id} catalog module" \
+            --notes-file "$NOTES" \
+            --prerelease \
+            "$OUT/catalog.sqlite3" \
+            "$OUT/catalog-manifest.json" \
+            "$OUT/catalog-module-manifest.json" \
+            "$OUT/catalog-module-manifest.sig" \
+            "$OUT/ATTRIBUTION.txt"
+          echo "published_by_this_run=true" >> "$GITHUB_ENV"
+
+      - name: Publicly re-download and independently verify every release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY_ID: ${{ inputs.signing_key_id }}
+          MARKET: ${{ inputs.market }}
+        run: |
+          set -euo pipefail
+          LOCAL="$RUNNER_TEMP/catalog-module"
+          PUBLIC="$RUNNER_TEMP/public-redownload"
+          mkdir -p "$PUBLIC"
+          BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          for asset in catalog.sqlite3 catalog-manifest.json catalog-module-manifest.json catalog-module-manifest.sig ATTRIBUTION.txt; do
+            curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+              --retry 5 --retry-all-errors --retry-delay 2 \
+              "$BASE/$asset" -o "$PUBLIC/$asset"
+            cmp "$LOCAL/$asset" "$PUBLIC/$asset"
+          done
+          python3 Tools/production_catalog.py validate \
+            --database "$PUBLIC/catalog.sqlite3" \
+            --manifest "$PUBLIC/catalog-manifest.json"
+          python3 Tools/catalog_module_release.py verify-artifacts \
+            --database "$PUBLIC/catalog.sqlite3" \
+            --catalog-manifest "$PUBLIC/catalog-manifest.json" \
+            --attribution "$PUBLIC/ATTRIBUTION.txt" \
+            --manifest "$PUBLIC/catalog-module-manifest.json" \
+            --signature "$PUBLIC/catalog-module-manifest.sig" \
+            --policy Data/catalog/catalog-module-trust-policy-v1.json \
+            --release-identity "$tag"
+          python3 - <<'PY' > "$PUBLIC/catalog-module-release-report.json"
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'public-redownload'
+          def digest(name): return hashlib.sha256((root / name).read_bytes()).hexdigest()
+          print(json.dumps({
+              'schemaVersion': 1,
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'commitSha': os.environ['GITHUB_SHA'],
+              'workflowRun': os.environ['GITHUB_RUN_ID'],
+              'releaseIdentity': os.environ['tag'],
+              'moduleID': os.environ['module_id'],
+              'market': os.environ['MARKET'],
+              'signingKeyID': os.environ['SIGNING_KEY_ID'],
+              'databaseSha256': digest('catalog.sqlite3'),
+              'moduleManifestSha256': digest('catalog-module-manifest.json'),
+              'publicRedownloadVerified': True,
+          }, indent=2, sort_keys=True))
+          PY
+          gh release upload "$tag" "$PUBLIC/catalog-module-release-report.json" \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Mark release stable only after public verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease=false
+          {
+            echo "### Signed catalog module published"
+            echo "- Release: \`$tag\`"
+            echo "- Module: \`$module_id\`"
+            echo "- Source: \`$GITHUB_SHA\`"
+            echo "- Public re-download verification: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean failed prerelease created by this exact run
+        if: ${{ failure() && env.published_by_this_run == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+

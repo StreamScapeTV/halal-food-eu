@@ -1,7 +1,7 @@
 # 017 — Public project configuration and optional source credentials
 
 **Status:** Accepted  
-**Last reviewed:** 2026-09-01
+**Last reviewed:** 2026-09-09
 
 ## Purpose
 
@@ -41,7 +41,11 @@ The canonical v1 public configuration is `Data/config/public-project-configurati
 - **HF-CONFIG-015:** Open Food Facts bulk acquisition reads its User-Agent from the committed public configuration. No repository variable or third-party credential is required for the approved bulk path.
 - **HF-CONFIG-016:** Public configuration may be packaged where a user-facing feature needs it, but API keys, OAuth secrets, SFTP passwords/keys, signing material, and private source tokens must never be embedded in the iOS app or SQLite catalog.
 - **HF-CONFIG-017:** Configuration health and CI are repository automation only. They do not add a backend, user account, analytics, tracking, or mandatory runtime network access to the iOS product.
+- **HF-CONFIG-018:** Specification-029 signing uses one explicit GitHub Environment secret name, `CATALOG_SIGNING_PRIVATE_KEY`, containing a base64-encoded 32-byte Ed25519 private seed. It is read only as environment state inside the manual protected-main release step; it is never passed as a command-line value, committed, emitted, artifacted, or embedded in the app/catalog.
+- **HF-CONFIG-019:** The public verification authority is the bundled `Data/catalog/catalog-module-trust-policy-v1.json`. Key IDs/public keys/states and revoked module/database digests are public security configuration. A production signing key is usable only when its derived public key exactly matches one `active` entry already shipped by the app. Repository/environment variables cannot add a runtime trust root.
+- **HF-CONFIG-020:** The committed trust policy may intentionally contain zero active keys. In that state the app keeps all bundled offline functionality but reports signed updates unavailable, and the release workflow fails before signing even if a private-key secret exists. Deterministic CI/test keys must never be copied into the production trust policy.
+- **HF-CONFIG-021:** Key rotation is staged through reviewed app releases: introduce the new public key before using its private key, overlap trusted keys only when needed, retire an old key to allow persisted known-good modules without new downloads, and revoke a compromised key/module/database through a new reviewed bundled trust policy plus release/incident response. No hidden remote key-discovery mechanism is accepted.
 
 ## Acceptance tests
 
-The repository tests cover exact public values, email/User-Agent binding, zero-secret free sources, disabled optional sources, enabled missing-credential failure, source-specific credential-policy requirements, mutually-exclusive authentication shape, `GITHUB_TOKEN` exclusion, unknown secret-state rejection, metadata-only health output, deduplicated issue creation/update/closure, PR secret isolation, trusted-main health isolation, Open Food Facts acquisition use of the committed User-Agent, and specification 018 consumption of `PRODUCT_SUBMISSION_EMAIL` as public app configuration without embedding any secret.
+The repository tests cover exact public values, email/User-Agent binding, zero-secret free sources, disabled optional sources, enabled missing-credential failure, source-specific credential-policy requirements, mutually-exclusive authentication shape, `GITHUB_TOKEN` exclusion, unknown secret-state rejection, metadata-only health output, deduplicated issue creation/update/closure, PR secret isolation, trusted-main health isolation, Open Food Facts acquisition use of the committed User-Agent, specification 018 consumption of `PRODUCT_SUBMISSION_EMAIL` as public app configuration without embedding any secret, and specification-029 signing-key/trust-policy separation including fail-closed empty policy and deterministic-test-key exclusion.

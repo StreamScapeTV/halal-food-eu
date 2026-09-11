@@ -16,6 +16,7 @@ final class ScannerViewModel {
     var manualBarcode = ""
     var isScannerPresented = false
     private(set) var lookupState: LookupState = .idle
+    private(set) var latestLookupResult: ProductLookupResult?
 
     private let lookupProduct: LookupProductByBarcode
     private let cameraHistoryConsentToken: @MainActor @Sendable () -> UInt64?
@@ -69,6 +70,7 @@ final class ScannerViewModel {
     func reset() {
         lookupTask?.cancel()
         lookupState = .idle
+        latestLookupResult = nil
     }
 
     private func submit(
@@ -78,6 +80,7 @@ final class ScannerViewModel {
     ) {
         lookupTask?.cancel()
         lastRequest = (payload, symbology)
+        latestLookupResult = nil
         lookupState = .lookingUp
 
         lookupTask = Task { [weak self, lookupProduct, onCameraScanResolved] in
@@ -86,6 +89,7 @@ final class ScannerViewModel {
                 try Task.checkCancellation()
 
                 guard let self else { return }
+                latestLookupResult = result
                 if let consentToken {
                     onCameraScanResolved(result, consentToken)
                 }

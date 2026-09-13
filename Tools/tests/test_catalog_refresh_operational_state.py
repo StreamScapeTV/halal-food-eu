@@ -13,6 +13,7 @@ from catalog_refresh_operational_state import (
     apply_operational_clock,
     digest_without,
     merge_previous_state,
+    merge_workflow_status,
     validate_operational_report,
     validate_operational_state,
 )
@@ -61,6 +62,52 @@ def applied(meta, *, previous=None, quality=QUALITY):
         policy=copy.deepcopy(POLICY),
         previous=previous,
     )
+
+
+def durable_workflow_status(
+    *,
+    source="open-food-facts",
+    snapshot="off-scheduled-34327267707",
+    at="2026-09-09T08:27:06Z",
+    mode="full",
+    success=True,
+    completeness="complete",
+    quality="pass",
+):
+    full_success = bool(success and mode == "full" and completeness == "complete" and quality == "pass")
+    return {
+        "schemaVersion": 2,
+        "available": True,
+        "workflow": "scheduled-catalog-refresh.yml",
+        "sourceKey": source,
+        "runId": "34327267707",
+        "event": "schedule",
+        "status": "completed",
+        "conclusion": "success" if success else "failure",
+        "createdAt": "2026-09-09T08:05:57Z",
+        "updatedAt": "2026-09-09T08:30:14Z",
+        "headSha": "0" * 40,
+        "mode": mode,
+        "snapshotID": snapshot,
+        "sourceContentSha256": None,
+        "completeness": completeness,
+        "qualityStatus": quality,
+        "successfulFullAcquisitionAt": at if full_success else None,
+        "fullAcquisitionSucceeded": full_success,
+        "lineageSource": "scheduled-job-graph",
+        "lastSuccessfulFullAcquisitionAt": at if full_success else None,
+        "lastSuccessfulFullSnapshotID": snapshot if full_success else None,
+        "lastSuccessfulFullRunId": "34327267707" if full_success else None,
+        "lastSuccessfulFullHeadSha": "0" * 40 if full_success else None,
+        "lastSuccessfulFullLineageSource": "scheduled-job-graph" if full_success else None,
+        "requiredJobs": {
+            "policy": "success",
+            "acquire": "success",
+            "normalize": "success",
+            "quality": "success" if quality == "pass" else "failure",
+            "refresh": "success" if success else "failure",
+        },
+    }
 
 
 class OperationalRefreshStateTests(unittest.TestCase):
@@ -186,6 +233,83 @@ class OperationalRefreshStateTests(unittest.TestCase):
         with self.assertRaisesRegex(OperationalRefreshError, "different snapshots"):
             merge_previous_state(accepted=accepted, operational=conflicting)
 
+    def test_expired_artifact_workflow_status_advances_only_operational_clock(self):
+        base_state, _ = applied(metadata(snapshot="off-old", retrieved="2026-09-02T00:00:00Z"))
+        accepted = promote_state(copy.deepcopy(POLICY), base_state)
+        accepted_snapshot = accepted["acceptedComplete"]["snapshotID"]
+        accepted_retrieved = accepted["acceptedComplete"]["retrievedAt"]
+
+        merged = merge_workflow_status(
+            accepted=accepted,
+            workflow_status=durable_workflow_status(),
+            policy=copy.deepcopy(POLICY),
+        )
+        self.assertEqual(merged["acceptedComplete"]["snapshotID"], accepted_snapshot)
+        self.assertEqual(merged["acceptedComplete"]["retrievedAt"], accepted_retrieved)
+        self.assertIsNone(merged["candidateComplete"])
+        self.assertEqual(merged["lastSuccessfulFullAcquisitionAt"], "2026-09-09T08:27:06Z")
+        self.assertEqual(merged["lastSuccessfulFullSnapshotID"], "off-scheduled-34327267707")
+        self.assertEqual(merged["nextFullDueAt"], "2026-09-16T08:27:06Z")
+        validate_operational_state(merged)
+
+    def test_failed_or_nonfull_workflow_status_cannot_advance_operational_clock(self):
+        base_state, _ = applied(metadata(snapshot="off-old", retrieved="2026-09-02T00:00:00Z"))
+        accepted = promote_state(copy.deepcopy(POLICY), base_state)
+        original = (
+            accepted["lastSuccessfulFullAcquisitionAt"],
+            accepted["lastSuccessfulFullSnapshotID"],
+            accepted["nextFullDueAt"],
+        )
+        for status in (
+            durable_workflow_status(success=False),
+            durable_workflow_status(mode="fixture"),
+            durable_workflow_status(completeness=None),
+            durable_workflow_status(quality="blocked"),
+        ):
+            merged = merge_workflow_status(
+                accepted=accepted,
+                workflow_status=status,
+                policy=copy.deepcopy(POLICY),
+            )
+            self.assertEqual(
+                (
+                    merged["lastSuccessfulFullAcquisitionAt"],
+                    merged["lastSuccessfulFullSnapshotID"],
+                    merged["nextFullDueAt"],
+                ),
+                original,
+            )
+
+    def test_newer_failed_workflow_attempt_preserves_older_durable_full_success(self):
+        base_state, _ = applied(metadata(snapshot="off-old", retrieved="2026-09-02T00:00:00Z"))
+        accepted = promote_state(copy.deepcopy(POLICY), base_state)
+        status = durable_workflow_status(success=False)
+        status.update(
+            lastSuccessfulFullAcquisitionAt="2026-09-09T08:27:06Z",
+            lastSuccessfulFullSnapshotID="off-scheduled-34327267707",
+            lastSuccessfulFullRunId="34327267707",
+            lastSuccessfulFullHeadSha="0" * 40,
+            lastSuccessfulFullLineageSource="scheduled-job-graph",
+        )
+        merged = merge_workflow_status(
+            accepted=accepted,
+            workflow_status=status,
+            policy=copy.deepcopy(POLICY),
+        )
+        self.assertEqual(merged["lastSuccessfulFullAcquisitionAt"], "2026-09-09T08:27:06Z")
+        self.assertEqual(merged["lastSuccessfulFullSnapshotID"], "off-scheduled-34327267707")
+        self.assertEqual(merged["nextFullDueAt"], "2026-09-16T08:27:06Z")
+
+    def test_workflow_status_source_mismatch_fails_closed(self):
+        base_state, _ = applied(metadata())
+        accepted = promote_state(copy.deepcopy(POLICY), base_state)
+        with self.assertRaisesRegex(OperationalRefreshError, "source differs"):
+            merge_workflow_status(
+                accepted=accepted,
+                workflow_status=durable_workflow_status(source="open-prices"),
+                policy=copy.deepcopy(POLICY),
+            )
+
     def test_partial_attempt_preserves_previous_operational_clock(self):
         first_state, first_report = evaluated(metadata())
         first_state, first_report = apply_operational_clock(
@@ -276,6 +400,11 @@ class OperationalRefreshStateTests(unittest.TestCase):
         self.assertIn("Tools/catalog_refresh_operational_state.py merge-previous", workflow)
         self.assertEqual(workflow.count('--previous-state "$RUNNER_TEMP/previous-refresh-state.json"'), 2)
         self.assertNotIn('--previous-state "${{ steps.paths.outputs.accepted_state }}"', workflow)
+
+    def test_catalog_health_recovers_operational_clock_from_durable_workflow_status_after_artifact_expiry(self):
+        health = (ROOT / ".github/workflows/catalog-health.yml").read_text(encoding="utf-8")
+        self.assertIn("Tools/catalog_refresh_operational_state.py merge-workflow-status", health)
+        self.assertIn('--workflow-status "$RUNNER_TEMP/health/scheduled-off-status.json"', health)
 
 
 if __name__ == "__main__":

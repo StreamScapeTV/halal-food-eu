@@ -18,8 +18,10 @@ class CatalogRefreshHealthWorkflowTests(unittest.TestCase):
     def test_refresh_plan_merges_protected_acceptance_with_latest_operational_artifact(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("Tools/catalog_refresh_operational_state.py merge-previous", text)
+        self.assertIn("Tools/catalog_refresh_operational_state.py merge-workflow-status", text)
         self.assertIn("--accepted-state Data/refresh/accepted-open-food-facts-v1.json", text)
         self.assertIn('--operational-state "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json"', text)
+        self.assertIn('--workflow-status "$RUNNER_TEMP/health/scheduled-off-status.json"', text)
         self.assertIn('--previous-state "$RUNNER_TEMP/health/refresh-plan-state.json"', text)
         self.assertNotIn('--previous-state "$RUNNER_TEMP/refresh-state/payload/source-refresh-state.json"', text)
 

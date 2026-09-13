@@ -56,6 +56,8 @@ Per source, refresh state must distinguish:
 
 The operational acquisition clock and accepted evidence clock are independent. A successful complete full acquisition may advance `lastSuccessfulFullAcquisitionAt` / `nextFullDueAt` even when its bytes are unchanged or its changed candidate is not yet accepted. That operational advancement must not rewrite `acceptedComplete.retrievedAt`, ingredient `observedAt`, retailer observation dates, certificate dates, assessment dates, or any other evidence-freshness field.
 
+Short-lived source/normalized/quality payload retention must not erase that operational fact. When exact refresh artifacts are still downloadable, they remain the preferred lineage evidence. After those payload artifacts expire, trusted health/planning may recover only the bounded operational full-acquisition clock from validated protected-`main` workflow/run/job metadata that proves the exact source, full mode, snapshot identifier, required policy/acquire/normalize/quality/refresh success, workflow revision, and acquisition completion time. This metadata fallback never supplies product evidence, a source-content digest that is no longer available, or accepted-catalog authority, and large source payload retention must not be extended solely to keep the operational clock alive.
+
 If no successful complete full acquisition is known, the full lane remains explicitly due rather than fabricating a successful baseline. Delta acquisitions do not reset the full-acquisition cadence unless a future reviewed source policy explicitly defines equivalent complete semantics.
 
 ### REF-004 — Candidate promotion
@@ -156,6 +158,8 @@ Catalog health (024) must expose refresh health in the same aggregate report/inc
 - stable refresh blocker/deduplication keys.
 
 Scheduled workflow health must remain source-specific even when multiple sources share one workflow file: a newer successful run for one source must not hide a failed run for another source.
+
+If payload artifacts have expired, health may treat a run as a successful full acquisition only when the durable metadata contract proves complete passing full lineage. Scheduled runs may use the deterministic schedule-owned full snapshot identity; manual recovery must carry an explicit successful metadata-only lineage marker after validated inputs. Missing markers, sample/fixture modes, failed/skipped required jobs, partial lineage, source mismatch, or foreign/stale workflow metadata fail closed and cannot advance the full-acquisition clock.
 
 Stale queues and scheduled refresh failures requiring action must therefore remain visible through the trusted catalog-health workflow rather than only in ephemeral job logs.
 

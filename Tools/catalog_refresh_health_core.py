@@ -87,7 +87,26 @@ def _queue_projection(queue: dict[str, Any]) -> tuple[dict[str, Any], list[str]]
 
 def _workflow_projection(status: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     if status.get("available") is False:
-        return {"available": False, "conclusion": None, "runId": None, "event": None, "updatedAt": None}, None
+        return {
+            "available": False,
+            "conclusion": None,
+            "runId": None,
+            "event": None,
+            "updatedAt": None,
+            "headSha": None,
+            "mode": None,
+            "snapshotID": None,
+            "completeness": None,
+            "qualityStatus": None,
+            "successfulFullAcquisitionAt": None,
+            "fullAcquisitionSucceeded": False,
+            "lineageSource": None,
+            "lastSuccessfulFullAcquisitionAt": None,
+            "lastSuccessfulFullSnapshotID": None,
+            "lastSuccessfulFullRunId": None,
+            "lastSuccessfulFullHeadSha": None,
+            "lastSuccessfulFullLineageSource": None,
+        }, None
     available = status.get("available")
     if available not in {None, True}:
         raise RefreshHealthError("workflow status available flag is invalid")
@@ -97,12 +116,62 @@ def _workflow_projection(status: dict[str, Any]) -> tuple[dict[str, Any], str | 
     run_id = status.get("runId")
     if run_id is not None and not isinstance(run_id, (str, int)):
         raise RefreshHealthError("workflow status runId is invalid")
+    full_success = status.get("fullAcquisitionSucceeded", False)
+    if not isinstance(full_success, bool):
+        raise RefreshHealthError("workflow status fullAcquisitionSucceeded is invalid")
+    mode = status.get("mode") if isinstance(status.get("mode"), str) else None
+    snapshot_id = status.get("snapshotID") if isinstance(status.get("snapshotID"), str) else None
+    success_at = (
+        status.get("successfulFullAcquisitionAt")
+        if isinstance(status.get("successfulFullAcquisitionAt"), str)
+        else None
+    )
+    if full_success:
+        if conclusion != "success" or mode != "full":
+            raise RefreshHealthError("successful full workflow status is inconsistent")
+        if not snapshot_id or not success_at:
+            raise RefreshHealthError("successful full workflow status lacks snapshot/time")
+        if status.get("completeness") != "complete" or status.get("qualityStatus") != "pass":
+            raise RefreshHealthError("successful full workflow status lacks complete passing lineage")
     projection = {
         "available": True,
         "conclusion": conclusion,
         "runId": str(run_id) if run_id is not None else None,
         "event": status.get("event") if isinstance(status.get("event"), str) else None,
         "updatedAt": status.get("updatedAt") if isinstance(status.get("updatedAt"), str) else None,
+        "headSha": status.get("headSha") if isinstance(status.get("headSha"), str) else None,
+        "mode": mode,
+        "snapshotID": snapshot_id,
+        "completeness": status.get("completeness") if isinstance(status.get("completeness"), str) else None,
+        "qualityStatus": status.get("qualityStatus") if isinstance(status.get("qualityStatus"), str) else None,
+        "successfulFullAcquisitionAt": success_at,
+        "fullAcquisitionSucceeded": full_success,
+        "lineageSource": status.get("lineageSource") if isinstance(status.get("lineageSource"), str) else None,
+        "lastSuccessfulFullAcquisitionAt": (
+            status.get("lastSuccessfulFullAcquisitionAt")
+            if isinstance(status.get("lastSuccessfulFullAcquisitionAt"), str)
+            else None
+        ),
+        "lastSuccessfulFullSnapshotID": (
+            status.get("lastSuccessfulFullSnapshotID")
+            if isinstance(status.get("lastSuccessfulFullSnapshotID"), str)
+            else None
+        ),
+        "lastSuccessfulFullRunId": (
+            str(status.get("lastSuccessfulFullRunId"))
+            if status.get("lastSuccessfulFullRunId") is not None
+            else None
+        ),
+        "lastSuccessfulFullHeadSha": (
+            status.get("lastSuccessfulFullHeadSha")
+            if isinstance(status.get("lastSuccessfulFullHeadSha"), str)
+            else None
+        ),
+        "lastSuccessfulFullLineageSource": (
+            status.get("lastSuccessfulFullLineageSource")
+            if isinstance(status.get("lastSuccessfulFullLineageSource"), str)
+            else None
+        ),
     }
     unhealthy = conclusion in {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}
     return projection, conclusion if unhealthy else None
@@ -162,8 +231,9 @@ def enrich_health(
         "snapshotID": None,
         "candidateChangedFromAccepted": None,
     }
-    last_success_at = None
-    last_success_snapshot = None
+    workflow_success = workflow_projections.get(source_key, {})
+    last_success_at = workflow_success.get("lastSuccessfulFullAcquisitionAt")
+    last_success_snapshot = workflow_success.get("lastSuccessfulFullSnapshotID")
     if refresh_report is not None:
         if refresh_report.get("schemaVersion") != 1:
             raise RefreshHealthError("refresh report schemaVersion must be 1")

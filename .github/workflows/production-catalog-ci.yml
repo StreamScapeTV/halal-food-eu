@@ -33,6 +33,8 @@ jobs:
           python3 -m py_compile \
             Tools/basic_exclusions.py \
             Tools/build_production_fixture.py \
+            Tools/build_bundled_catalog.py \
+            Tools/catalog_source_shards.py \
             Tools/github_catalog_proposal.py \
             Tools/product_search_index.py \
             Tools/production_catalog_aggregate.py \
@@ -43,6 +45,8 @@ jobs:
             Tools/production_catalog_proposal.py \
             Tools/production_catalog_release_input.py \
             Tools/tests/test_basic_exclusions.py \
+            Tools/tests/test_build_bundled_catalog.py \
+            Tools/tests/test_catalog_source_shards.py \
             Tools/tests/test_product_search_index.py \
             Tools/tests/test_production_build_workflow.py \
             Tools/tests/test_production_catalog_aggregate.py \
@@ -60,8 +64,39 @@ jobs:
             -v
           PYTHONPATH=Tools python3 -m unittest \
             Tools.tests.test_basic_exclusions \
+            Tools.tests.test_build_bundled_catalog \
+            Tools.tests.test_catalog_source_shards \
             Tools.tests.test_product_search_index \
             -v
+
+      - name: Build the Git-backed Germany bundle catalog
+        run: |
+          set -euo pipefail
+          python3 -m json.tool Data/catalog/bundle-source-manifest-v1.schema.json >/dev/null
+          python3 -m json.tool Data/catalog/bundled/de/source-manifest-v1.json >/dev/null
+          PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate \
+            --manifest Data/catalog/bundled/de/source-manifest-v1.json
+          PYTHONPATH=Tools python3 Tools/build_bundled_catalog.py \
+            --source-manifest Data/catalog/bundled/de/source-manifest-v1.json \
+            --database "${RUNNER_TEMP}/bundled-catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/bundled-catalog-manifest.json" \
+            --source-commit "${GITHUB_SHA}" \
+            --workflow-run "${GITHUB_RUN_ID}"
+          python3 Tools/production_catalog.py validate \
+            --database "${RUNNER_TEMP}/bundled-catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/bundled-catalog-manifest.json"
+          python3 Tools/product_search_index.py validate \
+            --database "${RUNNER_TEMP}/bundled-catalog.sqlite3" \
+            --manifest "${RUNNER_TEMP}/bundled-catalog-manifest.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest=json.loads((Path(os.environ["RUNNER_TEMP"])/"bundled-catalog-manifest.json").read_text())
+          assert manifest["recordCount"] == 7440
+          assert manifest["sourceShardSet"]["recordCount"] == 7440
+          assert manifest["sourceShardSet"]["shardCount"] == 32
+          assert manifest["sourceShardSet"]["logicalSha256"] == "b272c4bc1cf82f5e10b3afcd4c468a07099b0895fb8d64defae5968b9e68f0a7"
+          PY
 
       - name: Build the exact production-schema iOS fixture
         run: |

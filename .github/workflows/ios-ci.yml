@@ -139,6 +139,35 @@ jobs:
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 -m unittest discover -s Tools/tests -p 'test_catalog_workflow.py'
 
+      - name: Validate Git-backed bundled catalog source
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/build_bundled_catalog.py \
+            Tools/catalog_source_shards.py \
+            Tools/tests/test_build_bundled_catalog.py \
+            Tools/tests/test_catalog_source_shards.py
+          python3 -m json.tool Data/catalog/bundle-source-manifest-v1.schema.json >/dev/null
+          python3 -m json.tool Data/catalog/bundled/de/source-manifest-v1.json >/dev/null
+          PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate \
+            --manifest Data/catalog/bundled/de/source-manifest-v1.json
+          PYTHONPATH=Tools python3 -m unittest \
+            Tools.tests.test_build_bundled_catalog \
+            Tools.tests.test_catalog_source_shards \
+            -v
+          PYTHONPATH=Tools python3 Tools/build_bundled_catalog.py \
+            --source-manifest Data/catalog/bundled/de/source-manifest-v1.json \
+            --database "$RUNNER_TEMP/bundled-catalog.sqlite3" \
+            --manifest "$RUNNER_TEMP/bundled-catalog-manifest.json" \
+            --source-commit "$GITHUB_SHA" \
+            --workflow-run "$GITHUB_RUN_ID"
+          python3 Tools/production_catalog.py validate \
+            --database "$RUNNER_TEMP/bundled-catalog.sqlite3" \
+            --manifest "$RUNNER_TEMP/bundled-catalog-manifest.json"
+          python3 Tools/product_search_index.py validate \
+            --database "$RUNNER_TEMP/bundled-catalog.sqlite3" \
+            --manifest "$RUNNER_TEMP/bundled-catalog-manifest.json"
+
       - name: Validate hostile-input and dependency security policy
         run: |
           python3 -m py_compile \

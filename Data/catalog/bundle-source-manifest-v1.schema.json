@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://streamscape.tv/schemas/halal-food-eu/bundle-source-manifest-v1.schema.json",
+  "title": "Halal Food EU Git-backed bundle source manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion","csvSchemaVersion","datasetID","market","catalogVersion","selectionPolicyVersion","generatedAt","columns","selectionPolicy","qualityPolicy","primaryQualitySourceKey","sources","shardStrategy","shards","recordCount","logicalSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "csvSchemaVersion": {"const": 1},
+    "datasetID": {"type": "string", "minLength": 1},
+    "market": {"type": "string", "pattern": "^[A-Z]{2}$"},
+    "catalogVersion": {"type": "string", "minLength": 1},
+    "selectionPolicyVersion": {"type": "string", "minLength": 1},
+    "generatedAt": {"type": "string", "minLength": 1},
+    "columns": {
+      "const": ["gtin","original_barcode","market","brand","product_name","variant","quantity","category","identity_confidence","identity_source_key","identity_source_record_id","identity_retrieved_at","ingredients_text","ingredients_language","allergens_text","ingredients_source_key","ingredients_source_record_id","ingredients_retrieved_at","ingredients_observed_at","ingredients_source_url","retailer_kind","retailer_key","retailer_confidence","retailer_source_key","retailer_source_record_id","retailer_retrieved_at","retailer_observed_at","retailer_snapshot_at","retailer_location_id","retailer_source_url","retailer_scope","retailer_limitations"]
+    },
+    "selectionPolicy": {"$ref": "#/$defs/digestBinding"},
+    "qualityPolicy": {"$ref": "#/$defs/digestBinding"},
+    "primaryQualitySourceKey": {"type": "string", "minLength": 1},
+    "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+    "shardStrategy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind","bucketCount","key"],
+      "properties": {"kind": {"const": "sha256-mod"}, "bucketCount": {"type": "integer", "minimum": 1, "maximum": 64}, "key": {"const": "gtin"}}
+    },
+    "shards": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/shard"}},
+    "recordCount": {"type": "integer", "minimum": 1},
+    "logicalSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "migrationSummary": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+  },
+  "$defs": {
+    "digestBinding": {
+      "type": "object", "additionalProperties": false, "required": ["path","sha256"],
+      "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sourceKey","policyPath","policySha256","snapshotID","revision","reference","retrievedAt"],
+      "properties": {
+        "sourceKey": {"type": "string", "minLength": 1}, "policyPath": {"type": "string", "minLength": 1},
+        "policySha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "snapshotID": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1}, "reference": {"type": "string", "pattern": "^https://"}, "retrievedAt": {"type": "string", "minLength": 1}
+      }
+    },
+    "shard": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bucket","path","compression","recordCount","byteCount","sha256"],
+      "properties": {
+        "bucket": {"type": "integer", "minimum": 0}, "path": {"type": "string", "minLength": 1},
+        "compression": {"enum": ["none","gzip","xz"]}, "recordCount": {"type": "integer", "minimum": 0},
+        "byteCount": {"type": "integer", "minimum": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

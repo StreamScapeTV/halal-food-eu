@@ -1,0 +1,348 @@
+{
+  "catalogVersion": "2026.09.02.1",
+  "columns": [
+    "gtin",
+    "original_barcode",
+    "market",
+    "brand",
+    "product_name",
+    "variant",
+    "quantity",
+    "category",
+    "identity_confidence",
+    "identity_source_key",
+    "identity_source_record_id",
+    "identity_retrieved_at",
+    "ingredients_text",
+    "ingredients_language",
+    "allergens_text",
+    "ingredients_source_key",
+    "ingredients_source_record_id",
+    "ingredients_retrieved_at",
+    "ingredients_observed_at",
+    "ingredients_source_url",
+    "retailer_kind",
+    "retailer_key",
+    "retailer_confidence",
+    "retailer_source_key",
+    "retailer_source_record_id",
+    "retailer_retrieved_at",
+    "retailer_observed_at",
+    "retailer_snapshot_at",
+    "retailer_location_id",
+    "retailer_source_url",
+    "retailer_scope",
+    "retailer_limitations"
+  ],
+  "csvSchemaVersion": 1,
+  "datasetID": "de-bundled-open-data-2026-09-02-v1",
+  "generatedAt": "2026-09-14T02:25:00Z",
+  "logicalSha256": "b272c4bc1cf82f5e10b3afcd4c468a07099b0895fb8d64defae5968b9e68f0a7",
+  "market": "DE",
+  "migrationSummary": {
+    "bundledIngredientRows": 6563,
+    "bundledProductRows": 7440,
+    "bundledRetailerEvidenceRows": 7437,
+    "excludedInvalidGTINRows": 35,
+    "excludedManufacturerObservationRows": 3,
+    "excludedMissingProductNameRows": 70,
+    "excludedNoGTINRows": 7,
+    "omittedUndatedOpenPricesRetailerEvidence": 3,
+    "sourceObservationRows": 7555
+  },
+  "primaryQualitySourceKey": "open-food-facts",
+  "qualityPolicy": {
+    "path": "Data/quality/catalog-quality-policy-v1.json",
+    "sha256": "1acabb83b498838338d3c58c16dec80d19b184c9f1c2b73346a13ce8cee0a5b4"
+  },
+  "recordCount": 7440,
+  "schemaVersion": 1,
+  "selectionPolicy": {
+    "path": "Data/selection/catalog-selection-policy-v1.json",
+    "sha256": "d9ad6d4cce9cd7c03f64e19206be5d7d0a70466386de1fd68d9bce0578c515d0"
+  },
+  "selectionPolicyVersion": "1.0.0",
+  "shardStrategy": {
+    "bucketCount": 32,
+    "key": "gtin",
+    "kind": "sha256-mod"
+  },
+  "shards": [
+    {
+      "bucket": 0,
+      "byteCount": 34754,
+      "compression": "gzip",
+      "path": "shards/products-00.csv.gz",
+      "recordCount": 211,
+      "sha256": "2974e0bccf2ed51117e8443ecda9c95a31b58ab46949b33c472d7f0406b97bca"
+    },
+    {
+      "bucket": 1,
+      "byteCount": 40081,
+      "compression": "gzip",
+      "path": "shards/products-01.csv.gz",
+      "recordCount": 230,
+      "sha256": "a6f193573d55d620dc45f31c0d3548fc887e03f145844f01eb42705f270a95cd"
+    },
+    {
+      "bucket": 2,
+      "byteCount": 43728,
+      "compression": "gzip",
+      "path": "shards/products-02.csv.gz",
+      "recordCount": 245,
+      "sha256": "1a90e49846d0b106eafcc12dc875e7dc4b3806927d5aef58775a35f50d597f36"
+    },
+    {
+      "bucket": 3,
+      "byteCount": 38494,
+      "compression": "gzip",
+      "path": "shards/products-03.csv.gz",
+      "recordCount": 214,
+      "sha256": "a0c8a906b60253cb70b79321bd30a6b97bcceb4f8578651cd14ad30e76541eb0"
+    },
+    {
+      "bucket": 4,
+      "byteCount": 44063,
+      "compression": "gzip",
+      "path": "shards/products-04.csv.gz",
+      "recordCount": 245,
+      "sha256": "f4305564c850ab954e734691c0dd93f8aeaf99799549487a39623851b6c53258"
+    },
+    {
+      "bucket": 5,
+      "byteCount": 43258,
+      "compression": "gzip",
+      "path": "shards/products-05.csv.gz",
+      "recordCount": 233,
+      "sha256": "9248a7a668264cce1b7a3068bf51c24e96636b2dad0e20ee6521f14c43b5d93f"
+    },
+    {
+      "bucket": 6,
+      "byteCount": 43799,
+      "compression": "gzip",
+      "path": "shards/products-06.csv.gz",
+      "recordCount": 252,
+      "sha256": "959e2da4d995c84515c39ed85cf5981d1ecc0d74a1d214ab8a5c207d4933feae"
+    },
+    {
+      "bucket": 7,
+      "byteCount": 44175,
+      "compression": "gzip",
+      "path": "shards/products-07.csv.gz",
+      "recordCount": 251,
+      "sha256": "8a708d55d3e9977da57a60c1b83f1dd0fbbbbb931aab9662db426a2811495372"
+    },
+    {
+      "bucket": 8,
+      "byteCount": 37317,
+      "compression": "gzip",
+      "path": "shards/products-08.csv.gz",
+      "recordCount": 217,
+      "sha256": "1e6f8ef1056d85e3a0cefa3b794978df815bcd850877cc3bc5ea6d16688ac38b"
+    },
+    {
+      "bucket": 9,
+      "byteCount": 40084,
+      "compression": "gzip",
+      "path": "shards/products-09.csv.gz",
+      "recordCount": 243,
+      "sha256": "950b977efd4284670c93c515589c0531df544d4c8140017b892472bc6151f497"
+    },
+    {
+      "bucket": 10,
+      "byteCount": 35163,
+      "compression": "gzip",
+      "path": "shards/products-10.csv.gz",
+      "recordCount": 208,
+      "sha256": "0ff3c81063d978c1c1da93e97bdc178093dff24fe3acc5a58013c6dcf50bd86d"
+    },
+    {
+      "bucket": 11,
+      "byteCount": 41399,
+      "compression": "gzip",
+      "path": "shards/products-11.csv.gz",
+      "recordCount": 229,
+      "sha256": "28e9e499cf102ff26108c5ce55f16894c905064c0d814654ffa071c7eaaeff72"
+    },
+    {
+      "bucket": 12,
+      "byteCount": 42699,
+      "compression": "gzip",
+      "path": "shards/products-12.csv.gz",
+      "recordCount": 236,
+      "sha256": "6467c4d0f9d929655966fc276955b53db013ff414583bbe022c4e0a4f396e9a3"
+    },
+    {
+      "bucket": 13,
+      "byteCount": 46095,
+      "compression": "gzip",
+      "path": "shards/products-13.csv.gz",
+      "recordCount": 262,
+      "sha256": "115fc00417b8d115cac61fc292794a2e257aada7ba1a5f17a470b05ed74112e0"
+    },
+    {
+      "bucket": 14,
+      "byteCount": 39184,
+      "compression": "gzip",
+      "path": "shards/products-14.csv.gz",
+      "recordCount": 227,
+      "sha256": "f99ef14a7521571eb4f65ab03ce17c53886932aeb2bc8c6d7da79a995f23b7d9"
+    },
+    {
+      "bucket": 15,
+      "byteCount": 44325,
+      "compression": "gzip",
+      "path": "shards/products-15.csv.gz",
+      "recordCount": 236,
+      "sha256": "cfe6843a1030c264938c50f2b7ea2d73ef0d57cf55bf16b79dd15e6f6b9a29d0"
+    },
+    {
+      "bucket": 16,
+      "byteCount": 41807,
+      "compression": "gzip",
+      "path": "shards/products-16.csv.gz",
+      "recordCount": 233,
+      "sha256": "9754f5f26d561d335e21c22d611f645493604779272fa8e4b51017e66056baa8"
+    },
+    {
+      "bucket": 17,
+      "byteCount": 38630,
+      "compression": "gzip",
+      "path": "shards/products-17.csv.gz",
+      "recordCount": 212,
+      "sha256": "c9e927a01e307fa3d4222d2babd14a29ae4fa957d9ead3642ca3c7a1ea9f7f07"
+    },
+    {
+      "bucket": 18,
+      "byteCount": 36778,
+      "compression": "gzip",
+      "path": "shards/products-18.csv.gz",
+      "recordCount": 221,
+      "sha256": "53a1d57e9473a27f625a1f7e62132146f975265bb17a31943dafa1fe2b59b796"
+    },
+    {
+      "bucket": 19,
+      "byteCount": 37350,
+      "compression": "gzip",
+      "path": "shards/products-19.csv.gz",
+      "recordCount": 215,
+      "sha256": "f4548094df70d75210fd41f50869f29fcce99852b5cabe73712e4218806db42b"
+    },
+    {
+      "bucket": 20,
+      "byteCount": 40983,
+      "compression": "gzip",
+      "path": "shards/products-20.csv.gz",
+      "recordCount": 229,
+      "sha256": "3b26993ebed001cba563be910d1f2c3dfe710c1b36efe1467b6b07f7fffcd756"
+    },
+    {
+      "bucket": 21,
+      "byteCount": 40198,
+      "compression": "gzip",
+      "path": "shards/products-21.csv.gz",
+      "recordCount": 237,
+      "sha256": "e76488d71a608f8407ef48910a91d8f93e683784808f34f9fa8d99f6be4201de"
+    },
+    {
+      "bucket": 22,
+      "byteCount": 39693,
+      "compression": "gzip",
+      "path": "shards/products-22.csv.gz",
+      "recordCount": 240,
+      "sha256": "1af523ca2d13ae06e8db45e3f3fb260a9c5ad56805fbb779c3f9569545c3acf2"
+    },
+    {
+      "bucket": 23,
+      "byteCount": 42543,
+      "compression": "gzip",
+      "path": "shards/products-23.csv.gz",
+      "recordCount": 245,
+      "sha256": "d8db8d3da3d32ad007785a42bea7027053b516bbd59fb0c003c2453888dd494c"
+    },
+    {
+      "bucket": 24,
+      "byteCount": 39532,
+      "compression": "gzip",
+      "path": "shards/products-24.csv.gz",
+      "recordCount": 228,
+      "sha256": "dedfa200db9ddf21bf992740f6c9a4a8ce51a51fbf0610f9ae74fb196c80ab23"
+    },
+    {
+      "bucket": 25,
+      "byteCount": 42780,
+      "compression": "gzip",
+      "path": "shards/products-25.csv.gz",
+      "recordCount": 246,
+      "sha256": "25a060e934417baf3da2b87f66efd5f1ddfcaf8b0a8d208c73e7bd9592cd6fca"
+    },
+    {
+      "bucket": 26,
+      "byteCount": 39107,
+      "compression": "gzip",
+      "path": "shards/products-26.csv.gz",
+      "recordCount": 218,
+      "sha256": "699576ae32a95d3cb90ab3f4ff2861e1c530524423d5f675ee848e906d217012"
+    },
+    {
+      "bucket": 27,
+      "byteCount": 36661,
+      "compression": "gzip",
+      "path": "shards/products-27.csv.gz",
+      "recordCount": 224,
+      "sha256": "3e06177463e146a2f8c806c03ededa77c5def37b37f859dde8de896937e6e1ec"
+    },
+    {
+      "bucket": 28,
+      "byteCount": 39459,
+      "compression": "gzip",
+      "path": "shards/products-28.csv.gz",
+      "recordCount": 216,
+      "sha256": "e30580a7064d955188db03dee838d847c0554b21dc556372d61c0282c4483745"
+    },
+    {
+      "bucket": 29,
+      "byteCount": 44760,
+      "compression": "gzip",
+      "path": "shards/products-29.csv.gz",
+      "recordCount": 243,
+      "sha256": "b416010a43657491d6e385a47cb978a6c59304aef12abf3dea978fbe56cdf52b"
+    },
+    {
+      "bucket": 30,
+      "byteCount": 49013,
+      "compression": "gzip",
+      "path": "shards/products-30.csv.gz",
+      "recordCount": 264,
+      "sha256": "ffada78c6f50e806b68b32aaf242a6c6962d00a4d347a91019f7cd0e6418b35b"
+    },
+    {
+      "bucket": 31,
+      "byteCount": 41313,
+      "compression": "gzip",
+      "path": "shards/products-31.csv.gz",
+      "recordCount": 230,
+      "sha256": "6967e3f405dc03cf14013ca5fb5940e1af957896aa467312bf1bf5d61dd2a35f"
+    }
+  ],
+  "sources": [
+    {
+      "policyPath": "Data/sources/open-food-facts/source-policy-v1.json",
+      "policySha256": "52df981c11be442efdc8a85959b8fb4411f7a6c4c52eb38271b7fac701f14a95",
+      "reference": "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz",
+      "retrievedAt": "2026-09-02T20:24:55Z",
+      "revision": "git-projection-v1",
+      "snapshotID": "bundled-de-off-2026-09-02",
+      "sourceKey": "open-food-facts"
+    },
+    {
+      "policyPath": "Data/sources/open-prices/source-policy-v1.json",
+      "policySha256": "131d1d78d5ddeff63f0f2dad536c05cf73bafd857c77b6f212af578a46bb4c5e",
+      "reference": "https://prices.openfoodfacts.org/data/prices.jsonl.gz",
+      "retrievedAt": "2026-09-02T20:24:55Z",
+      "revision": "git-projection-v1",
+      "snapshotID": "bundled-de-open-prices-2026-09-02",
+      "sourceKey": "open-prices"
+    }
+  ]
+}

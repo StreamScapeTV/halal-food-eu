@@ -264,8 +264,10 @@ jobs:
               json.dumps(queue, indent=2, sort_keys=True) + '\n', encoding='utf-8'
           )
           PY
-            python3 Tools/catalog_refresh_operational_state.py merge-previous \
+            python3 Tools/catalog_refresh_operational_state.py merge-workflow-status \
+              --policy Data/refresh/catalog-refresh-policy-v1.json \
               --accepted-state Data/refresh/accepted-open-food-facts-v1.json \
+              --workflow-status "$RUNNER_TEMP/health/scheduled-off-status.json" \
               --output "$RUNNER_TEMP/health/refresh-plan-state.json"
           fi
 

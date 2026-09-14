@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from catalog_workflow_common import SAFE_SNAPSHOT, SHA40
+
 
 class OperationalRefreshError(ValueError):
     pass
@@ -232,6 +234,82 @@ def merge_previous_state(
     return result
 
 
+def merge_workflow_status(
+    *,
+    accepted: dict[str, Any],
+    workflow_status: dict[str, Any],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Recover only the operational full-acquisition clock from durable run metadata.
+
+    GitHub Actions payload artifacts may expire before the next health run. The
+    workflow-status contract is deliberately metadata-only and may advance only the
+    operational cadence fields. Accepted evidence/candidate lineage remains sourced
+    exclusively from protected ``main``.
+    """
+    result = merge_previous_state(accepted=accepted, operational=None)
+    source_key = result.get("sourceKey")
+    if not isinstance(source_key, str) or source_key not in policy.get("sources", {}):
+        raise OperationalRefreshError("accepted refresh source is not admitted by policy")
+    if workflow_status.get("schemaVersion") != 2:
+        raise OperationalRefreshError("workflow status schemaVersion must be 2")
+    if workflow_status.get("sourceKey") != source_key:
+        raise OperationalRefreshError("workflow status source differs from accepted refresh state")
+    if workflow_status.get("available") is False:
+        return result
+    if workflow_status.get("available") is not True:
+        raise OperationalRefreshError("workflow status available flag is invalid")
+
+    success = workflow_status.get("fullAcquisitionSucceeded")
+    if not isinstance(success, bool):
+        raise OperationalRefreshError("workflow status fullAcquisitionSucceeded is invalid")
+    last_success_at_raw = workflow_status.get("lastSuccessfulFullAcquisitionAt")
+    last_success_snapshot = workflow_status.get("lastSuccessfulFullSnapshotID")
+    last_success_run = workflow_status.get("lastSuccessfulFullRunId")
+    if (last_success_at_raw is None) != (last_success_snapshot is None) or (last_success_at_raw is None) != (last_success_run is None):
+        raise OperationalRefreshError("workflow status last successful full lineage is incomplete")
+    if last_success_at_raw is None:
+        return result
+    snapshot = last_success_snapshot
+    if not isinstance(snapshot, str) or not SAFE_SNAPSHOT.fullmatch(snapshot):
+        raise OperationalRefreshError("workflow status successful snapshot ID is invalid")
+    success_at = parse_time(
+        last_success_at_raw,
+        "workflow successfulFullAcquisitionAt",
+    )
+    assert success_at is not None
+    head_sha = workflow_status.get("lastSuccessfulFullHeadSha")
+    if head_sha is not None and (not isinstance(head_sha, str) or not SHA40.fullmatch(head_sha)):
+        raise OperationalRefreshError("workflow status head SHA is invalid")
+
+    source = policy["sources"][source_key]
+    if not isinstance(source, dict):
+        raise OperationalRefreshError("refresh source policy is invalid")
+    cadence = source.get("fullCadenceDays")
+    if not isinstance(cadence, int) or isinstance(cadence, bool) or cadence < 1:
+        raise OperationalRefreshError("fullCadenceDays must be positive")
+
+    accepted_at = parse_time(
+        result.get("lastSuccessfulFullAcquisitionAt"),
+        "accepted lastSuccessfulFullAcquisitionAt",
+        allow_none=True,
+    )
+    if accepted_at is not None and success_at < accepted_at:
+        return result
+    if accepted_at is not None and success_at == accepted_at:
+        existing_snapshot = result.get("lastSuccessfulFullSnapshotID")
+        if existing_snapshot != snapshot:
+            raise OperationalRefreshError("equal successful-full timestamps identify different snapshots")
+        return result
+
+    result["lastSuccessfulFullAcquisitionAt"] = stamp(success_at)
+    result["lastSuccessfulFullSnapshotID"] = snapshot
+    result["nextFullDueAt"] = stamp(success_at + timedelta(days=cadence))
+    result["stateSha256"] = digest_without(result, "stateSha256")
+    validate_operational_state(result)
+    return result
+
+
 def write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -251,6 +329,11 @@ def parse_args() -> argparse.Namespace:
     merge.add_argument("--accepted-state", type=Path, required=True)
     merge.add_argument("--operational-state", type=Path)
     merge.add_argument("--output", type=Path, required=True)
+    merge_status = sub.add_parser("merge-workflow-status")
+    merge_status.add_argument("--policy", type=Path, default=Path("Data/refresh/catalog-refresh-policy-v1.json"))
+    merge_status.add_argument("--accepted-state", type=Path, required=True)
+    merge_status.add_argument("--workflow-status", type=Path, required=True)
+    merge_status.add_argument("--output", type=Path, required=True)
     validate_state = sub.add_parser("validate-state")
     validate_state.add_argument("--input", type=Path, required=True)
     validate_report = sub.add_parser("validate-report")
@@ -283,6 +366,23 @@ def main() -> None:
             write_json(args.output, merged)
             print(
                 f"Merged previous refresh state: source={merged['sourceKey']} "
+                f"lastFull={merged['lastSuccessfulFullAcquisitionAt']} "
+                f"accepted={((merged.get('acceptedComplete') or {}).get('snapshotID'))}"
+            )
+            return
+        if args.command == "merge-workflow-status":
+            accepted = load_json(args.accepted_state)
+            workflow_status = load_json(args.workflow_status)
+            policy = load_json(args.policy)
+            assert accepted is not None and workflow_status is not None and policy is not None
+            merged = merge_workflow_status(
+                accepted=accepted,
+                workflow_status=workflow_status,
+                policy=policy,
+            )
+            write_json(args.output, merged)
+            print(
+                f"Merged workflow refresh status: source={merged['sourceKey']} "
                 f"lastFull={merged['lastSuccessfulFullAcquisitionAt']} "
                 f"accepted={((merged.get('acceptedComplete') or {}).get('snapshotID'))}"
             )

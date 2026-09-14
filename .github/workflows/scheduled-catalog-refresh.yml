@@ -161,6 +161,38 @@ jobs:
       change_artifact_name: ${{ needs.normalize.outputs.change_artifact_name }}
       quality_artifact_name: ${{ needs.quality.outputs.artifact_name }}
 
+  # Durable metadata-only lineage marker. GitHub retains workflow/job metadata after
+  # short-lived source artifacts expire, so catalog health can distinguish a passing
+  # full acquisition from "never succeeded" without extending raw payload retention.
+  refresh-lineage:
+    if: ${{ always() && needs.refresh.result == 'success' && needs.quality.result == 'success' }}
+    needs: [trusted-default-branch, quality, refresh]
+    name: refresh-lineage / ${{ needs.trusted-default-branch.outputs.source_key }} / ${{ needs.trusted-default-branch.outputs.mode }} / ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm bounded refresh lineage marker
+        env:
+          SOURCE_KEY: ${{ needs.trusted-default-branch.outputs.source_key }}
+          SNAPSHOT_ID: ${{ needs.trusted-default-branch.outputs.snapshot_id }}
+          MODE: ${{ needs.trusted-default-branch.outputs.mode }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE_KEY" in
+            open-food-facts|open-prices) ;;
+            *) echo "unsupported refresh lineage source" >&2; exit 2 ;;
+          esac
+          case "$MODE" in
+            fixture|full) ;;
+            *) echo "unsupported refresh lineage mode" >&2; exit 2 ;;
+          esac
+          SNAPSHOT_ID="$SNAPSHOT_ID" python3 - <<'PY'
+          import os, re
+          value = os.environ['SNAPSHOT_ID']
+          if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', value):
+              raise SystemExit('refresh lineage snapshot ID is invalid')
+          PY
+
   retailer-policy:
     if: needs.trusted-default-branch.outputs.production_aggregate_enabled == 'true'
     needs: trusted-default-branch

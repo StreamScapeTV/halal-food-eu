@@ -95,16 +95,30 @@ def plan(due_reason="full-cadence-not-due"):
     }
 
 
-def workflow_status(source_key, conclusion="success", run_id=12345):
-    return {
-        "schemaVersion": 1,
+def workflow_status(source_key, conclusion="success", run_id=12345, *, full=False):
+    value = {
+        "schemaVersion": 2,
         "sourceKey": source_key,
         "available": True,
         "conclusion": conclusion,
         "runId": str(run_id),
         "event": "schedule",
         "updatedAt": "2026-09-02T03:30:00Z",
+        "headSha": "1" * 40,
+        "mode": "full" if full else None,
+        "snapshotID": f"off-scheduled-{run_id}" if full else None,
+        "completeness": "complete" if full else None,
+        "qualityStatus": "pass" if full else None,
+        "successfulFullAcquisitionAt": "2026-09-02T03:20:00Z" if full else None,
+        "fullAcquisitionSucceeded": full,
+        "lineageSource": "scheduled-job-graph" if full else None,
+        "lastSuccessfulFullAcquisitionAt": "2026-09-02T03:20:00Z" if full else None,
+        "lastSuccessfulFullSnapshotID": f"off-scheduled-{run_id}" if full else None,
+        "lastSuccessfulFullRunId": str(run_id) if full else None,
+        "lastSuccessfulFullHeadSha": "1" * 40 if full else None,
+        "lastSuccessfulFullLineageSource": "scheduled-job-graph" if full else None,
     }
+    return value
 
 
 class RefreshHealthTests(unittest.TestCase):
@@ -175,6 +189,40 @@ class RefreshHealthTests(unittest.TestCase):
             "refresh:open-prices:scheduled-workflow:failure",
             report["refresh"]["deduplicationKeys"],
         )
+
+    def test_successful_full_workflow_metadata_fills_clock_when_refresh_artifact_is_expired(self):
+        report = REFRESH_HEALTH.enrich_health(
+            base_health=base_health(),
+            refresh_queue=queue(),
+            refresh_plan=plan(),
+            workflow_statuses=[workflow_status("open-food-facts", "success", 34327267707, full=True)],
+        )
+        self.assertEqual(report["refresh"]["lastSuccessfulFullAcquisitionAt"], "2026-09-02T03:20:00Z")
+        self.assertEqual(report["refresh"]["lastSuccessfulFullSnapshotID"], "off-scheduled-34327267707")
+        projected = report["refresh"]["scheduledWorkflows"]["open-food-facts"]
+        self.assertTrue(projected["fullAcquisitionSucceeded"])
+        self.assertEqual(projected["lineageSource"], "scheduled-job-graph")
+
+    def test_exact_refresh_report_remains_authoritative_when_available(self):
+        refresh_report = {
+            "schemaVersion": 1,
+            "sourceKey": "open-food-facts",
+            "snapshotID": "off-artifact-exact",
+            "attemptStatus": "complete",
+            "qualityStatus": "pass",
+            "candidateChangedFromAccepted": False,
+            "lastSuccessfulFullAcquisitionAt": "2026-09-02T02:00:00Z",
+            "lastSuccessfulFullSnapshotID": "off-artifact-exact",
+        }
+        report = REFRESH_HEALTH.enrich_health(
+            base_health=base_health(),
+            refresh_queue=queue(),
+            refresh_plan=plan(),
+            refresh_report=refresh_report,
+            workflow_statuses=[workflow_status("open-food-facts", "success", 34327267707, full=True)],
+        )
+        self.assertEqual(report["refresh"]["lastSuccessfulFullAcquisitionAt"], "2026-09-02T02:00:00Z")
+        self.assertEqual(report["refresh"]["lastSuccessfulFullSnapshotID"], "off-artifact-exact")
 
     def test_unavailable_source_workflow_is_visible_without_false_failure(self):
         unavailable = {

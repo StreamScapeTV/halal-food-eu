@@ -5,7 +5,7 @@
 
 ## Purpose
 
-The application can only be trustworthy when its assessment method is explicit, versioned, reviewable, and honest about religious interpretation. This specification governs how real-product conclusions may enter a released catalog; the current bundled records remain synthetic demonstrations.
+The application can only be trustworthy when its assessment method is explicit, versioned, reviewable, and honest about religious interpretation. This specification governs how real-product conclusions may enter a released catalog. The application bundle may contain rights-reviewed real-product evidence from the Git-backed source set defined by specification 030, but imported products remain unreviewed/`unknown` unless separate methodology evidence and review support another status. Synthetic catalog records are test fixtures only.
 
 ## Methodology authority
 

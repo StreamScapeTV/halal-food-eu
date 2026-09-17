@@ -12,3 +12,5 @@ coverage/
 __pycache__/
 HalalFoodEU/Resources/catalog.sqlite3
 HalalFoodEU/Resources/catalog-manifest.json
+HalalFoodEUTests/Resources/catalog.sqlite3
+HalalFoodEUTests/Resources/catalog-manifest.json

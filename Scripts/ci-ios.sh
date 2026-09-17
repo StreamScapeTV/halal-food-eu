@@ -41,6 +41,8 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   fi
 fi
 
+mkdir -p HalalFoodEU/Resources HalalFoodEUTests/Resources
+
 PREBUILT_DATABASE="${HFEU_PREBUILT_CATALOG_DATABASE:-}"
 PREBUILT_MANIFEST="${HFEU_PREBUILT_CATALOG_MANIFEST:-}"
 PREBUILT_MODE=false
@@ -53,18 +55,36 @@ if [[ -n "$PREBUILT_DATABASE" || -n "$PREBUILT_MANIFEST" ]]; then
   test -f "$PREBUILT_MANIFEST"
   cp "$PREBUILT_DATABASE" HalalFoodEU/Resources/catalog.sqlite3
   cp "$PREBUILT_MANIFEST" HalalFoodEU/Resources/catalog-manifest.json
+  cp "$PREBUILT_DATABASE" HalalFoodEUTests/Resources/catalog.sqlite3
+  cp "$PREBUILT_MANIFEST" HalalFoodEUTests/Resources/catalog-manifest.json
   PREBUILT_MODE=true
 else
-  python3 Tools/build_production_fixture.py \
+  PYTHONPATH=Tools python3 Tools/build_bundled_catalog.py \
+    --source-manifest Data/catalog/bundled/de/source-manifest-v1.json \
     --database HalalFoodEU/Resources/catalog.sqlite3 \
     --manifest HalalFoodEU/Resources/catalog-manifest.json \
     --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
     --workflow-run "${GITHUB_RUN_ID:-local-ios-ci}"
+
+  python3 Tools/build_production_fixture.py \
+    --database HalalFoodEUTests/Resources/catalog.sqlite3 \
+    --manifest HalalFoodEUTests/Resources/catalog-manifest.json \
+    --source-commit "${GITHUB_SHA:-0000000000000000000000000000000000000000}" \
+    --workflow-run "${GITHUB_RUN_ID:-local-ios-ci-tests}"
 fi
 
 python3 Tools/production_catalog.py validate \
   --database HalalFoodEU/Resources/catalog.sqlite3 \
   --manifest HalalFoodEU/Resources/catalog-manifest.json
+PYTHONPATH=Tools python3 Tools/product_search_index.py validate \
+  --database HalalFoodEU/Resources/catalog.sqlite3 \
+  --manifest HalalFoodEU/Resources/catalog-manifest.json
+python3 Tools/production_catalog.py validate \
+  --database HalalFoodEUTests/Resources/catalog.sqlite3 \
+  --manifest HalalFoodEUTests/Resources/catalog-manifest.json
+PYTHONPATH=Tools python3 Tools/product_search_index.py validate \
+  --database HalalFoodEUTests/Resources/catalog.sqlite3 \
+  --manifest HalalFoodEUTests/Resources/catalog-manifest.json
 
 PYTHONPATH=Tools python3 Tools/privacy_manifest.py --root .
 

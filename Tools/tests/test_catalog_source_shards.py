@@ -35,12 +35,14 @@ def base_row(gtin: str) -> dict[str, str]:
         "ingredients_source_key": "open-food-facts",
         "ingredients_source_record_id": gtin,
         "ingredients_retrieved_at": "2026-09-02T20:24:55Z",
+        "ingredients_source_url": f"https://world.openfoodfacts.org/product/{gtin}",
         "retailer_kind": "community-store-report",
         "retailer_key": "lidl-de",
         "retailer_confidence": "low",
         "retailer_source_key": "open-food-facts",
         "retailer_source_record_id": f"gtin:{gtin}:community-store-report",
         "retailer_retrieved_at": "2026-09-02T20:24:55Z",
+        "retailer_source_url": f"https://world.openfoodfacts.org/product/{gtin}",
         "retailer_scope": "community-reported Lidl association",
         "retailer_limitations": "Community metadata only; not current stock.",
     })
@@ -165,6 +167,23 @@ class CatalogSourceShardTests(unittest.TestCase):
                 manifest["sources"][0]["policyPath"] = fake.relative_to(ROOT).as_posix(); manifest["sources"][0]["policySha256"] = module.file_sha256(fake); path.write_text(json.dumps(manifest,indent=2,sort_keys=True)+"\n")
                 with self.assertRaises(module.CatalogSourceError): module.validate_source_set(path)
             finally: fake.unlink(missing_ok=True)
+
+    def test_manifest_source_reference_must_match_reviewed_acquisition_host(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_source_set(Path(tmp), [base_row(valid_gtin(101))], bucket_count=1)
+            manifest = json.loads(path.read_text())
+            manifest["sources"][0]["reference"] = "https://example.invalid/products.jsonl.gz"
+            path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            with self.assertRaises(module.CatalogSourceError):
+                module.validate_source_set(path)
+
+    def test_evidence_source_url_must_match_reviewed_reference_host(self):
+        row = base_row(valid_gtin(101))
+        row["ingredients_source_url"] = "https://example.invalid/product/101"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_source_set(Path(tmp), [row], bucket_count=1)
+            with self.assertRaises(module.CatalogSourceError):
+                module.validate_source_set(path)
 
     def test_repository_source_set_is_valid(self):
         source = module.validate_source_set(ROOT / "Data/catalog/bundled/de/source-manifest-v1.json")

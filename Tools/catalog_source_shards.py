@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import evidence_model
 
@@ -91,6 +92,37 @@ def _validate_https(value: str, label: str) -> None:
         raise CatalogSourceError(f"{label} must be HTTPS")
 
 
+def _policy_hosts(policy: dict[str, Any], source_key: str, *fields: str) -> set[str]:
+    hosts: set[str] = set()
+    for field in fields:
+        raw = policy.get(field, [])
+        if raw is None:
+            raw = []
+        if not isinstance(raw, list):
+            raise CatalogSourceError(f"source {source_key}.{field} must be an array")
+        for index, value in enumerate(raw):
+            host = _require_string(value, f"source {source_key}.{field}[{index}]").lower().rstrip(".")
+            if ":" in host or "/" in host or "@" in host:
+                raise CatalogSourceError(f"source {source_key}.{field}[{index}] must be hostname-only")
+            hosts.add(host)
+    return hosts
+
+
+def _validate_source_url(value: str, source_key: str, policy: dict[str, Any], label: str, *, acquisition: bool = False) -> None:
+    _validate_https(value, label)
+    if not value:
+        return
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or parsed.hostname is None or parsed.username is not None or parsed.password is not None:
+        raise CatalogSourceError(f"{label} must be a canonical HTTPS URL")
+    fields = ("allowedAcquisitionHosts",) if acquisition else ("allowedReferenceHosts", "allowedAcquisitionHosts")
+    allowed = _policy_hosts(policy, source_key, *fields)
+    if not allowed:
+        raise CatalogSourceError(f"source {source_key} has no reviewed hosts for {label}")
+    if parsed.hostname.lower().rstrip(".") not in allowed:
+        raise CatalogSourceError(f"{label} host is not admitted by source policy {source_key}")
+
+
 def _resolve_repo_path(raw: Any, label: str) -> Path:
     rel = _require_string(raw, label)
     path = (ROOT / rel).resolve()
@@ -165,7 +197,8 @@ def _read_shard(path: Path, expected_columns: list[str], label: str, compression
     return rows
 
 
-def _validate_row(row: dict[str, str], *, market: str, sources: set[str], label: str) -> None:
+def _validate_row(row: dict[str, str], *, market: str, source_policies: dict[str, dict[str, Any]], label: str) -> None:
+    sources = set(source_policies)
     gtin = row["gtin"]
     if not _valid_gtin(gtin):
         raise CatalogSourceError(f"{label}.gtin must be canonical valid GTIN-14")
@@ -195,7 +228,10 @@ def _validate_row(row: dict[str, str], *, market: str, sources: set[str], label:
             raise CatalogSourceError(f"{label}.ingredients_language is invalid")
         if row["ingredients_observed_at"]:
             _validate_timestamp(row["ingredients_observed_at"], f"{label}.ingredients_observed_at")
-        _validate_https(row["ingredients_source_url"], f"{label}.ingredients_source_url")
+        _validate_source_url(
+            row["ingredients_source_url"], row["ingredients_source_key"],
+            source_policies[row["ingredients_source_key"]], f"{label}.ingredients_source_url",
+        )
     elif any(ingredient_metadata):
         raise CatalogSourceError(f"{label} has ingredient metadata without ingredients_text")
 
@@ -220,7 +256,10 @@ def _validate_row(row: dict[str, str], *, market: str, sources: set[str], label:
         for field in ("retailer_observed_at", "retailer_snapshot_at"):
             if row[field]:
                 _validate_timestamp(row[field], f"{label}.{field}")
-        _validate_https(row["retailer_source_url"], f"{label}.retailer_source_url")
+        _validate_source_url(
+            row["retailer_source_url"], row["retailer_source_key"],
+            source_policies[row["retailer_source_key"]], f"{label}.retailer_source_url",
+        )
         _require_string(row["retailer_limitations"], f"{label}.retailer_limitations")
     elif any(retailer_metadata):
         raise CatalogSourceError(f"{label} has retailer metadata without retailer_kind")
@@ -280,7 +319,8 @@ def validate_source_set(manifest_path: Path) -> ValidatedSourceSet:
         source_policies[key] = _load_policy(source)
         _require_string(source["snapshotID"], f"source {key}.snapshotID")
         _require_string(source["revision"], f"source {key}.revision")
-        _validate_https(_require_string(source["reference"], f"source {key}.reference"), f"source {key}.reference")
+        reference = _require_string(source["reference"], f"source {key}.reference")
+        _validate_source_url(reference, key, source_policies[key], f"source {key}.reference", acquisition=True)
         _validate_timestamp(_require_string(source["retrievedAt"], f"source {key}.retrievedAt"), f"source {key}.retrievedAt")
     primary = _require_string(manifest.get("primaryQualitySourceKey"), "primaryQualitySourceKey")
     if primary not in source_policies:
@@ -328,7 +368,7 @@ def validate_source_set(manifest_path: Path) -> ValidatedSourceSet:
         previous = None
         for row_index, row in enumerate(shard_rows, start=1):
             label = f"shards[{index}] row {row_index}"
-            _validate_row(row, market=market, sources=set(source_policies), label=label)
+            _validate_row(row, market=market, source_policies=source_policies, label=label)
             if _bucket_for(row["gtin"], bucket_count) != bucket:
                 raise CatalogSourceError(f"{label} is in wrong shard bucket")
             if previous is not None and row["gtin"] <= previous:

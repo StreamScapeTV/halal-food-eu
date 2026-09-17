@@ -11,7 +11,7 @@ The core flow is deliberately offline:
 
 ## Current state
 
-The repository contains the initial iOS foundation, canonical feature specifications, a deterministic catalog builder, a synthetic demonstration catalog, unit/integration tests, and GitHub-hosted CI. The bundled records are examples only and do not represent real retail products.
+The repository contains the iOS foundation, canonical feature specifications, a deterministic Git-backed Germany catalog source, synthetic test fixtures, unit/integration tests, and GitHub-hosted CI. Ordinary app builds compile the rights-reviewed Git source into the bundled SQLite catalog; synthetic product records are confined to test fixtures.
 
 The accepted product and engineering requirements live in [`docs/feature-specs`](docs/feature-specs/README.md). Architecture decisions live in [`docs/architecture`](docs/architecture/README.md).
 
@@ -46,17 +46,19 @@ make catalog-validate
 ./Scripts/ci-ios.sh
 ```
 
-Rebuild the synthetic catalog after changing `Data/sample-products.json`:
+Rebuild the Git-backed Germany application catalog from `Data/catalog/bundled/de/source-manifest-v1.json`:
 
 ```bash
 make catalog
 ```
 
+`Data/sample-products.json` remains synthetic test/demo input and is not the ordinary application bundle source.
+
 The generated `.xcodeproj` is intentionally not committed; `project.yml` is the deterministic project source of truth.
 
-## Demonstration barcodes
+## Test-fixture demonstration barcodes
 
-The synthetic catalog includes valid restricted-circulation example GTINs:
+The synthetic test fixture includes valid restricted-circulation example GTINs:
 
 - `0200000000004` — reviewed-halal demonstration oat drink
 - `0200000000011` — not-halal demonstration gelatine sweets

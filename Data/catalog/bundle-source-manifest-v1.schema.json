@@ -49,7 +49,7 @@
       "required": ["bucket","path","compression","recordCount","byteCount","sha256"],
       "properties": {
         "bucket": {"type": "integer", "minimum": 0}, "path": {"type": "string", "minLength": 1},
-        "compression": {"enum": ["none","gzip","xz"]}, "recordCount": {"type": "integer", "minimum": 0},
+        "compression": {"enum": ["none","gzip"]}, "recordCount": {"type": "integer", "minimum": 0},
         "byteCount": {"type": "integer", "minimum": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     }

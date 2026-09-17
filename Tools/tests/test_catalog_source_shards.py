@@ -70,11 +70,6 @@ def write_source_set(root: Path, rows: list[dict[str, str]], *, bucket_count: in
                 with gzip.GzipFile(filename="", mode="wb", fileobj=handle, mtime=0, compresslevel=9) as gz:
                     gz.write(raw)
             csv_path.unlink()
-        elif compression == "xz":
-            raw = csv_path.read_bytes()
-            path = csv_path.with_suffix(".csv.xz")
-            path.write_bytes(lzma.compress(raw, preset=6))
-            csv_path.unlink()
         else:
             path = csv_path
         shard_entries.append({
@@ -113,6 +108,20 @@ class CatalogSourceShardTests(unittest.TestCase):
             b = module.validate_source_set(write_source_set(Path(many), rows, bucket_count=4, compression="gzip"))
             self.assertEqual(module.logical_sha256(a.rows), module.logical_sha256(b.rows))
             self.assertEqual(module.canonical_json(module.evidence_envelope(a)), module.canonical_json(module.evidence_envelope(b)))
+
+    def test_manifest_schema_compressions_match_runtime(self):
+        schema = json.loads((ROOT / "Data/catalog/bundle-source-manifest-v1.schema.json").read_text(encoding="utf-8"))
+        advertised = schema["$defs"]["shard"]["properties"]["compression"]["enum"]
+        self.assertEqual(set(advertised), module.SUPPORTED_COMPRESSIONS)
+
+    def test_unadvertised_compression_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_source_set(Path(tmp), [base_row(valid_gtin(101))], bucket_count=1)
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["shards"][0]["compression"] = "xz"
+            path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaises(module.CatalogSourceError):
+                module.validate_source_set(path)
 
     def test_tampered_shard_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

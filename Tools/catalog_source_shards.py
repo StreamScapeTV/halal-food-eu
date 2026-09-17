@@ -23,6 +23,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$|^und$")
 IDENTITY_CONFIDENCE = {"low", "medium", "high"}
 RETAILER_KINDS = {"community-store-report", "retailer-observation"}
+SUPPORTED_COMPRESSIONS = {"none", "gzip"}
 CSV_COLUMNS = [
     "gtin", "original_barcode", "market", "brand", "product_name", "variant", "quantity", "category",
     "identity_confidence", "identity_source_key", "identity_source_record_id", "identity_retrieved_at",
@@ -171,11 +172,6 @@ def _read_shard(path: Path, expected_columns: list[str], label: str, compression
             data = gzip.decompress(stored)
         except OSError as exc:
             raise CatalogSourceError(f"{label} is not valid gzip: {exc}") from exc
-    elif compression == "xz":
-        try:
-            data = lzma.decompress(stored)
-        except lzma.LZMAError as exc:
-            raise CatalogSourceError(f"{label} is not valid xz: {exc}") from exc
     elif compression == "none":
         data = stored
     else:
@@ -355,7 +351,7 @@ def validate_source_set(manifest_path: Path) -> ValidatedSourceSet:
         if path != manifest_dir and manifest_dir not in path.parents:
             raise CatalogSourceError(f"shards[{index}].path escapes manifest directory")
         compression = _require_string(shard["compression"], f"shards[{index}].compression")
-        if compression not in {"none", "gzip"}:
+        if compression not in SUPPORTED_COMPRESSIONS:
             raise CatalogSourceError(f"shards[{index}].compression is unsupported")
         if shard["byteCount"] != path.stat().st_size:
             raise CatalogSourceError(f"shards[{index}].byteCount mismatch")

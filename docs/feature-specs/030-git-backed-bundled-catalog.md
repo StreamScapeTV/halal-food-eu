@@ -50,6 +50,32 @@ Ordinary app build/test first builds the Git-backed Germany catalog into `HalalF
 
 The Swift test target gets a separately generated synthetic production-shaped catalog under `HalalFoodEUTests/Resources`. This preserves deterministic product-detail/search tests without shipping synthetic products in the application catalog. In prebuilt compatibility mode, the exact supplied release catalog is copied to both app and test resources and only the artifact compatibility test is selected.
 
+## Maintainer source update and re-shard procedure
+
+The Git bundle is a reviewed production source, not an ingestion scratch area. A refresh starts from a rights-reviewed candidate projection outside the shipping resources and follows this sequence:
+
+1. **Admit sources before rows.** Confirm that every source used by the candidate is represented by a reviewed policy under `Data/sources/`, that collection and public/bundle redistribution are permitted, and that attribution/share-alike obligations are compatible with the combined catalog. Private retailer/manufacturer research, unadmitted web pages, and proof/image binaries stay outside the Git bundle.
+2. **Produce canonical logical rows.** Use exactly the v1 `columns` order from `source-manifest-v1.json`, UTF-8 with LF line endings, one canonical valid GTIN-14 per logical row, the target market, nonblank runtime identity, and source-scoped provenance/timestamps/URLs admitted by the bound source policy. Do not repair invalid/no-GTIN/private rows into production; quarantine or exclude them before sharding.
+3. **Assign and sort shards deterministically.** Choose `bucketCount` in the reviewed `1...64` range. For each GTIN compute SHA-256 over its ASCII canonical GTIN-14, interpret the first eight digest bytes as an unsigned big-endian integer, and take modulo `bucketCount`. Every bucket uses the identical reviewed CSV header and rows are strictly ascending by GTIN. Changing bucket count/order is storage-only and must not alter the logical row set.
+4. **Write only an admitted storage encoding.** Source-set v1 permits plain `.csv` or deterministic `.csv.gz`. Deterministic gzip uses an empty embedded filename, `mtime=0`, and compression level 9 (the repository tests use `gzip.GzipFile(filename="", mode="wb", mtime=0, compresslevel=9)`). Do not introduce another compression label without a new reviewed contract/schema change.
+5. **Rebind the manifest from the produced bytes.** Update `datasetID`, `catalogVersion`, `generatedAt`, source snapshot/revision/reference/retrieval lineage, and any changed policy binding. For every shard record its bucket, relative path, compression, logical row count, exact stored byte count, and SHA-256 of the stored bytes. Set `recordCount` to the total logical rows. Recompute `logicalSha256` with the same canonical JSON/sort rule used by `Tools/catalog_source_shards.py`; never derive it from compressed bytes or shard filenames.
+6. **Validate before building.** Run:
+
+   ```bash
+   PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate \
+     --manifest Data/catalog/bundled/de/source-manifest-v1.json
+   PYTHONPATH=Tools python3 -m unittest \
+     Tools.tests.test_catalog_source_shards \
+     Tools.tests.test_build_bundled_catalog
+   make catalog
+   make catalog-validate
+   ```
+
+7. **Prove a pure re-shard is logically identical.** Before replacing an existing source set solely to change shard layout, retain the previous manifest/shards outside the edited paths long enough to generate both evidence envelopes with `Tools/catalog_source_shards.py evidence`. Their canonical evidence JSON and `logicalSha256` must match exactly. The shard byte hashes may change; product/evidence identity must not.
+8. **Review and CI the exact candidate.** Inspect the public diff for accidental private/unlicensed material, source-policy changes, count/digest changes, and semantic drift. The exact candidate head must pass catalog/production/iOS checks before integration. After merge, rebuild/validate the exact integrated `main` before closing the owning issue.
+
+Generated SQLite/manifest files remain ignored build artifacts. A catalog refresh changes Git source data and its manifest, not the app’s immutable runtime architecture.
+
 ## Initial Germany migration
 
 The September 2 private working CSV contains 7,555 observation rows. The reviewed migration excludes three manufacturer-official observation rows from the public bundle lane, seven rows with no GTIN, 35 rows whose GTIN fails canonical check-digit validation, and 70 rows with no runtime product name. Three Open Prices rows lack a usable dated observation and therefore do not project retailer-observation evidence. The first Git-backed source set contains 7,440 unique valid products, 6,563 ingredient observations, and 7,437 retailer evidence records. Products remain unreviewed/`unknown` unless separate reviewed methodology evidence supports another status.

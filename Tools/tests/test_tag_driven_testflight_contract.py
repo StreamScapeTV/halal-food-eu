@@ -87,143 +87,156 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
         ):
             self.assertIn(required, text)
         self.assertIn('ARCHIVE_VERSION_ARGS+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")', text)
+        self.assertIn('build-state', text)
+        self.assertIn('processing)', text)
+        self.assertIn('retryable)', text)
+        self.assertIn('POST_UPLOAD_MAX_ATTEMPTS=80', text)
+        self.assertIn('source build number remains unchanged', text)
         self.assertNotIn("GITHUB_RUN_NUMBER", text)
 
-    def test_app_store_lookup_requires_exact_app_version_and_build(self) -> None:
-        calls: list[str] = []
+    def _app_payload(self):
+        return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
 
-        def getter(path: str, *, token: str):
-            self.assertEqual(token, "token")
-            calls.append(path)
-            parsed = urllib.parse.urlparse(path)
-            query = urllib.parse.parse_qs(parsed.query)
-            if parsed.path == "/v1/apps":
-                self.assertEqual(query["filter[bundleId]"], ["tv.streamscape.halalfoodeu"])
-                return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
-            if parsed.path == "/v1/apps/app-1/buildUploads":
-                self.assertEqual(query["filter[cfBundleShortVersionString]"], ["1.0.0"])
-                self.assertEqual(query["filter[cfBundleVersion]"], ["257"])
-                self.assertEqual(query["filter[platform]"], ["IOS"])
-                return {"data": []}
-            self.assertEqual(parsed.path, "/v1/builds")
-            self.assertEqual(query["filter[app]"], ["app-1"])
-            self.assertEqual(query["filter[version]"], ["257"])
-            self.assertEqual(query["filter[preReleaseVersion.version]"], ["1.0.0"])
-            self.assertEqual(query["filter[preReleaseVersion.platform]"], ["IOS"])
-            return {
-                "data": [{
-                    "type": "builds", "id": "build-1", "attributes": {"version": "257"},
-                    "relationships": {"preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": "pre-1"}}},
-                }],
-                "included": [{"type": "preReleaseVersions", "id": "pre-1", "attributes": {"version": "1.0.0"}}],
-            }
+    def _build(self, state: str):
+        return {
+            "type": "builds",
+            "id": f"build-{state.lower()}",
+            "attributes": {"version": "257", "processingState": state},
+            "relationships": {"preReleaseVersion": {"data": {"type": "preReleaseVersions", "id": "pre-1"}}},
+        }
 
-        self.assertTrue(app_store_connect.build_exists(
-            bundle_id="tv.streamscape.halalfoodeu", marketing_version="1.0.0", build_number="257", token="token", getter=getter,
-        ))
-        self.assertEqual(len(calls), 3)
+    def _included(self):
+        return [{"type": "preReleaseVersions", "id": "pre-1", "attributes": {"version": "1.0.0"}}]
 
-    def test_app_store_lookup_reports_absent_without_guessing(self) -> None:
-        def getter(path: str, *, token: str):
-            parsed = urllib.parse.urlparse(path)
-            if parsed.path == "/v1/apps":
-                return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
-            if parsed.path == "/v1/apps/app-1/buildUploads":
-                return {"data": []}
-            return {"data": [], "included": []}
+    def _upload(self, state: str):
+        return {
+            "type": "buildUploads",
+            "id": f"upload-{state.lower()}",
+            "attributes": {
+                "cfBundleShortVersionString": "1.0.0",
+                "cfBundleVersion": "257",
+                "platform": "IOS",
+                "state": {"state": state},
+            },
+        }
 
-        self.assertFalse(app_store_connect.build_exists(
-            bundle_id="tv.streamscape.halalfoodeu", marketing_version="1.0.0", build_number="257", token="token", getter=getter,
-        ))
+    def test_app_store_reconciliation_accepts_only_complete_or_valid_identity(self) -> None:
+        for upload_state, build_state in (("COMPLETE", None), ("FAILED", "VALID")):
+            with self.subTest(upload_state=upload_state, build_state=build_state):
+                def getter(path: str, *, token: str):
+                    parsed = urllib.parse.urlparse(path)
+                    if parsed.path == "/v1/apps":
+                        return self._app_payload()
+                    if parsed.path == "/v1/apps/app-1/buildUploads":
+                        return {"data": [self._upload(upload_state)]}
+                    builds = [] if build_state is None else [self._build(build_state)]
+                    return {"data": builds, "included": self._included() if builds else []}
 
-    def test_processing_build_upload_counts_as_already_accepted_before_build_resource_exists(self) -> None:
-        calls: list[str] = []
+                self.assertEqual(
+                    app_store_connect.build_reconciliation_state(
+                        bundle_id="tv.streamscape.halalfoodeu",
+                        marketing_version="1.0.0",
+                        build_number="257",
+                        token="token",
+                        getter=getter,
+                    ),
+                    "accepted",
+                )
 
-        def getter(path: str, *, token: str):
-            calls.append(path)
-            parsed = urllib.parse.urlparse(path)
-            if parsed.path == "/v1/apps":
-                return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
-            if parsed.path == "/v1/apps/app-1/buildUploads":
-                query = urllib.parse.parse_qs(parsed.query)
-                self.assertEqual(query["filter[cfBundleShortVersionString]"], ["1.0.0"])
-                self.assertEqual(query["filter[cfBundleVersion]"], ["257"])
-                self.assertEqual(query["filter[platform]"], ["IOS"])
-                return {
-                    "data": [
-                        {
-                            "type": "buildUploads",
-                            "id": "upload-awaiting-old",
-                            "attributes": {
-                                "cfBundleShortVersionString": "1.0.0",
-                                "cfBundleVersion": "257",
-                                "platform": "IOS",
-                                "state": {"state": "AWAITING_UPLOAD"},
-                            },
-                        },
-                        {
-                            "type": "buildUploads",
-                            "id": "upload-1",
-                            "attributes": {
-                                "cfBundleShortVersionString": "1.0.0",
-                                "cfBundleVersion": "257",
-                                "platform": "IOS",
-                                "state": {"state": "PROCESSING"},
-                            },
-                        },
-                    ]
-                }
-            self.fail(f"processed-build lookup must not run while exact upload is processing: {path}")
+    def test_app_store_reconciliation_processing_blocks_duplicate_upload_and_bump(self) -> None:
+        for upload_state, build_state in (("PROCESSING", None), ("AWAITING_UPLOAD", None), ("FAILED", "PROCESSING")):
+            with self.subTest(upload_state=upload_state, build_state=build_state):
+                def getter(path: str, *, token: str):
+                    parsed = urllib.parse.urlparse(path)
+                    if parsed.path == "/v1/apps":
+                        return self._app_payload()
+                    if parsed.path == "/v1/apps/app-1/buildUploads":
+                        return {"data": [self._upload(upload_state)]}
+                    builds = [] if build_state is None else [self._build(build_state)]
+                    return {"data": builds, "included": self._included() if builds else []}
 
-        self.assertTrue(app_store_connect.build_exists(
-            bundle_id="tv.streamscape.halalfoodeu", marketing_version="1.0.0", build_number="257", token="token", getter=getter,
-        ))
-        self.assertEqual(len(calls), 2)
+                self.assertEqual(
+                    app_store_connect.build_reconciliation_state(
+                        bundle_id="tv.streamscape.halalfoodeu",
+                        marketing_version="1.0.0",
+                        build_number="257",
+                        token="token",
+                        getter=getter,
+                    ),
+                    "processing",
+                )
 
-    def test_failed_build_upload_can_reuse_build_number_but_awaiting_upload_fails_closed(self) -> None:
+    def test_app_store_reconciliation_failed_identity_is_retryable_and_absent_is_absent(self) -> None:
         def failed_getter(path: str, *, token: str):
             parsed = urllib.parse.urlparse(path)
             if parsed.path == "/v1/apps":
-                return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
+                return self._app_payload()
             if parsed.path == "/v1/apps/app-1/buildUploads":
-                return {
-                    "data": [{
-                        "type": "buildUploads",
-                        "id": "upload-failed",
-                        "attributes": {
-                            "cfBundleShortVersionString": "1.0.0",
-                            "cfBundleVersion": "257",
-                            "platform": "IOS",
-                            "state": {"state": "FAILED"},
-                        },
-                    }]
-                }
+                return {"data": [self._upload("FAILED")]}
+            return {"data": [self._build("INVALID")], "included": self._included()}
+
+        self.assertEqual(
+            app_store_connect.build_reconciliation_state(
+                bundle_id="tv.streamscape.halalfoodeu",
+                marketing_version="1.0.0",
+                build_number="257",
+                token="token",
+                getter=failed_getter,
+            ),
+            "retryable",
+        )
+
+        def absent_getter(path: str, *, token: str):
+            if urllib.parse.urlparse(path).path == "/v1/apps":
+                return self._app_payload()
             return {"data": [], "included": []}
 
-        self.assertFalse(app_store_connect.build_exists(
-            bundle_id="tv.streamscape.halalfoodeu", marketing_version="1.0.0", build_number="257", token="token", getter=failed_getter,
-        ))
+        self.assertEqual(
+            app_store_connect.build_reconciliation_state(
+                bundle_id="tv.streamscape.halalfoodeu",
+                marketing_version="1.0.0",
+                build_number="257",
+                token="token",
+                getter=absent_getter,
+            ),
+            "absent",
+        )
 
-        def awaiting_getter(path: str, *, token: str):
+    def test_app_store_reconciliation_is_order_independent_and_unknown_state_fails_closed(self) -> None:
+        def mixed_getter(path: str, *, token: str):
             parsed = urllib.parse.urlparse(path)
             if parsed.path == "/v1/apps":
-                return {"data": [{"type": "apps", "id": "app-1", "attributes": {"bundleId": "tv.streamscape.halalfoodeu"}}]}
-            return {
-                "data": [{
-                    "type": "buildUploads",
-                    "id": "upload-awaiting",
-                    "attributes": {
-                        "cfBundleShortVersionString": "1.0.0",
-                        "cfBundleVersion": "257",
-                        "platform": "IOS",
-                        "state": {"state": "AWAITING_UPLOAD"},
-                    },
-                }]
-            }
+                return self._app_payload()
+            if parsed.path == "/v1/apps/app-1/buildUploads":
+                return {"data": [self._upload("FAILED"), self._upload("PROCESSING")]}
+            return {"data": [], "included": []}
 
-        with self.assertRaisesRegex(app_store_connect.AppStoreConnectError, "awaiting upload"):
-            app_store_connect.build_exists(
-                bundle_id="tv.streamscape.halalfoodeu", marketing_version="1.0.0", build_number="257", token="token", getter=awaiting_getter,
+        self.assertEqual(
+            app_store_connect.build_reconciliation_state(
+                bundle_id="tv.streamscape.halalfoodeu",
+                marketing_version="1.0.0",
+                build_number="257",
+                token="token",
+                getter=mixed_getter,
+            ),
+            "processing",
+        )
+
+        def unknown_getter(path: str, *, token: str):
+            parsed = urllib.parse.urlparse(path)
+            if parsed.path == "/v1/apps":
+                return self._app_payload()
+            if parsed.path == "/v1/apps/app-1/buildUploads":
+                return {"data": [self._upload("MYSTERY")]}
+            return {"data": [], "included": []}
+
+        with self.assertRaisesRegex(app_store_connect.AppStoreConnectError, "state is missing or unsupported"):
+            app_store_connect.build_reconciliation_state(
+                bundle_id="tv.streamscape.halalfoodeu",
+                marketing_version="1.0.0",
+                build_number="257",
+                token="token",
+                getter=unknown_getter,
             )
 
     def test_es256_signing_produces_fixed_width_jws_signature(self) -> None:

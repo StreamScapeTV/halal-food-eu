@@ -133,28 +133,39 @@ SOURCE_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
   exit 2
 }
 
+app_store_build_state() {
+  python3 "${ROOT_DIR}/Tools/app_store_connect.py" build-state \
+    --bundle-id tv.streamscape.halalfoodeu \
+    --marketing-version "${RELEASE_VERSION}" \
+    --build-number "${BUILD_NUMBER}" \
+    --issuer-id "${ISSUER_ID}" \
+    --key-id "${KEY_ID}" \
+    --key-path "${AUTH_KEY_PATH}"
+}
+
 if test "${SOURCE_IS_TAG}" = true; then
-  EXISTING_BUILD="$(
-    python3 "${ROOT_DIR}/Tools/app_store_connect.py" build-exists \
-      --bundle-id tv.streamscape.halalfoodeu \
-      --marketing-version "${RELEASE_VERSION}" \
-      --build-number "${BUILD_NUMBER}" \
-      --issuer-id "${ISSUER_ID}" \
-      --key-id "${KEY_ID}" \
-      --key-path "${AUTH_KEY_PATH}"
-  )" || {
-    printf 'Unable to verify whether the exact TestFlight build already exists.\n' >&2
+  PROVIDER_STATE="$(app_store_build_state)" || {
+    printf 'Unable to reconcile the exact TestFlight build in App Store Connect.\n' >&2
     exit 2
   }
-  case "${EXISTING_BUILD}" in
-    present)
-      printf 'App Store Connect already contains Halal Food EU %s (%s); skipping binary upload so Central can reconcile the post-publication build bump.\n' \
+  case "${PROVIDER_STATE}" in
+    accepted)
+      printf 'App Store Connect already accepted Halal Food EU %s (%s); skipping binary upload so Central can reconcile the post-publication build bump.\n' \
         "${RELEASE_VERSION}" "${BUILD_NUMBER}"
       exit 0
       ;;
+    processing)
+      printf 'The exact TestFlight build %s (%s) is still processing in App Store Connect; retry the same tag after processing completes.\n' \
+        "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+      exit 2
+      ;;
+    retryable)
+      printf 'A prior TestFlight delivery for %s (%s) failed processing; retrying the same committed source identity.\n' \
+        "${RELEASE_VERSION}" "${BUILD_NUMBER}"
+      ;;
     absent) ;;
     *)
-      printf 'Unexpected App Store Connect build lookup result.\n' >&2
+      printf 'Unexpected App Store Connect build reconciliation state.\n' >&2
       exit 2
       ;;
   esac
@@ -358,7 +369,41 @@ xcrun altool \
   --p8-file-path "${AUTH_KEY_PATH}"
 
 if test "${SOURCE_IS_TAG}" = true; then
-  printf 'Uploaded exact Halal Food EU TestFlight version %s build %s from source %s with catalog %s.\n' \
+  POST_UPLOAD_MAX_ATTEMPTS=80
+  POST_UPLOAD_SLEEP_SECONDS=15
+  POST_UPLOAD_ACCEPTED=false
+  for ((attempt = 1; attempt <= POST_UPLOAD_MAX_ATTEMPTS; attempt++)); do
+    PROVIDER_STATE="$(app_store_build_state)" || {
+      printf 'Unable to reconcile TestFlight processing after upload.\n' >&2
+      exit 2
+    }
+    case "${PROVIDER_STATE}" in
+      accepted)
+        POST_UPLOAD_ACCEPTED=true
+        break
+        ;;
+      processing|absent)
+        if (( attempt < POST_UPLOAD_MAX_ATTEMPTS )); then
+          sleep "${POST_UPLOAD_SLEEP_SECONDS}"
+        fi
+        ;;
+      retryable)
+        printf 'App Store Connect rejected TestFlight version %s build %s during processing; source build number remains unchanged.\n' \
+          "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+        exit 2
+        ;;
+      *)
+        printf 'Unexpected App Store Connect post-upload reconciliation state.\n' >&2
+        exit 2
+        ;;
+    esac
+  done
+  test "${POST_UPLOAD_ACCEPTED}" = true || {
+    printf 'TestFlight version %s build %s did not reach an accepted provider state within the bounded processing window; source build number remains unchanged.\n' \
+      "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+    exit 2
+  }
+  printf 'Uploaded and provider-accepted exact Halal Food EU TestFlight version %s build %s from source %s with catalog %s.\n' \
     "${RELEASE_VERSION}" "${BUILD_NUMBER}" "${SOURCE_SHA}" "$(hfeu_sha256 "${DATABASE}")"
 else
   printf 'Uploaded exact Halal Food EU TestFlight build %s from source %s with catalog %s.\n' \

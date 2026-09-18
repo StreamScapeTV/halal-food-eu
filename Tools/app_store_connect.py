@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal App Store Connect build-identity lookup for release retry safety.
-
-The helper deliberately supports one read-only operation: determine whether an exact
-bundle/marketing-version/build-number identity already exists in App Store Connect.
-Authentication uses the fixed App Store Connect ES256 API key supplied by Central CI.
-"""
+"""Read-only App Store Connect reconciliation for one exact TestFlight build identity."""
 
 from __future__ import annotations
 
@@ -83,8 +78,8 @@ def make_token(*, issuer_id: str, key_id: str, key_path: Path, now: int | None =
         raise AppStoreConnectError("App Store Connect issuer ID is invalid")
     if not KEY_ID.fullmatch(key_id):
         raise AppStoreConnectError("App Store Connect key ID is invalid")
-    if not key_path.is_file():
-        raise AppStoreConnectError("App Store Connect API key file is missing")
+    if not key_path.is_file() or key_path.is_symlink():
+        raise AppStoreConnectError("App Store Connect API key file is missing or unsafe")
 
     issued_at = int(time.time()) if now is None else now
     header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
@@ -109,8 +104,7 @@ def make_token(*, issuer_id: str, key_id: str, key_path: Path, now: int | None =
         raise AppStoreConnectError("OpenSSL is required for App Store Connect API authentication") from exc
     if completed.returncode != 0 or not completed.stdout:
         raise AppStoreConnectError("App Store Connect API token signing failed")
-    raw_signature = der_es256_to_raw(completed.stdout)
-    return f"{encoded_header}.{encoded_payload}.{_b64url(raw_signature)}"
+    return f"{encoded_header}.{encoded_payload}.{_b64url(der_es256_to_raw(completed.stdout))}"
 
 
 def api_get(path: str, *, token: str) -> dict[str, Any]:
@@ -136,25 +130,52 @@ def api_get(path: str, *, token: str) -> dict[str, Any]:
     return payload
 
 
-def _only_resource(payload: dict[str, Any], *, label: str, allow_empty: bool) -> dict[str, Any] | None:
+def _resource_list(payload: dict[str, Any], *, label: str) -> list[dict[str, Any]]:
     data = payload.get("data")
-    if not isinstance(data, list):
-        raise AppStoreConnectError(f"App Store Connect {label} response has no resource list")
-    if not data and allow_empty:
-        return None
-    if len(data) != 1 or not isinstance(data[0], dict):
-        raise AppStoreConnectError(f"App Store Connect {label} identity is not unique")
-    return data[0]
+    if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+        raise AppStoreConnectError(f"App Store Connect {label} response has no valid resource list")
+    links = payload.get("links")
+    if isinstance(links, dict) and links.get("next") not in (None, ""):
+        raise AppStoreConnectError(f"App Store Connect exact {label} history exceeded the bounded lookup page")
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        paging = meta.get("paging")
+        if isinstance(paging, dict):
+            total = paging.get("total")
+            if isinstance(total, int) and total > len(data):
+                raise AppStoreConnectError(f"App Store Connect exact {label} history exceeded the bounded lookup page")
+    return data
 
 
-def build_exists(
+def _app_id(*, bundle_id: str, token: str, getter: Callable[..., dict[str, Any]]) -> str:
+    app_query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": "2"})
+    apps = _resource_list(getter(f"/v1/apps?{app_query}", token=token), label="app")
+    if len(apps) != 1:
+        raise AppStoreConnectError("App Store Connect app identity is not unique")
+    app = apps[0]
+    app_id = app.get("id")
+    attributes = app.get("attributes")
+    if (
+        app.get("type") != "apps"
+        or not isinstance(app_id, str)
+        or not app_id
+        or not isinstance(attributes, dict)
+        or attributes.get("bundleId") != bundle_id
+    ):
+        raise AppStoreConnectError("App Store Connect app bundle identity mismatch")
+    return app_id
+
+
+def build_reconciliation_state(
     *,
     bundle_id: str,
     marketing_version: str,
     build_number: str,
     token: str,
     getter: Callable[..., dict[str, Any]] = api_get,
-) -> bool:
+) -> str:
+    """Classify an exact TestFlight identity as accepted, processing, retryable, or absent."""
+
     if not BUNDLE_ID.fullmatch(bundle_id):
         raise AppStoreConnectError("bundle identifier is invalid")
     if not MARKETING_VERSION.fullmatch(marketing_version):
@@ -162,15 +183,7 @@ def build_exists(
     if not BUILD_NUMBER.fullmatch(build_number) or int(build_number) >= 9_999_999_999:
         raise AppStoreConnectError("tag-driven build number is outside the supported range")
 
-    app_query = urllib.parse.urlencode({"filter[bundleId]": bundle_id, "limit": "2"})
-    app = _only_resource(getter(f"/v1/apps?{app_query}", token=token), label="app", allow_empty=False)
-    assert app is not None
-    app_id = app.get("id")
-    app_attributes = app.get("attributes")
-    if not isinstance(app_id, str) or not app_id:
-        raise AppStoreConnectError("App Store Connect app identity is invalid")
-    if not isinstance(app_attributes, dict) or app_attributes.get("bundleId") != bundle_id:
-        raise AppStoreConnectError("App Store Connect app bundle identity mismatch")
+    app_id = _app_id(bundle_id=bundle_id, token=token, getter=getter)
 
     upload_query = urllib.parse.urlencode(
         {
@@ -181,20 +194,15 @@ def build_exists(
             "limit": "200",
         }
     )
-    upload_payload = getter(
-        f"/v1/apps/{urllib.parse.quote(app_id, safe='')}/buildUploads?{upload_query}",
-        token=token,
+    uploads = _resource_list(
+        getter(f"/v1/apps/{urllib.parse.quote(app_id, safe='')}/buildUploads?{upload_query}", token=token),
+        label="build-upload",
     )
-    uploads = upload_payload.get("data")
-    if not isinstance(uploads, list):
-        raise AppStoreConnectError("App Store Connect build-upload response has no resource list")
     upload_states: set[str] = set()
     for upload in uploads:
-        if not isinstance(upload, dict) or upload.get("type") != "buildUploads":
-            raise AppStoreConnectError("App Store Connect build-upload identity is invalid")
         attributes = upload.get("attributes")
-        if not isinstance(attributes, dict):
-            raise AppStoreConnectError("App Store Connect build-upload attributes are invalid")
+        if upload.get("type") != "buildUploads" or not isinstance(attributes, dict):
+            raise AppStoreConnectError("App Store Connect build-upload identity is invalid")
         if (
             attributes.get("cfBundleShortVersionString") != marketing_version
             or attributes.get("cfBundleVersion") != build_number
@@ -204,15 +212,8 @@ def build_exists(
         state_value = attributes.get("state")
         state = state_value.get("state") if isinstance(state_value, dict) else state_value
         if state not in {"AWAITING_UPLOAD", "PROCESSING", "FAILED", "COMPLETE"}:
-            raise AppStoreConnectError("exact App Store Connect build upload has an unknown state")
+            raise AppStoreConnectError("App Store Connect build-upload state is missing or unsupported")
         upload_states.add(state)
-
-    if upload_states & {"PROCESSING", "COMPLETE"}:
-        return True
-    if "AWAITING_UPLOAD" in upload_states:
-        raise AppStoreConnectError("exact App Store Connect build upload is still awaiting upload")
-    # Apple documents that FAILED uploads may reuse the same build number; if all
-    # exact upload attempts failed, continue to the processed-build lookup.
 
     build_query = urllib.parse.urlencode(
         {
@@ -220,42 +221,64 @@ def build_exists(
             "filter[version]": build_number,
             "filter[preReleaseVersion.version]": marketing_version,
             "filter[preReleaseVersion.platform]": "IOS",
+            "fields[builds]": "version,processingState,preReleaseVersion",
             "include": "preReleaseVersion",
-            "limit": "2",
+            "limit": "200",
         }
     )
     build_payload = getter(f"/v1/builds?{build_query}", token=token)
-    build = _only_resource(build_payload, label="build", allow_empty=True)
-    if build is None:
-        return False
-    attributes = build.get("attributes")
-    if not isinstance(attributes, dict) or attributes.get("version") != build_number:
-        raise AppStoreConnectError("App Store Connect build number mismatch")
-    relationship = build.get("relationships", {}).get("preReleaseVersion", {}).get("data")
-    if not isinstance(relationship, dict) or not isinstance(relationship.get("id"), str):
-        raise AppStoreConnectError("App Store Connect build prerelease-version identity is missing")
-    prerelease_id = relationship["id"]
+    builds = _resource_list(build_payload, label="build")
     included = build_payload.get("included")
-    if not isinstance(included, list):
+    if builds and not isinstance(included, list):
         raise AppStoreConnectError("App Store Connect build response omitted prerelease-version metadata")
-    matches = [
-        item
-        for item in included
-        if isinstance(item, dict)
-        and item.get("type") == "preReleaseVersions"
-        and item.get("id") == prerelease_id
-    ]
-    if len(matches) != 1 or not isinstance(matches[0].get("attributes"), dict):
-        raise AppStoreConnectError("App Store Connect prerelease-version metadata is not unique")
-    if matches[0]["attributes"].get("version") != marketing_version:
-        raise AppStoreConnectError("App Store Connect marketing-version mismatch")
-    return True
+
+    build_states: set[str] = set()
+    for build in builds:
+        attributes = build.get("attributes")
+        if build.get("type") != "builds" or not isinstance(attributes, dict):
+            raise AppStoreConnectError("App Store Connect build identity is invalid")
+        if attributes.get("version") != build_number:
+            raise AppStoreConnectError("App Store Connect build number mismatch")
+        processing_state = attributes.get("processingState")
+        if processing_state not in {"PROCESSING", "FAILED", "INVALID", "VALID"}:
+            raise AppStoreConnectError("App Store Connect build processing state is missing or unsupported")
+        build_states.add(processing_state)
+        relationship = build.get("relationships", {}).get("preReleaseVersion", {}).get("data")
+        if not isinstance(relationship, dict) or not isinstance(relationship.get("id"), str):
+            raise AppStoreConnectError("App Store Connect build prerelease-version identity is missing")
+        prerelease_id = relationship["id"]
+        matches = [
+            item
+            for item in included
+            if isinstance(item, dict)
+            and item.get("type") == "preReleaseVersions"
+            and item.get("id") == prerelease_id
+            and isinstance(item.get("attributes"), dict)
+        ]
+        if len(matches) != 1 or matches[0]["attributes"].get("version") != marketing_version:
+            raise AppStoreConnectError("App Store Connect prerelease-version identity mismatch")
+
+    # A completed upload or VALID processed build proves that this exact identity
+    # reached a provider-accepted state suitable for the source build-number bump.
+    if "COMPLETE" in upload_states or "VALID" in build_states:
+        return "accepted"
+    # Never duplicate an upload while Apple still owns an in-flight exact identity.
+    if upload_states & {"AWAITING_UPLOAD", "PROCESSING"} or "PROCESSING" in build_states:
+        return "processing"
+    # Apple documents that a FAILED upload may reuse the same build number. Processed
+    # FAILED/INVALID deliveries are likewise terminal non-acceptance.
+    if upload_states or build_states:
+        if upload_states <= {"FAILED"} and build_states <= {"FAILED", "INVALID"}:
+            return "retryable"
+        raise AppStoreConnectError("App Store Connect exact build states are inconsistent")
+    return "absent"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    subcommands = parser.add_subparsers(dest="command", required=True)
-    check = subcommands.add_parser("build-exists", help="Print present/absent for one exact TestFlight build identity")
+    check = parser.add_subparsers(dest="command", required=True).add_parser(
+        "build-state", help="Print accepted/processing/retryable/absent for one exact TestFlight build identity"
+    )
     check.add_argument("--bundle-id", required=True)
     check.add_argument("--marketing-version", required=True)
     check.add_argument("--build-number", required=True)
@@ -265,23 +288,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+def main() -> int:
     args = parse_args()
     try:
-        if args.command == "build-exists":
-            token = make_token(issuer_id=args.issuer_id, key_id=args.key_id, key_path=args.key_path)
-            exists = build_exists(
-                bundle_id=args.bundle_id,
-                marketing_version=args.marketing_version,
-                build_number=args.build_number,
-                token=token,
-            )
-            print("present" if exists else "absent")
-            return
+        token = make_token(issuer_id=args.issuer_id, key_id=args.key_id, key_path=args.key_path)
+        state = build_reconciliation_state(
+            bundle_id=args.bundle_id,
+            marketing_version=args.marketing_version,
+            build_number=args.build_number,
+            token=token,
+        )
+        print(state)
+        return 0
     except AppStoreConnectError as exc:
-        raise SystemExit(str(exc)) from exc
-    raise SystemExit("unsupported App Store Connect operation")
+        print(f"App Store Connect lookup failed: {exc}", file=__import__("sys").stderr)
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

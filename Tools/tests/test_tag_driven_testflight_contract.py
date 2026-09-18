@@ -80,7 +80,7 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
             "CI_APPLE_TESTFLIGHT_RELEASE_VERSION",
             "PROJECT_MARKETING_VERSION",
             "PROJECT_BUILD_NUMBER",
-            'Tools/app_store_connect.py" build-exists',
+            'Tools/app_store_connect.py" build-state',
             'if test "${SOURCE_IS_TAG}" != true; then',
             "CFBundleShortVersionString",
             "already contains Halal Food EU",

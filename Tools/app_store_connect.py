@@ -172,6 +172,45 @@ def build_exists(
     if not isinstance(app_attributes, dict) or app_attributes.get("bundleId") != bundle_id:
         raise AppStoreConnectError("App Store Connect app bundle identity mismatch")
 
+    upload_query = urllib.parse.urlencode(
+        {
+            "filter[cfBundleShortVersionString]": marketing_version,
+            "filter[cfBundleVersion]": build_number,
+            "filter[platform]": "IOS",
+            "fields[buildUploads]": "cfBundleShortVersionString,cfBundleVersion,state,platform",
+            "limit": "200",
+        }
+    )
+    upload_payload = getter(
+        f"/v1/apps/{urllib.parse.quote(app_id, safe='')}/buildUploads?{upload_query}",
+        token=token,
+    )
+    uploads = upload_payload.get("data")
+    if not isinstance(uploads, list):
+        raise AppStoreConnectError("App Store Connect build-upload response has no resource list")
+    for upload in uploads:
+        if not isinstance(upload, dict) or upload.get("type") != "buildUploads":
+            raise AppStoreConnectError("App Store Connect build-upload identity is invalid")
+        attributes = upload.get("attributes")
+        if not isinstance(attributes, dict):
+            raise AppStoreConnectError("App Store Connect build-upload attributes are invalid")
+        if (
+            attributes.get("cfBundleShortVersionString") != marketing_version
+            or attributes.get("cfBundleVersion") != build_number
+            or attributes.get("platform") != "IOS"
+        ):
+            raise AppStoreConnectError("App Store Connect build-upload identity mismatch")
+        state_value = attributes.get("state")
+        state = state_value.get("state") if isinstance(state_value, dict) else state_value
+        if state in {"PROCESSING", "COMPLETE"}:
+            return True
+        if state == "FAILED":
+            # Apple documents that a failed upload may reuse the same build number.
+            continue
+        if state == "AWAITING_UPLOAD":
+            raise AppStoreConnectError("exact App Store Connect build upload is still awaiting upload")
+        raise AppStoreConnectError("exact App Store Connect build upload has an unknown state")
+
     build_query = urllib.parse.urlencode(
         {
             "filter[app]": app_id,

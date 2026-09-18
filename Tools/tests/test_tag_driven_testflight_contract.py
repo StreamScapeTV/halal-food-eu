@@ -239,6 +239,78 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
                 getter=unknown_getter,
             )
 
+    def _run_wrapper_with_fake_provider_state(self, state: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            (root / "scripts/ci").mkdir(parents=True)
+            shutil.copy2(self.testflight, root / "scripts/ci/run-apple-testflight.sh")
+            shutil.copy2(ROOT / "scripts/ci/apple-common.sh", root / "scripts/ci/apple-common.sh")
+            (root / "Tools").mkdir()
+            (root / "Data/catalog").mkdir(parents=True)
+            (root / "Data/catalog/production-catalog-release-input-v1.json").write_text("{}\n", encoding="utf-8")
+            (root / "Tools/production_catalog_release_input.py").write_text(
+                "raise SystemExit(0)\n", encoding="utf-8"
+            )
+            (root / "Tools/app_store_connect.py").write_text(
+                "import os\nprint(os.environ['HFEU_TEST_ASC_STATE'])\n", encoding="utf-8"
+            )
+            (root / "project.yml").write_text(
+                "targets:\n"
+                "  HalalFoodEU:\n"
+                "    settings:\n"
+                "      base:\n"
+                "        CURRENT_PROJECT_VERSION: 1\n"
+                "        MARKETING_VERSION: 0.1.0\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "HFEU Test"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "hfeu-test@example.invalid"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-q", "-m", "fixture"], cwd=root, check=True)
+
+            key = Path(temporary) / "AuthKey.p8"
+            key.write_text("fixture\n", encoding="utf-8")
+            release_root = Path(temporary) / "release"
+            release_root.mkdir()
+            env = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "HFEU_TEST_ASC_STATE": state,
+                "CI_APPLE_TESTFLIGHT_SOURCE_IS_TAG": "true",
+                "CI_APPLE_TESTFLIGHT_RELEASE_VERSION": "0.1.0",
+                "CI_APPLE_TESTFLIGHT_BUILD_NUMBER": "1",
+                "CI_APPLE_TESTFLIGHT_AUTH_KEY_PATH": str(key),
+                "CI_APPLE_TESTFLIGHT_TEMP_DIR": str(release_root),
+                "CI_APPLE_TESTFLIGHT_TEAM_ID": "ABCDE12345",
+                "CI_APPLE_TESTFLIGHT_KEY_ID": "ABCDE12345",
+                "CI_APPLE_TESTFLIGHT_ISSUER_ID": "11111111-2222-3333-4444-555555555555",
+            }
+            return subprocess.run(
+                ["bash", str(root / "scripts/ci/run-apple-testflight.sh")],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+    def test_wrapper_accepted_state_is_idempotent_and_processing_fails_closed(self) -> None:
+        accepted = self._run_wrapper_with_fake_provider_state("accepted")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIn("already accepted Halal Food EU", accepted.stdout)
+        self.assertNotIn("GitHub CLI is required", accepted.stderr)
+
+        processing = self._run_wrapper_with_fake_provider_state("processing")
+        self.assertEqual(processing.returncode, 2)
+        self.assertIn("still processing in App Store Connect", processing.stderr)
+        self.assertNotIn("GitHub CLI is required", processing.stderr)
+
+    def test_wrapper_retryable_state_continues_toward_new_publication(self) -> None:
+        retryable = self._run_wrapper_with_fake_provider_state("retryable")
+        self.assertEqual(retryable.returncode, 2)
+        self.assertIn("failed processing; retrying the same committed source identity", retryable.stdout)
+        self.assertNotIn("already accepted Halal Food EU", retryable.stdout)
+
     def test_es256_signing_produces_fixed_width_jws_signature(self) -> None:
         self.assertEqual(
             app_store_connect.der_es256_to_raw(bytes.fromhex("3006020101020102")),

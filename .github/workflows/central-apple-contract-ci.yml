@@ -35,9 +35,11 @@ jobs:
             Tools/app_store_connect.py \
             Tools/catalog_workflow_policy.py \
             Tools/tests/test_apple_ci_adoption.py \
+            Tools/tests/test_tag_driven_testflight_contract.py \
             Tools/tests/test_reusable_workflow_dependency.py
           python3 Tools/catalog_workflow.py validate-workflows --root .github/workflows
           python3 -m unittest \
             Tools.tests.test_apple_ci_adoption \
+            Tools.tests.test_tag_driven_testflight_contract \
             Tools.tests.test_reusable_workflow_dependency \
             -v

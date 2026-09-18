@@ -29,8 +29,10 @@ jobs:
           bash -n scripts/ci/apple-common.sh
           bash -n scripts/ci/run-apple-hosted-validation.sh
           bash -n scripts/ci/run-apple-testflight.sh
+          bash -n scripts/ci/advance-mobile-build.sh
           bash -n Scripts/ci-ios.sh
           python3 -m py_compile \
+            Tools/app_store_connect.py \
             Tools/catalog_workflow_policy.py \
             Tools/tests/test_apple_ci_adoption.py \
             Tools/tests/test_reusable_workflow_dependency.py

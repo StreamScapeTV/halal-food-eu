@@ -188,6 +188,7 @@ def build_exists(
     uploads = upload_payload.get("data")
     if not isinstance(uploads, list):
         raise AppStoreConnectError("App Store Connect build-upload response has no resource list")
+    upload_states: set[str] = set()
     for upload in uploads:
         if not isinstance(upload, dict) or upload.get("type") != "buildUploads":
             raise AppStoreConnectError("App Store Connect build-upload identity is invalid")
@@ -202,14 +203,16 @@ def build_exists(
             raise AppStoreConnectError("App Store Connect build-upload identity mismatch")
         state_value = attributes.get("state")
         state = state_value.get("state") if isinstance(state_value, dict) else state_value
-        if state in {"PROCESSING", "COMPLETE"}:
-            return True
-        if state == "FAILED":
-            # Apple documents that a failed upload may reuse the same build number.
-            continue
-        if state == "AWAITING_UPLOAD":
-            raise AppStoreConnectError("exact App Store Connect build upload is still awaiting upload")
-        raise AppStoreConnectError("exact App Store Connect build upload has an unknown state")
+        if state not in {"AWAITING_UPLOAD", "PROCESSING", "FAILED", "COMPLETE"}:
+            raise AppStoreConnectError("exact App Store Connect build upload has an unknown state")
+        upload_states.add(state)
+
+    if upload_states & {"PROCESSING", "COMPLETE"}:
+        return True
+    if "AWAITING_UPLOAD" in upload_states:
+        raise AppStoreConnectError("exact App Store Connect build upload is still awaiting upload")
+    # Apple documents that FAILED uploads may reuse the same build number; if all
+    # exact upload attempts failed, continue to the processed-build lookup.
 
     build_query = urllib.parse.urlencode(
         {

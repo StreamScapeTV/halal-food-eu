@@ -150,16 +150,28 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
                 self.assertEqual(query["filter[cfBundleVersion]"], ["257"])
                 self.assertEqual(query["filter[platform]"], ["IOS"])
                 return {
-                    "data": [{
-                        "type": "buildUploads",
-                        "id": "upload-1",
-                        "attributes": {
-                            "cfBundleShortVersionString": "1.0.0",
-                            "cfBundleVersion": "257",
-                            "platform": "IOS",
-                            "state": {"state": "PROCESSING"},
+                    "data": [
+                        {
+                            "type": "buildUploads",
+                            "id": "upload-awaiting-old",
+                            "attributes": {
+                                "cfBundleShortVersionString": "1.0.0",
+                                "cfBundleVersion": "257",
+                                "platform": "IOS",
+                                "state": {"state": "AWAITING_UPLOAD"},
+                            },
                         },
-                    }]
+                        {
+                            "type": "buildUploads",
+                            "id": "upload-1",
+                            "attributes": {
+                                "cfBundleShortVersionString": "1.0.0",
+                                "cfBundleVersion": "257",
+                                "platform": "IOS",
+                                "state": {"state": "PROCESSING"},
+                            },
+                        },
+                    ]
                 }
             self.fail(f"processed-build lookup must not run while exact upload is processing: {path}")
 

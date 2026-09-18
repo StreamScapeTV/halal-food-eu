@@ -83,7 +83,7 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
             'Tools/app_store_connect.py" build-state',
             'if test "${SOURCE_IS_TAG}" != true; then',
             "CFBundleShortVersionString",
-            "already contains Halal Food EU",
+            "already accepted Halal Food EU",
         ):
             self.assertIn(required, text)
         self.assertIn('ARCHIVE_VERSION_ARGS+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")', text)

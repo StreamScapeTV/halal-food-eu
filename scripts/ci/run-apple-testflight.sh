@@ -20,6 +20,16 @@ for name in "${required_context[@]}"; do
   }
 done
 
+SOURCE_IS_TAG="${CI_APPLE_TESTFLIGHT_SOURCE_IS_TAG:-false}"
+RELEASE_VERSION="${CI_APPLE_TESTFLIGHT_RELEASE_VERSION:-}"
+case "${SOURCE_IS_TAG}" in
+  true|false) ;;
+  *)
+    printf 'CI_APPLE_TESTFLIGHT_SOURCE_IS_TAG must be true or false.\n' >&2
+    exit 2
+    ;;
+esac
+
 BUILD_NUMBER="${CI_APPLE_TESTFLIGHT_BUILD_NUMBER}"
 if [[ ! "${BUILD_NUMBER}" =~ ^[1-9][0-9]{0,17}([.][0-9]{1,18}){0,2}$ ]]; then
   printf 'Halal Food EU TestFlight build number must be a positive numeric CFBundleVersion with at most three components.\n' >&2
@@ -49,6 +59,62 @@ if (( ${#ISSUER_ID} > 128 )) || [[ "${ISSUER_ID}" =~ [[:space:]] ]]; then
   exit 2
 fi
 
+PROJECT_IDENTITY="$(
+  PROJECT_FILE="${ROOT_DIR}/project.yml" python3 - <<'PY_PROJECT_IDENTITY'
+import os
+import re
+from pathlib import Path
+
+path = Path(os.environ["PROJECT_FILE"])
+try:
+    text = path.read_text(encoding="utf-8")
+except (OSError, UnicodeDecodeError) as exc:
+    raise SystemExit(f"failed to read canonical project.yml release identity: {exc}") from exc
+patterns = {
+    "marketing": re.compile(r'^\s*MARKETING_VERSION:\s*"?([^"\s#]+)"?\s*$', re.MULTILINE),
+    "build": re.compile(r'^\s*CURRENT_PROJECT_VERSION:\s*"?([^"\s#]+)"?\s*$', re.MULTILINE),
+}
+values = {}
+for label, pattern in patterns.items():
+    matches = pattern.findall(text)
+    if len(matches) != 1:
+        raise SystemExit(f"project.yml must contain exactly one canonical {label} release value")
+    values[label] = matches[0]
+print(values["marketing"])
+print(values["build"])
+PY_PROJECT_IDENTITY
+)" || exit 2
+PROJECT_MARKETING_VERSION="$(printf '%s\n' "${PROJECT_IDENTITY}" | sed -n '1p')"
+PROJECT_BUILD_NUMBER="$(printf '%s\n' "${PROJECT_IDENTITY}" | sed -n '2p')"
+
+if test "${SOURCE_IS_TAG}" = true; then
+  [[ "${RELEASE_VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+    printf 'Tag-driven TestFlight release version must be a three-component numeric marketing version.\n' >&2
+    exit 2
+  }
+  [[ "${BUILD_NUMBER}" =~ ^[1-9][0-9]{0,9}$ ]] || {
+    printf 'Tag-driven TestFlight build number must be a positive bounded integer.\n' >&2
+    exit 2
+  }
+  (( 10#${BUILD_NUMBER} < 9999999999 )) || {
+    printf 'Tag-driven TestFlight build number must leave room for the next bounded build.\n' >&2
+    exit 2
+  }
+  test "${PROJECT_MARKETING_VERSION}" = "${RELEASE_VERSION}" || {
+    printf 'Tag release version %s does not match project.yml MARKETING_VERSION %s.\n' "${RELEASE_VERSION}" "${PROJECT_MARKETING_VERSION}" >&2
+    exit 2
+  }
+  test "${PROJECT_BUILD_NUMBER}" = "${BUILD_NUMBER}" || {
+    printf 'Tag release build %s does not match project.yml CURRENT_PROJECT_VERSION %s.\n' "${BUILD_NUMBER}" "${PROJECT_BUILD_NUMBER}" >&2
+    exit 2
+  }
+else
+  test -z "${RELEASE_VERSION}" || {
+    printf 'Manual TestFlight publication does not accept a release-version override.\n' >&2
+    exit 2
+  }
+fi
+
 RECEIPT="${ROOT_DIR}/Data/catalog/production-catalog-release-input-v1.json"
 test -f "${RECEIPT}" || {
   printf 'No accepted production catalog release receipt exists; refusing to package a synthetic catalog for TestFlight.\n' >&2
@@ -56,8 +122,8 @@ test -f "${RECEIPT}" || {
 }
 python3 "${ROOT_DIR}/Tools/production_catalog_release_input.py" validate --input "${RECEIPT}"
 
-if [[ "${GITHUB_ACTIONS:-}" == "true" && "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
-  printf 'TestFlight publication is allowed only from protected main.\n' >&2
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${SOURCE_IS_TAG}" != "true" && "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+  printf 'Manual TestFlight publication is allowed only from protected main.\n' >&2
   exit 2
 fi
 
@@ -66,6 +132,44 @@ SOURCE_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
   printf 'Unable to resolve an exact source commit for TestFlight.\n' >&2
   exit 2
 }
+
+app_store_build_state() {
+  python3 "${ROOT_DIR}/Tools/app_store_connect.py" build-state \
+    --bundle-id tv.streamscape.halalfoodeu \
+    --marketing-version "${RELEASE_VERSION}" \
+    --build-number "${BUILD_NUMBER}" \
+    --issuer-id "${ISSUER_ID}" \
+    --key-id "${KEY_ID}" \
+    --key-path "${AUTH_KEY_PATH}"
+}
+
+if test "${SOURCE_IS_TAG}" = true; then
+  PROVIDER_STATE="$(app_store_build_state)" || {
+    printf 'Unable to reconcile the exact TestFlight build in App Store Connect.\n' >&2
+    exit 2
+  }
+  case "${PROVIDER_STATE}" in
+    accepted)
+      printf 'App Store Connect already accepted Halal Food EU %s (%s); skipping binary upload so Central can reconcile the post-publication build bump.\n' \
+        "${RELEASE_VERSION}" "${BUILD_NUMBER}"
+      exit 0
+      ;;
+    processing)
+      printf 'The exact TestFlight build %s (%s) is still processing in App Store Connect; retry the same tag after processing completes.\n' \
+        "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+      exit 2
+      ;;
+    retryable)
+      printf 'A prior TestFlight delivery for %s (%s) failed processing; retrying the same committed source identity.\n' \
+        "${RELEASE_VERSION}" "${BUILD_NUMBER}"
+      ;;
+    absent) ;;
+    *)
+      printf 'Unexpected App Store Connect build reconciliation state.\n' >&2
+      exit 2
+      ;;
+  esac
+fi
 
 command -v gh >/dev/null 2>&1 || {
   printf 'GitHub CLI is required to resolve exact catalog release evidence.\n' >&2
@@ -174,6 +278,11 @@ EXPORT_OPTIONS="${RELEASE_ROOT}/ExportOptions.plist"
 rm -rf -- "${ARCHIVE_PATH}" "${EXPORT_PATH}"
 mkdir -p "${EXPORT_PATH}"
 
+ARCHIVE_VERSION_ARGS=()
+if test "${SOURCE_IS_TAG}" != true; then
+  ARCHIVE_VERSION_ARGS+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")
+fi
+
 xcodebuild archive \
   -project "${ROOT_DIR}/HalalFoodEU.xcodeproj" \
   -scheme HalalFoodEU \
@@ -182,7 +291,7 @@ xcodebuild archive \
   -archivePath "${ARCHIVE_PATH}" \
   DEVELOPMENT_TEAM="${TEAM_ID}" \
   CODE_SIGN_STYLE=Automatic \
-  CURRENT_PROJECT_VERSION="${BUILD_NUMBER}" \
+  "${ARCHIVE_VERSION_ARGS[@]}" \
   -allowProvisioningUpdates \
   -authenticationKeyPath "${AUTH_KEY_PATH}" \
   -authenticationKeyID "${KEY_ID}" \
@@ -195,6 +304,9 @@ test -f "${ARCHIVED_APP}/catalog-manifest.json"
 test "$(hfeu_sha256 "${ARCHIVED_APP}/catalog.sqlite3")" = "$(hfeu_sha256 "${DATABASE}")"
 test "$(hfeu_sha256 "${ARCHIVED_APP}/catalog-manifest.json")" = "$(hfeu_sha256 "${MANIFEST}")"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${ARCHIVED_APP}/Info.plist")" = "${BUILD_NUMBER}"
+if test "${SOURCE_IS_TAG}" = true; then
+  test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${ARCHIVED_APP}/Info.plist")" = "${RELEASE_VERSION}"
+fi
 
 cat > "${EXPORT_OPTIONS}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -244,6 +356,9 @@ EXPORTED_APP="$(find "${VERIFY_ROOT}/Payload" -maxdepth 1 -type d -name '*.app' 
 test "$(hfeu_sha256 "${EXPORTED_APP}/catalog.sqlite3")" = "$(hfeu_sha256 "${DATABASE}")"
 test "$(hfeu_sha256 "${EXPORTED_APP}/catalog-manifest.json")" = "$(hfeu_sha256 "${MANIFEST}")"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${EXPORTED_APP}/Info.plist")" = "${BUILD_NUMBER}"
+if test "${SOURCE_IS_TAG}" = true; then
+  test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${EXPORTED_APP}/Info.plist")" = "${RELEASE_VERSION}"
+fi
 
 xcrun altool \
   --upload-app \
@@ -253,5 +368,44 @@ xcrun altool \
   --apiIssuer "${ISSUER_ID}" \
   --p8-file-path "${AUTH_KEY_PATH}"
 
-printf 'Uploaded exact Halal Food EU TestFlight build %s from source %s with catalog %s.\n' \
-  "${BUILD_NUMBER}" "${SOURCE_SHA}" "$(hfeu_sha256 "${DATABASE}")"
+if test "${SOURCE_IS_TAG}" = true; then
+  POST_UPLOAD_MAX_ATTEMPTS=80
+  POST_UPLOAD_SLEEP_SECONDS=15
+  POST_UPLOAD_ACCEPTED=false
+  for ((attempt = 1; attempt <= POST_UPLOAD_MAX_ATTEMPTS; attempt++)); do
+    PROVIDER_STATE="$(app_store_build_state)" || {
+      printf 'Unable to reconcile TestFlight processing after upload.\n' >&2
+      exit 2
+    }
+    case "${PROVIDER_STATE}" in
+      accepted)
+        POST_UPLOAD_ACCEPTED=true
+        break
+        ;;
+      processing|absent)
+        if (( attempt < POST_UPLOAD_MAX_ATTEMPTS )); then
+          sleep "${POST_UPLOAD_SLEEP_SECONDS}"
+        fi
+        ;;
+      retryable)
+        printf 'App Store Connect rejected TestFlight version %s build %s during processing; source build number remains unchanged.\n' \
+          "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+        exit 2
+        ;;
+      *)
+        printf 'Unexpected App Store Connect post-upload reconciliation state.\n' >&2
+        exit 2
+        ;;
+    esac
+  done
+  test "${POST_UPLOAD_ACCEPTED}" = true || {
+    printf 'TestFlight version %s build %s did not reach an accepted provider state within the bounded processing window; source build number remains unchanged.\n' \
+      "${RELEASE_VERSION}" "${BUILD_NUMBER}" >&2
+    exit 2
+  }
+  printf 'Uploaded and provider-accepted exact Halal Food EU TestFlight version %s build %s from source %s with catalog %s.\n' \
+    "${RELEASE_VERSION}" "${BUILD_NUMBER}" "${SOURCE_SHA}" "$(hfeu_sha256 "${DATABASE}")"
+else
+  printf 'Uploaded exact Halal Food EU TestFlight build %s from source %s with catalog %s.\n' \
+    "${BUILD_NUMBER}" "${SOURCE_SHA}" "$(hfeu_sha256 "${DATABASE}")"
+fi

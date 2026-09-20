@@ -116,11 +116,20 @@ else
 fi
 
 RECEIPT="${ROOT_DIR}/Data/catalog/production-catalog-release-input-v1.json"
-test -f "${RECEIPT}" || {
-  printf 'No accepted production catalog release receipt exists; refusing to package a synthetic catalog for TestFlight.\n' >&2
+BUNDLE_SOURCE_MANIFEST="${ROOT_DIR}/Data/catalog/bundled/de/source-manifest-v1.json"
+if test -f "${RECEIPT}"; then
+  CATALOG_AUTHORITY=receipt
+  python3 "${ROOT_DIR}/Tools/production_catalog_release_input.py" validate --input "${RECEIPT}"
+elif test -f "${BUNDLE_SOURCE_MANIFEST}"; then
+  CATALOG_AUTHORITY=git-bundle
+  (
+    cd "${ROOT_DIR}"
+    PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate       --manifest Data/catalog/bundled/de/source-manifest-v1.json
+  )
+else
+  printf 'No accepted production catalog authority exists; refusing to package synthetic or unreviewed catalog data for TestFlight.\n' >&2
   exit 2
-}
-python3 "${ROOT_DIR}/Tools/production_catalog_release_input.py" validate --input "${RECEIPT}"
+fi
 
 if [[ "${GITHUB_ACTIONS:-}" == "true" && "${SOURCE_IS_TAG}" != "true" && "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
   printf 'Manual TestFlight publication is allowed only from protected main.\n' >&2
@@ -231,7 +240,7 @@ python3 "${ROOT_DIR}/Tools/production_catalog.py" validate \
   --database "${DATABASE}" \
   --manifest "${MANIFEST}"
 
-SOURCE_SHA="${SOURCE_SHA}" DATABASE="${DATABASE}" MANIFEST="${MANIFEST}" REPORT="${REPORT}" RECEIPT="${RECEIPT}" python3 - <<'PY'
+SOURCE_SHA="${SOURCE_SHA}" DATABASE="${DATABASE}" MANIFEST="${MANIFEST}" REPORT="${REPORT}"   RECEIPT="${RECEIPT}" BUNDLE_SOURCE_MANIFEST="${BUNDLE_SOURCE_MANIFEST}" CATALOG_AUTHORITY="${CATALOG_AUTHORITY}" python3 - <<'PY'
 import hashlib
 import json
 import os
@@ -242,21 +251,57 @@ database = Path(os.environ["DATABASE"])
 manifest_path = Path(os.environ["MANIFEST"])
 report_path = Path(os.environ["REPORT"])
 receipt_path = Path(os.environ["RECEIPT"])
+bundle_source_path = Path(os.environ["BUNDLE_SOURCE_MANIFEST"])
+authority = os.environ["CATALOG_AUTHORITY"]
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 report = json.loads(report_path.read_text(encoding="utf-8"))
-receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
 
 if report.get("commitSha") != source_sha or report.get("releaseMode") != "production":
     raise SystemExit("release evidence does not belong to this exact production source commit")
+if report.get("productionAuthority") != authority:
+    raise SystemExit("release evidence production authority does not match the accepted source authority")
 if manifest.get("sourceCommit") != source_sha:
     raise SystemExit("catalog manifest sourceCommit does not match this exact application source")
-if manifest.get("catalogVersion") != receipt.get("catalogVersion"):
-    raise SystemExit("catalog release evidence does not match the accepted release receipt")
+if report.get("catalogVersion") != manifest.get("catalogVersion"):
+    raise SystemExit("release report catalogVersion does not match the packaged catalog manifest")
+
 database_sha = hashlib.sha256(database.read_bytes()).hexdigest()
 manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
 if report.get("databaseSha256") != database_sha or report.get("manifestSha256") != manifest_sha:
     raise SystemExit("catalog release evidence digest mismatch")
+
+if authority == "receipt":
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if manifest.get("catalogVersion") != receipt.get("catalogVersion"):
+        raise SystemExit("catalog release evidence does not match the accepted release receipt")
+elif authority == "git-bundle":
+    source = json.loads(bundle_source_path.read_text(encoding="utf-8"))
+    expected_shard_set = {
+        "schemaVersion": source["schemaVersion"],
+        "datasetID": source["datasetID"],
+        "manifestPath": "Data/catalog/bundled/de/source-manifest-v1.json",
+        "manifestSha256": hashlib.sha256(bundle_source_path.read_bytes()).hexdigest(),
+        "logicalSha256": source["logicalSha256"],
+        "recordCount": source["recordCount"],
+        "shardCount": len(source["shards"]),
+    }
+    if manifest.get("catalogVersion") != source.get("catalogVersion"):
+        raise SystemExit("catalog release evidence does not match the committed Git-backed catalog version")
+    if manifest.get("sourceShardSet") != expected_shard_set:
+        raise SystemExit("packaged catalog sourceShardSet does not match the committed Git-backed source set")
+    if report.get("sourceShardSet") != expected_shard_set:
+        raise SystemExit("release report sourceShardSet does not match the committed Git-backed source set")
+    if report.get("sourceSetManifestSha256") != expected_shard_set["manifestSha256"]:
+        raise SystemExit("release report source-set manifest digest mismatch")
+    if report.get("sourceSetLogicalSha256") != expected_shard_set["logicalSha256"]:
+        raise SystemExit("release report source-set logical digest mismatch")
+    if report.get("sourceSetRecordCount") != expected_shard_set["recordCount"]:
+        raise SystemExit("release report source-set record count mismatch")
+    if report.get("sourceSetShardCount") != expected_shard_set["shardCount"]:
+        raise SystemExit("release report source-set shard count mismatch")
+else:
+    raise SystemExit("unsupported production catalog authority")
 PY
 
 cp "${DATABASE}" "${ROOT_DIR}/HalalFoodEU/Resources/catalog.sqlite3"

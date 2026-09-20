@@ -61,17 +61,15 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
                     self.assertIn(expected, result.stderr)
                     self.assertNotIn("production catalog release receipt", result.stderr)
 
-    def test_matching_tag_still_fails_closed_on_missing_production_receipt(self) -> None:
+    def test_git_backed_bundle_is_an_accepted_production_authority(self) -> None:
         self.assertFalse((ROOT / "Data/catalog/production-catalog-release-input-v1.json").exists())
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            result = subprocess.run(
-                ["bash", str(self.testflight)], cwd=ROOT,
-                env=self._testflight_env(root, CI_APPLE_TESTFLIGHT_SOURCE_IS_TAG="true", CI_APPLE_TESTFLIGHT_RELEASE_VERSION="0.1.0"),
-                text=True, capture_output=True, check=False,
-            )
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("refusing to package a synthetic catalog", result.stderr)
+        self.assertTrue((ROOT / "Data/catalog/bundled/de/source-manifest-v1.json").is_file())
+        text = self.testflight.read_text(encoding="utf-8")
+        self.assertIn('BUNDLE_SOURCE_MANIFEST="${ROOT_DIR}/Data/catalog/bundled/de/source-manifest-v1.json"', text)
+        self.assertIn("CATALOG_AUTHORITY=git-bundle", text)
+        self.assertIn("Tools/catalog_source_shards.py validate", text)
+        self.assertIn("release evidence production authority does not match the accepted source authority", text)
+        self.assertIn("packaged catalog sourceShardSet does not match the committed Git-backed source set", text)
 
     def test_testflight_static_contract_binds_tag_values_and_retry_lookup(self) -> None:
         text = self.testflight.read_text(encoding="utf-8")
@@ -239,7 +237,7 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
                 getter=unknown_getter,
             )
 
-    def _run_wrapper_with_fake_provider_state(self, state: str) -> subprocess.CompletedProcess[str]:
+    def _run_wrapper_with_fake_provider_state(self, state: str, *, authority: str = "receipt") -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
             (root / "scripts/ci").mkdir(parents=True)
@@ -247,10 +245,19 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
             shutil.copy2(ROOT / "scripts/ci/apple-common.sh", root / "scripts/ci/apple-common.sh")
             (root / "Tools").mkdir()
             (root / "Data/catalog").mkdir(parents=True)
-            (root / "Data/catalog/production-catalog-release-input-v1.json").write_text("{}\n", encoding="utf-8")
-            (root / "Tools/production_catalog_release_input.py").write_text(
-                "raise SystemExit(0)\n", encoding="utf-8"
-            )
+            if authority == "receipt":
+                (root / "Data/catalog/production-catalog-release-input-v1.json").write_text("{}\n", encoding="utf-8")
+                (root / "Tools/production_catalog_release_input.py").write_text(
+                    "raise SystemExit(0)\n", encoding="utf-8"
+                )
+            elif authority == "git-bundle":
+                (root / "Data/catalog/bundled/de").mkdir(parents=True)
+                (root / "Data/catalog/bundled/de/source-manifest-v1.json").write_text("{}\n", encoding="utf-8")
+                (root / "Tools/catalog_source_shards.py").write_text(
+                    "raise SystemExit(0)\n", encoding="utf-8"
+                )
+            else:
+                raise AssertionError(f"unsupported authority fixture: {authority}")
             (root / "Tools/app_store_connect.py").write_text(
                 "import os\nprint(os.environ['HFEU_TEST_ASC_STATE'])\n", encoding="utf-8"
             )
@@ -310,6 +317,12 @@ class TagDrivenTestFlightContractTests(unittest.TestCase):
         self.assertEqual(retryable.returncode, 2)
         self.assertIn("failed processing; retrying the same committed source identity", retryable.stdout)
         self.assertNotIn("already accepted Halal Food EU", retryable.stdout)
+
+    def test_git_bundle_authority_preserves_same_tag_accepted_reconciliation(self) -> None:
+        accepted = self._run_wrapper_with_fake_provider_state("accepted", authority="git-bundle")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIn("already accepted Halal Food EU", accepted.stdout)
+        self.assertNotIn("production catalog release receipt", accepted.stderr)
 
     def test_es256_signing_produces_fixed_width_jws_signature(self) -> None:
         self.assertEqual(

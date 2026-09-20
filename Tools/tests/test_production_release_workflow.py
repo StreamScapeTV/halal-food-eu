@@ -22,6 +22,25 @@ class ProductionReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.text.count("github-token: ${{ github.token }}"), 3)
         self.assertIn("actions: read", self.text)
 
+    def test_git_backed_bundle_is_first_class_production_release_mode(self) -> None:
+        self.assertIn('Data/catalog/bundled/de/**', self.text)
+        self.assertIn('Data/catalog/bundle-source-manifest-v1.schema.json', self.text)
+        self.assertIn("production_mode=git-bundle", self.text)
+        self.assertIn("source_key=aggregate", self.text)
+        bundle = self.text.index("- name: Materialize Git-backed production catalog")
+        fallback = self.text.index("- name: Materialize deterministic synthetic fallback")
+        self.assertLess(bundle, fallback)
+        block = self.text[bundle:fallback]
+        self.assertIn("if: steps.mode.outputs.production_mode == 'git-bundle'", block)
+        self.assertIn("Tools/catalog_source_shards.py validate", block)
+        self.assertIn("Tools/build_bundled_catalog.py", block)
+        self.assertIn("Tools/product_search_index.py validate", block)
+        self.assertIn("Git-backed production manifest sourceShardSet differs from committed source manifest", block)
+        self.assertIn("sourceSetManifestSha256", self.text)
+        self.assertIn("sourceSetLogicalSha256", self.text)
+        self.assertIn("sourceSetRecordCount", self.text)
+        self.assertIn("sourceSetShardCount", self.text)
+
     def test_production_release_validates_protected_main_refresh_checkpoints_before_build(self) -> None:
         checkpoint = self.text.index("- name: Validate protected main accepted refresh checkpoints")
         downloads = self.text.index("- name: Download reviewed normalized evidence")
@@ -32,10 +51,10 @@ class ProductionReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("Data/refresh/accepted-open-prices-v1.json", block)
         self.assertIn("post-merge accepted refresh state still contains a candidate", block)
         self.assertIn("post-merge accepted refresh state has unpromoted candidate flags", block)
-        self.assertIn("if: steps.mode.outputs.production == 'true'", block)
+        self.assertIn("if: steps.mode.outputs.production_mode == 'receipt'", block)
 
     def test_production_release_rebuilds_locally_and_validates_exact_sqlite(self) -> None:
-        self.assertIn("if: steps.mode.outputs.production == 'true'", self.text)
+        self.assertIn("if: steps.mode.outputs.production_mode == 'receipt'", self.text)
         self.assertIn("Tools/production_catalog_request.py validate", self.text)
         self.assertIn("Tools/production_catalog_request.py build", self.text)
         self.assertIn("Tools/production_catalog.py validate", self.text)

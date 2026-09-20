@@ -95,8 +95,9 @@ class AppleCIAdoptionTests(unittest.TestCase):
             self.assertEqual(invalid.returncode, 2)
             self.assertIn("positive numeric CFBundleVersion", invalid.stderr)
 
-    def test_testflight_refuses_synthetic_catalog_before_network_or_xcode(self) -> None:
+    def test_testflight_accepts_git_backed_production_authority_before_release_evidence_lookup(self) -> None:
         self.assertFalse((ROOT / "Data/catalog/production-catalog-release-input-v1.json").exists())
+        self.assertTrue((ROOT / "Data/catalog/bundled/de/source-manifest-v1.json").is_file())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             auth_key = root / "AuthKey.p8"
@@ -114,13 +115,20 @@ class AppleCIAdoptionTests(unittest.TestCase):
                 ["bash", str(self.testflight)], cwd=ROOT, env=env, text=True, capture_output=True, check=False
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("refusing to package a synthetic catalog", result.stderr)
+            self.assertTrue(
+                "GitHub CLI is required" in result.stderr
+                or "GitHub token with read access to release evidence is required" in result.stderr
+            )
+            self.assertNotIn("refusing to package synthetic", result.stderr)
 
     def test_testflight_static_contract_preserves_exact_catalog_and_build_identity(self) -> None:
         text = self.testflight.read_text(encoding="utf-8")
         for required in (
             "Data/catalog/production-catalog-release-input-v1.json",
+            "Data/catalog/bundled/de/source-manifest-v1.json",
+            "CATALOG_AUTHORITY=git-bundle",
             'report.get("releaseMode") != "production"',
+            'report.get("productionAuthority") != authority',
             'ARTIFACT_NAME="release-evidence-${SOURCE_SHA}"',
             'CURRENT_PROJECT_VERSION="${BUILD_NUMBER}"',
             "manageAppVersionAndBuildNumber",

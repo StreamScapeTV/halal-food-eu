@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "Data/catalog/production-catalog-release-input-v1.json"
+      - "Data/catalog/bundle-source-manifest-v1.schema.json"
+      - "Data/catalog/bundled/de/**"
       - "Data/refresh/accepted-open-food-facts-v1.json"
       - "Data/refresh/accepted-open-prices-v1.json"
       - "Data/quality/catalog-quality-policy-v1.json"
@@ -14,10 +16,13 @@ on:
       - "HalalFoodEU/Resources/catalog.sqlite3"
       - "HalalFoodEU/Resources/catalog-manifest.json"
       - "Tools/catalog_builder.py"
+      - "Tools/build_bundled_catalog.py"
+      - "Tools/catalog_source_shards.py"
       - "Tools/catalog_refresh_operational_state.py"
       - "Tools/catalog_security.py"
       - "Tools/catalog_workflow.py"
       - "Tools/production_catalog.py"
+      - "Tools/product_search_index.py"
       - "Tools/production_catalog_aggregate.py"
       - "Tools/production_catalog_logical.py"
       - "Tools/production_catalog_manifest_review.py"
@@ -64,6 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           RECEIPT=Data/catalog/production-catalog-release-input-v1.json
+          BUNDLE_MANIFEST=Data/catalog/bundled/de/source-manifest-v1.json
           if [[ -f "$RECEIPT" ]]; then
             python3 Tools/production_catalog_release_input.py validate --input "$RECEIPT"
             RECEIPT="$RECEIPT" python3 - <<'PY' >> "$GITHUB_OUTPUT"
@@ -72,6 +78,7 @@ jobs:
 
           receipt = json.loads(Path(os.environ['RECEIPT']).read_text(encoding='utf-8'))
           print('production=true')
+          print('production_mode=receipt')
           print(f"source_key={receipt['sourceKey']}")
           print(f"snapshot_id={receipt['snapshotId']}")
           print(f"catalog_version={receipt['catalogVersion']}")
@@ -80,15 +87,29 @@ jobs:
           print(f"quality_artifact_name={receipt['inputs']['qualityReport']['artifactName']}")
           print(f"basic_exclusions_artifact_name={receipt['inputs']['basicExclusions']['artifactName']}")
           PY
+          elif [[ -f "$BUNDLE_MANIFEST" ]]; then
+            PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate --manifest "$BUNDLE_MANIFEST"
+            BUNDLE_MANIFEST="$BUNDLE_MANIFEST" python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          from pathlib import Path
+
+          manifest = json.loads(Path(os.environ['BUNDLE_MANIFEST']).read_text(encoding='utf-8'))
+          print('production=true')
+          print('production_mode=git-bundle')
+          print('source_key=aggregate')
+          print(f"snapshot_id={manifest['datasetID']}")
+          print(f"catalog_version={manifest['catalogVersion']}")
+          PY
           else
             echo "production=false" >> "$GITHUB_OUTPUT"
+            echo "production_mode=synthetic" >> "$GITHUB_OUTPUT"
             echo "source_key=synthetic-fixture" >> "$GITHUB_OUTPUT"
             echo "snapshot_id=main-${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
             echo "catalog_version=0.0.0-demo.1" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate protected main accepted refresh checkpoints
-        if: steps.mode.outputs.production == 'true'
+        if: steps.mode.outputs.production_mode == 'receipt'
         run: |
           set -euo pipefail
           python3 Tools/catalog_refresh_operational_state.py validate-state \
@@ -117,7 +138,7 @@ jobs:
           PY
 
       - name: Download reviewed normalized evidence
-        if: steps.mode.outputs.production == 'true'
+        if: steps.mode.outputs.production_mode == 'receipt'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ steps.mode.outputs.normalized_artifact_name }}
@@ -127,7 +148,7 @@ jobs:
           run-id: ${{ steps.mode.outputs.source_run_id }}
 
       - name: Download reviewed quality report
-        if: steps.mode.outputs.production == 'true'
+        if: steps.mode.outputs.production_mode == 'receipt'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ steps.mode.outputs.quality_artifact_name }}
@@ -137,7 +158,7 @@ jobs:
           run-id: ${{ steps.mode.outputs.source_run_id }}
 
       - name: Download reviewed basic exclusions
-        if: steps.mode.outputs.production == 'true'
+        if: steps.mode.outputs.production_mode == 'receipt'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ steps.mode.outputs.basic_exclusions_artifact_name }}
@@ -147,7 +168,7 @@ jobs:
           run-id: ${{ steps.mode.outputs.source_run_id }}
 
       - name: Materialize production catalog from reviewed immutable inputs
-        if: steps.mode.outputs.production == 'true'
+        if: steps.mode.outputs.production_mode == 'receipt'
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/release-root"
@@ -226,6 +247,55 @@ jobs:
               raise SystemExit('post-merge production release notes are missing the formal release summary')
           PY
 
+      - name: Materialize Git-backed production catalog
+        if: steps.mode.outputs.production_mode == 'git-bundle'
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/release-root"
+          BUNDLE_MANIFEST=Data/catalog/bundled/de/source-manifest-v1.json
+          mkdir -p "$ROOT/database/payload" "$ROOT/manifest/payload" "$ROOT/release-notes/payload"
+          PYTHONPATH=Tools python3 Tools/catalog_source_shards.py validate             --manifest "$BUNDLE_MANIFEST"
+          PYTHONPATH=Tools python3 Tools/build_bundled_catalog.py             --source-manifest "$BUNDLE_MANIFEST"             --database "$ROOT/database/payload/catalog.sqlite3"             --manifest "$ROOT/manifest/payload/catalog-manifest.json"             --source-commit "$GITHUB_SHA"             --workflow-run "github:${GITHUB_RUN_ID}:attempt:${GITHUB_RUN_ATTEMPT}"
+          python3 Tools/production_catalog.py validate             --database "$ROOT/database/payload/catalog.sqlite3"             --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          python3 Tools/product_search_index.py validate             --database "$ROOT/database/payload/catalog.sqlite3"             --manifest "$ROOT/manifest/payload/catalog-manifest.json"
+          ROOT="$ROOT" BUNDLE_MANIFEST="$BUNDLE_MANIFEST" python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root = Path(os.environ['ROOT'])
+          source_path = Path(os.environ['BUNDLE_MANIFEST'])
+          source = json.loads(source_path.read_text(encoding='utf-8'))
+          manifest = json.loads((root / 'manifest/payload/catalog-manifest.json').read_text(encoding='utf-8'))
+          shard_set = manifest.get('sourceShardSet')
+          expected = {
+              'schemaVersion': source['schemaVersion'],
+              'datasetID': source['datasetID'],
+              'manifestPath': source_path.as_posix(),
+              'manifestSha256': hashlib.sha256(source_path.read_bytes()).hexdigest(),
+              'logicalSha256': source['logicalSha256'],
+              'recordCount': source['recordCount'],
+              'shardCount': len(source['shards']),
+          }
+          if shard_set != expected:
+              raise SystemExit('Git-backed production manifest sourceShardSet differs from committed source manifest')
+          if manifest.get('catalogVersion') != source['catalogVersion']:
+              raise SystemExit('Git-backed production manifest catalogVersion differs from committed source manifest')
+          notes = [
+              '# Halal Food EU catalog release',
+              '',
+              '## Git-backed production baseline',
+              '',
+              f"- catalogVersion: {source['catalogVersion']}",
+              f"- datasetID: {source['datasetID']}",
+              f"- recordCount: {source['recordCount']}",
+              f"- logicalSha256: {source['logicalSha256']}",
+              f"- sourceCommit: {manifest['sourceCommit']}",
+              '',
+              'This release materializes the rights-reviewed Git-backed Germany source set defined by specification 030.',
+          ]
+          (root / 'release-notes/payload/catalog-release-notes.md').write_text('\n'.join(notes) + '\n', encoding='utf-8')
+          PY
+
       - name: Materialize deterministic synthetic fallback
         if: steps.mode.outputs.production != 'true'
         run: |
@@ -255,6 +325,7 @@ jobs:
       - name: Emit post-merge checksum and lineage report
         env:
           PRODUCTION: ${{ steps.mode.outputs.production }}
+          PRODUCTION_MODE: ${{ steps.mode.outputs.production_mode }}
           SOURCE_KEY: ${{ steps.mode.outputs.source_key }}
           SNAPSHOT_ID: ${{ steps.mode.outputs.snapshot_id }}
           CATALOG_VERSION: ${{ steps.mode.outputs.catalog_version }}
@@ -280,8 +351,13 @@ jobs:
               'appStoreSigningPerformed': False,
               'remoteCatalogPublicationPerformed': False,
           }
+          manifest_data = json.loads(manifest.read_text(encoding='utf-8'))
+          production_mode = os.environ['PRODUCTION_MODE']
+          report['productionAuthority'] = production_mode
+          if manifest_data.get('catalogVersion') != os.environ['CATALOG_VERSION']:
+              raise SystemExit('release report catalogVersion differs from materialized manifest')
           receipt_path = Path('Data/catalog/production-catalog-release-input-v1.json')
-          if os.environ['PRODUCTION'] == 'true':
+          if os.environ['PRODUCTION'] == 'true' and production_mode == 'receipt':
               receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
               release_notes = root / 'release-notes/payload/catalog-release-notes.md'
               report['reviewedSourceCommit'] = receipt['reviewedSourceCommit']
@@ -289,8 +365,21 @@ jobs:
               report['proposedCatalogSha256'] = receipt['proposedCatalogSha256']
               report['proposedManifestSha256'] = receipt['proposedManifestSha256']
               report['releaseNotesSha256'] = hashlib.sha256(release_notes.read_bytes()).hexdigest()
+          elif os.environ['PRODUCTION'] == 'true' and production_mode == 'git-bundle':
+              source_path = Path('Data/catalog/bundled/de/source-manifest-v1.json')
+              source = json.loads(source_path.read_text(encoding='utf-8'))
+              shard_set = manifest_data.get('sourceShardSet')
+              if not isinstance(shard_set, dict):
+                  raise SystemExit('Git-backed production release manifest is missing sourceShardSet')
+              report['sourceShardSet'] = shard_set
+              report['sourceSetManifestSha256'] = hashlib.sha256(source_path.read_bytes()).hexdigest()
+              report['sourceSetLogicalSha256'] = source['logicalSha256']
+              report['sourceSetRecordCount'] = source['recordCount']
+              report['sourceSetShardCount'] = len(source['shards'])
+              release_notes = root / 'release-notes/payload/catalog-release-notes.md'
+              report['releaseNotesSha256'] = hashlib.sha256(release_notes.read_bytes()).hexdigest()
           else:
-              report['sourcePolicy'] = json.loads(manifest.read_text(encoding='utf-8'))['sourcePolicy']
+              report['sourcePolicy'] = manifest_data['sourcePolicy']
           (root / 'release/payload/release-report.json').write_text(
               json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8'
           )
